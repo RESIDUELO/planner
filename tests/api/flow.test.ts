@@ -54,7 +54,7 @@ describe('Base de provas (somente pelo administrador)', () => {
     // Datas oficiais cadastradas (fixas); sem data oficial, cada aluno informa a sua
     expect(f).toMatchObject({ exam_date: '2026-11-24', date_official: true, days_left: 60 });
     expect(list.find((e: any) => e.institution === 'UNOESTE/HRPP')).toMatchObject({ exam_date: '2026-12-05', date_official: true });
-    expect(list.find((e: any) => e.institution === 'HU-UEL')).toMatchObject({ exam_date: null, date_official: false });
+    expect(list.find((e: any) => e.institution === 'HU-UEL')).toMatchObject({ exam_date: '2026-11-08', date_official: true });
     expect(f.registration_fee).toBeNull();
     expect(f.history.editionsAnalyzed).toBe(6);
     expect(f.history.message).toBe('Análise baseada em 6 edições cadastradas.');
@@ -105,12 +105,12 @@ describe('Segurança (RLS contra requisições forjadas)', () => {
   });
 
   it('dados da prova informados por um aluno não aparecem para outro', async () => {
-    await student.ok('PUT', `/api/me/editions/${ids.uel}`, { examDate: '2026-11-20', registrationFee: 450 });
+    await student.ok('PUT', `/api/me/editions/${ids.uel}`, { registrationFee: 450 });
     other = new Client();
     other.today = TODAY;
     await other.ok('POST', '/api/auth/register', { name: 'Outro', email: 'outro@teste.com', password: 'senha-outro-123' });
     const f = (await other.ok('GET', '/api/exams')).find((e: any) => e.institution === 'HU-UEL');
-    expect(f.exam_date).toBeNull();
+    expect(f.exam_date).toBe('2026-11-08');
     expect(f.registration_fee).toBeNull();
     const token = await other.accessToken();
     expect((await rest(token, 'GET', '/user_exam_editions')).body).toEqual([]);
@@ -293,7 +293,6 @@ describe('Visitante (teste 2)', () => {
       profile: { start_date: TODAY, daily_hours: 2, study_days_per_week: 5, questions_per_day: 10, study_saturday: false, study_sunday: false },
       methods: s.methods.map((m: any) => ({ id: m.id, enabled: m.code === 'summary', minutes: 30 })),
     });
-    await g.ok('PUT', `/api/me/editions/${ids.uel}`, { examDate: '2026-11-20' });
     await g.ok('POST', '/api/planner/generate', { editionIds: [ids.uel], primaryEditionId: ids.uel, startDate: TODAY });
     await g.ok('POST', '/api/auth/upgrade', { name: 'Ex-visitante', email: 'exvisitante@teste.com', password: 'senha-exvis-123' });
     const g2 = new Client();
@@ -305,7 +304,6 @@ describe('Visitante (teste 2)', () => {
 
 describe('Multiprova (teste 4) e atualização de estatísticas (teste 25)', () => {
   it('gera planner combinado com as três provas, cada uma com a data do aluno', async () => {
-    await student.ok('PUT', `/api/me/editions/${ids.uel}`, { examDate: '2026-11-20' });
     await student.ok('POST', '/api/planner/generate', {
       editionIds: [ids.famerp, ids.uel, ids.unoeste], primaryEditionId: ids.famerp, startDate: TODAY,
     });
@@ -395,5 +393,32 @@ describe('Planner dinâmico: fila de estudo, fila de revisões e observações',
     await student.ok('PUT', '/api/notes/2026-09-21', { content: 'Focar mais em cardiologia.' });
     expect((await student.ok('GET', '/api/notes/2026-09-21')).content).toBe('Focar mais em cardiologia.');
     expect((await other.ok('GET', '/api/notes/2026-09-21')).content).toBe('');
+  });
+});
+
+describe('FAMEMA (relatório sem anexo questão a questão)', () => {
+  it('entra com 600 questões, data oficial e só as classificações que o relatório dá', async () => {
+    await runDataFile('famema_r1');
+    await runDataFile('famema_r1');
+    const r = await dbQuery(`select count(distinct q.id)::int as n, count(distinct qs.question_id)::int as c from questions q
+      join exam_editions ed on ed.id = q.exam_edition_id join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
+      left join question_subjects qs on qs.question_id = q.id where i.abbreviation = 'FAMEMA'`);
+    expect(r.rows[0]).toEqual({ n: 600, c: 433 });
+    const list = await student.ok('GET', '/api/exams');
+    const f = list.find((e: any) => e.institution === 'FAMEMA');
+    expect(f).toMatchObject({ exam_date: '2026-12-08', date_official: true });
+    const h = await student.ok('GET', `/api/exams/${f.exam_id}/history`);
+    expect(h.totalQuestions).toBe(600);
+    expect(h.editionsAnalyzed).toBe(6);
+    expect(h.subjects[0].name).toBe('Perioperatório e princípios cirúrgicos');
+    expect(h.subjects[0].questions).toBe(24);
+    expect(h.subjects[0].percentage).toBeCloseTo(24 / 600);
+    const cirrose = h.subjects.find((s: any) => s.name === 'Cirrose e complicações');
+    expect(cirrose).toMatchObject({ questions: 6, editionsPresent: 6 });
+    // Questão contada em dois assuntos (HPV: imunização + prevenção do colo) divide o peso
+    const hpv = await dbQuery(`select count(*)::int as n from question_subjects qs join questions q on q.id = qs.question_id
+      join exam_editions ed on ed.id = q.exam_edition_id join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
+      where i.abbreviation = 'FAMEMA' and ed.year = 2022 and q.question_number = 2`);
+    expect(hpv.rows[0].n).toBe(2);
   });
 });

@@ -29,8 +29,9 @@ export function buildExamSql(entry) {
   const inst = entry.institution;
   const examRef = `(select e.id from public.exams e join public.institutions i on i.id = e.institution_id where i.abbreviation = ${lit(inst.abbreviation)} and e.name = ${lit(entry.exam.name)})`;
   const out = [];
+  const classified = qs.filter((q) => q.subject).length;
   out.push(`-- =====================================================================
--- ${inst.abbreviation} — ${entry.exam.name}: ${qs.length} questões classificadas
+-- ${inst.abbreviation} — ${entry.exam.name}: ${qs.length} questões, ${classified} classificadas
 -- Fonte: ${entry.source.name}
 -- Gerado por scripts/build-data-sql.mjs (não edite à mão). Pode rodar mais de uma vez.
 -- =====================================================================
@@ -45,12 +46,20 @@ on conflict (institution_id, name) do update set total_questions = excluded.tota
 
   // Áreas, especialidades, assuntos e subassuntos (identificados por slug do caminho completo)
   const areas = new Map(), specs = new Map(), subjects = new Map(), subs = new Map();
+  const register = (c) => {
+    areas.set(slug(c.area), c.area);
+    const areaSlug = c.specialty ? slug(c.area, c.specialty) : slug(c.area);
+    if (c.specialty) specs.set(areaSlug, { name: c.specialty, parent: slug(c.area) });
+    const sSlug = slug(c.area, c.specialty, c.subject);
+    subjects.set(sSlug, { name: c.subject, area: areaSlug });
+    return { areaSlug, sSlug };
+  };
   for (const q of qs) {
-    areas.set(slug(q.area), q.area);
-    const areaSlug = q.specialty ? slug(q.area, q.specialty) : slug(q.area);
-    if (q.specialty) specs.set(areaSlug, { name: q.specialty, parent: slug(q.area) });
-    const sSlug = slug(q.area, q.specialty, q.subject);
-    subjects.set(sSlug, { name: q.subject, area: areaSlug });
+    // Questão sem classificação no relatório: entra na contagem da prova, sem assunto
+    if (!q.subject) continue;
+    // Questão que o relatório conta em mais de um assunto
+    q._extra = (q.extra_subjects ?? []).map((c) => register(c).sSlug);
+    const { areaSlug, sSlug } = register(q);
     q._slug = sSlug;
     if (q.subsubject) {
       const ssSlug = slug(q.area, q.specialty, q.subject, q.subsubject);
@@ -103,6 +112,9 @@ on conflict (exam_id, year) do update set notes = excluded.notes, exam_date = ex
 
   // Questões
   const qsrc = doc.source ?? src.name;
+  if (qs.some((q) => !q.annulled && !q.correct_answer)) out.push(`-- O relatório não traz o gabarito questão a questão: a resposta pode ficar em branco
+alter table public.questions drop constraint if exists answer_or_annulled;
+`);
   for (const part of chunk(qs, 250)) {
     out.push(`insert into public.questions (exam_edition_id, question_number, summary, correct_answer, annulled, difficulty, question_type, guideline, source, notes)
 select ed.id, v.n, v.summary, v.answer, v.annulled, v.difficulty::public.difficulty, v.qtype, v.guideline, ${lit(qsrc)}, v.notes
@@ -114,19 +126,20 @@ on conflict (exam_edition_id, question_number) do nothing;
 `);
   }
   // Classificação
-  for (const part of chunk(qs, 500)) {
+  const links = qs.filter((q) => q._slug).flatMap((q) => [[q, q._slug, true], ...q._extra.map((x) => [q, x, false])]);
+  for (const part of chunk(links, 500)) {
     out.push(`insert into public.question_subjects (question_id, subject_id, relevance_weight, is_primary)
-select q.id, s.id, 1, true
+select q.id, s.id, 1, v.prim
 from (values
-${part.map((q) => `  (${q.year}, ${q.question_number}, ${lit(q._slug)})`).join(',\n')}
-) as v(year, n, slug)
+${part.map(([q, sl, prim]) => `  (${q.year}, ${q.question_number}, ${lit(sl)}, ${prim})`).join(',\n')}
+) as v(year, n, slug, prim)
 join public.exam_editions ed on ed.exam_id = ${examRef} and ed.year = v.year
 join public.questions q on q.exam_edition_id = ed.id and q.question_number = v.n
 join public.subjects s on s.slug = v.slug
 on conflict do nothing;
 `);
   }
-  out.push(`-- Conferência: deve mostrar ${qs.length} questões classificadas
+  out.push(`-- Conferência: deve mostrar ${qs.length} questões, ${classified} classificadas
 select i.abbreviation, count(distinct q.id) as questoes, count(distinct qs.question_id) as classificadas
 from public.questions q join public.exam_editions ed on ed.id = q.exam_edition_id
 join public.exams e on e.id = ed.exam_id join public.institutions i on i.id = e.institution_id

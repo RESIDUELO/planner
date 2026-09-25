@@ -43,7 +43,8 @@
       },
       "upcoming": {
         "year": 2027,
-        "notes": "Próxima prova. Data, inscrição e valor são informados por cada aluno no site."
+        "notes": "Próxima prova. Data oficial: 08/11/2026.",
+        "exam_date": "2026-11-08"
       }
     },
     {
@@ -67,6 +68,29 @@
         "year": 2027,
         "notes": "Próxima prova. Data oficial: 05/12/2026.",
         "exam_date": "2026-12-05"
+      }
+    },
+    {
+      "id": "famema_r1",
+      "institution": {
+        "abbreviation": "FAMEMA",
+        "name": "Faculdade de Medicina de Marília",
+        "state": "SP",
+        "city": "Marília"
+      },
+      "exam": {
+        "name": "R1 Acesso Direto",
+        "total_questions": 100
+      },
+      "file": "famema_r1_2021-2026.json",
+      "source": {
+        "name": "Relatório \"Análise das provas R1 FAMEMA 2021–2026\" (25/09/2026). Sem anexo questão a questão: números exatos das seções 4 e 8; demais assuntos contados por ano (seções 5, 10 e 11).",
+        "checked_at": "2026-09-25"
+      },
+      "upcoming": {
+        "year": 2027,
+        "notes": "Próxima prova. Data oficial: 08/12/2026.",
+        "exam_date": "2026-12-08"
       }
     }
   ]
