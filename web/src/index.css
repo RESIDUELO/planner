@@ -30,6 +30,9 @@
   --mint: #c4ecd4;   --mint-ink: #1c1b19;
   --sky: #cfe3f7;    --sky-ink: #1c1b19;
   --peach: #f7dac7;  --peach-ink: #1c1b19;
+  --paper: #fbf9f4;         /* folha do caderno */
+  --paper-rule: rgba(110, 140, 180, 0.28);
+  --paper-margin: rgba(231, 142, 160, 0.55);
   color-scheme: light;
 }
 
@@ -55,10 +58,14 @@
   --mint: rgba(140, 225, 180, 0.2);    --mint-ink: #b5ecd0;
   --sky: rgba(150, 200, 245, 0.22);    --sky-ink: #c5e0fa;
   --peach: rgba(245, 190, 160, 0.22);  --peach-ink: #f6d2bd;
+  --paper: #1f1d1a;
+  --paper-rule: rgba(160, 180, 210, 0.16);
+  --paper-margin: rgba(231, 142, 160, 0.35);
   color-scheme: dark;
 }
 
 @theme inline {
+  --font-hand: "Patrick Hand", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
   --font-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --color-canvas: var(--canvas);
@@ -134,4 +141,34 @@ input[type="date"].field, input[type="time"].field { min-height: 42px; }
 .dot-rose { background: #e79aaa; }
 .dot-lilac { background: #a797e6; } .dot-butter { background: #e3cf3c; } .dot-mint { background: #5fcf92; }
 .dot-sky { background: #7fb3e6; } .dot-peach { background: #eba37d; }
+}
+
+/* Observações da semana: folha pautada de caderno, com margem */
+@layer components {
+.notebook {
+  position: relative;
+  border-radius: 14px;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  padding: 22px 22px 18px 56px;
+}
+.notebook::before { /* margem */
+  content: ""; position: absolute; top: 0; bottom: 0; left: 40px; width: 1px; background: var(--paper-margin);
+}
+.notebook::after { /* furos da folha */
+  content: ""; position: absolute; left: 14px; top: 26px; width: 9px; height: 9px; border-radius: 999px;
+  background: var(--canvas); box-shadow: 0 64px 0 var(--canvas), 0 128px 0 var(--canvas);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.notebook-text {
+  display: block; width: 100%; resize: none; border: 0; outline: none; background-color: transparent;
+  font-family: var(--font-hand); font-size: 21px; line-height: 32px; letter-spacing: 0.01em; color: var(--ink);
+  background-image: linear-gradient(to bottom, transparent 31px, var(--paper-rule) 31px);
+  background-size: 100% 32px; background-attachment: local;
+  min-height: 224px;
+}
+.notebook-text::placeholder { color: var(--ink-3); }
+.notebook-text:focus-visible { outline: none; }
+.notebook:focus-within { border-color: color-mix(in srgb, var(--ink) 25%, transparent); }
+@media (max-width: 480px) { .notebook { padding-left: 44px; } .notebook::before { left: 30px; } .notebook::after { left: 9px; } }
 }

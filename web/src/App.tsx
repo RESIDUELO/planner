@@ -4,7 +4,6 @@ import { useAuth } from './lib/auth';
 import { Layout } from './components/Layout';
 import { Spinner } from './components/ui';
 import { LoginPage } from './pages/Login';
-import { DashboardPage } from './pages/Dashboard';
 import { ExamsPage } from './pages/Exams';
 import { PlannerPage } from './pages/Planner';
 import { ReviewsPage } from './pages/Reviews';
@@ -25,7 +24,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth><Layout /></RequireAuth>}>
-        <Route index element={<DashboardPage />} />
+        <Route index element={<Navigate to="/planner" replace />} />
         <Route path="provas" element={<ExamsPage />} />
         <Route path="planner" element={<PlannerPage />} />
         <Route path="foco" element={<FocusPage />} />

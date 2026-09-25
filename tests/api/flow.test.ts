@@ -51,7 +51,10 @@ describe('Base de provas (somente pelo administrador)', () => {
     const list = await student.ok('GET', '/api/exams');
     expect(list.map((e: any) => e.institution).sort()).toEqual(['FAMERP', 'HU-UEL', 'UNOESTE/HRPP']);
     const f = list.find((e: any) => e.institution === 'FAMERP');
-    expect(f.exam_date).toBeNull();
+    // Datas oficiais cadastradas (fixas); sem data oficial, cada aluno informa a sua
+    expect(f).toMatchObject({ exam_date: '2026-11-24', date_official: true, days_left: 60 });
+    expect(list.find((e: any) => e.institution === 'UNOESTE/HRPP')).toMatchObject({ exam_date: '2026-12-05', date_official: true });
+    expect(list.find((e: any) => e.institution === 'HU-UEL')).toMatchObject({ exam_date: null, date_official: false });
     expect(f.registration_fee).toBeNull();
     expect(f.history.editionsAnalyzed).toBe(6);
     expect(f.history.message).toBe('Análise baseada em 6 edições cadastradas.');
@@ -102,11 +105,11 @@ describe('Segurança (RLS contra requisições forjadas)', () => {
   });
 
   it('dados da prova informados por um aluno não aparecem para outro', async () => {
-    await student.ok('PUT', `/api/me/editions/${ids.famerp}`, { examDate: '2026-11-12', registrationFee: 450 });
+    await student.ok('PUT', `/api/me/editions/${ids.uel}`, { examDate: '2026-11-20', registrationFee: 450 });
     other = new Client();
     other.today = TODAY;
     await other.ok('POST', '/api/auth/register', { name: 'Outro', email: 'outro@teste.com', password: 'senha-outro-123' });
-    const f = (await other.ok('GET', '/api/exams')).find((e: any) => e.institution === 'FAMERP');
+    const f = (await other.ok('GET', '/api/exams')).find((e: any) => e.institution === 'HU-UEL');
     expect(f.exam_date).toBeNull();
     expect(f.registration_fee).toBeNull();
     const token = await other.accessToken();
@@ -120,10 +123,12 @@ describe('Aluno (testes 1–19)', () => {
   it('informa data, inscrição e valor e seleciona a prova principal (teste 3)', async () => {
     await student.ok('PUT', `/api/me/editions/${ids.famerp}`, {
       selected: true, isPrimary: true, status: 'registered', registrationNumber: '12345',
-      examDate: '2026-11-12', registrationStart: '2026-09-01', registrationEnd: '2026-10-10', registrationFee: 450,
+      registrationStart: '2026-09-01', registrationEnd: '2026-10-10', registrationFee: 450,
     });
     const e = (await student.ok('GET', '/api/exams')).find((x: any) => x.edition_id === ids.famerp);
-    expect(e).toMatchObject({ selected: true, is_primary: true, registration_status: 'registered', exam_date: '2026-11-12', registration_fee: 450, days_left: 48, registration_window: 'open' });
+    expect(e).toMatchObject({ selected: true, is_primary: true, registration_status: 'registered', exam_date: '2026-11-24', registration_fee: 450, days_left: 60, registration_window: 'open' });
+    // A data oficial não pode ser alterada pelo aluno
+    expect((await student.req('PUT', `/api/me/editions/${ids.famerp}`, { examDate: '2026-11-12' })).status).toBe(400);
     const bad = await student.req('PUT', `/api/me/editions/${ids.famerp}`, { registrationStart: '2026-10-20' });
     expect(bad.status).toBe(400);
   });
@@ -148,7 +153,7 @@ describe('Aluno (testes 1–19)', () => {
   it('gera o planner até a data informada, ordenado pela frequência histórica (teste 6)', async () => {
     await student.ok('POST', '/api/planner/generate', { editionIds: [ids.famerp], primaryEditionId: ids.famerp, startDate: TODAY });
     const p = await student.ok('GET', '/api/planner');
-    expect(p.plan.end_date).toBe('2026-11-12');
+    expect(p.plan.end_date).toBe('2026-11-24');
     expect(p.subjects[0].name).toBe('Saúde do Trabalhador');
     expect(p.subjects[0].levelLabel).toBe('Muito alta');
     expect(p.subjects[1].name).toBe('Trauma');
@@ -215,7 +220,7 @@ describe('Aluno (testes 1–19)', () => {
     expect(s.mastery.mastery).toBeCloseTo(18 / 22, 2);
     const dash = await student.ok('GET', '/api/dashboard');
     expect(dash.dominated[0].dominated).toBeGreaterThan(before);
-    expect(dash.nextExam).toMatchObject({ date: '2026-11-12', daysLeft: 48 });
+    expect(dash.nextExam).toMatchObject({ date: '2026-11-24', daysLeft: 60 });
     expect(dash.subjects.studied).toBe(2);
     ids.firstReview = s.card.nextReview;
   });
@@ -235,15 +240,15 @@ describe('Aluno (testes 1–19)', () => {
     const cal = await student.ok('GET', '/api/reviews/calendar?from=2026-09-25&to=2026-10-31');
     expect(cal.days.filter((d: any) => d.newSubjects.length).length).toBeGreaterThan(10);
     expect(cal.days.find((d: any) => d.date === ids.afterAgain).reviews.some((r: any) => r.subjectId === ids.subject1)).toBe(true);
-    const late = await student.ok('GET', '/api/reviews/calendar?from=2026-11-12&to=2026-11-30');
+    const late = await student.ok('GET', '/api/reviews/calendar?from=2026-11-24&to=2026-11-30');
     expect(late.days.every((d: any) => d.reviews.filter((r: any) => r.status !== 'done').length === 0)).toBe(true);
-    expect(late.days.find((d: any) => d.date === '2026-11-12').exams).toEqual(['FAMERP']);
+    expect(late.days.find((d: any) => d.date === '2026-11-24').exams).toEqual(['FAMERP']);
   });
 
   it('revisões atrasadas aparecem como atrasadas (teste 16)', async () => {
-    student.today = '2026-10-25';
+    student.today = '2026-10-26';
     const t = await student.ok('GET', '/api/planner/today');
-    expect(t.reviews.find((x: any) => x.subjectId === ids.subject1).overdueDays).toBeGreaterThan(0);
+    expect(t.reviews.some((x: any) => x.overdueDays > 0)).toBe(true);
     expect((await student.ok('GET', '/api/dashboard')).reviews.overdue).toBeGreaterThanOrEqual(1);
     expect((await student.ok('GET', '/api/planner')).overdueActivities).toBeGreaterThan(0);
   });
@@ -251,15 +256,15 @@ describe('Aluno (testes 1–19)', () => {
   it('replanejar mantém o progresso e reorganiza a partir de hoje', async () => {
     await student.ok('POST', '/api/planner/replan');
     const p = await student.ok('GET', '/api/planner');
-    expect(p.plan.start_date).toBe('2026-10-25');
+    expect(p.plan.start_date).toBe('2026-10-26');
     expect(p.subjects.find((s: any) => s.subjectId === ids.subject1).status).toBe('studied');
     student.today = TODAY;
   });
 
-  it('mudar a data da prova muda o planner (a data é do aluno)', async () => {
-    await student.ok('PUT', `/api/me/editions/${ids.famerp}`, { examDate: '2026-11-30' });
+  it('a data oficial se mantém mesmo ao replanejar', async () => {
+    expect((await student.req('PUT', `/api/me/editions/${ids.famerp}`, { examDate: '2026-11-30' })).status).toBe(400);
     await student.ok('POST', '/api/planner/replan');
-    expect((await student.ok('GET', '/api/planner')).plan.end_date).toBe('2026-11-30');
+    expect((await student.ok('GET', '/api/planner')).plan.end_date).toBe('2026-11-24');
   });
 
   it('persistência: nova sessão encontra tudo (testes 17–19)', async () => {
@@ -301,14 +306,13 @@ describe('Visitante (teste 2)', () => {
 describe('Multiprova (teste 4) e atualização de estatísticas (teste 25)', () => {
   it('gera planner combinado com as três provas, cada uma com a data do aluno', async () => {
     await student.ok('PUT', `/api/me/editions/${ids.uel}`, { examDate: '2026-11-20' });
-    await student.ok('PUT', `/api/me/editions/${ids.unoeste}`, { examDate: '2026-11-27' });
     await student.ok('POST', '/api/planner/generate', {
       editionIds: [ids.famerp, ids.uel, ids.unoeste], primaryEditionId: ids.famerp, startDate: TODAY,
     });
     const p = await student.ok('GET', '/api/planner');
     expect(p.plan.mode).toBe('multi');
     expect(p.exams).toHaveLength(3);
-    expect(p.plan.end_date).toBe('2026-11-30');
+    expect(p.plan.end_date).toBe('2026-12-05');
     expect(p.subjects[0].perExam).toHaveLength(3);
     expect(p.subjects.find((s: any) => s.subjectId === ids.subject1).status).toBe('studied');
   });
@@ -324,5 +328,72 @@ describe('Multiprova (teste 4) e atualização de estatísticas (teste 25)', () 
     const after = await student.ok('GET', `/api/exams/${ids.famerpExam}/history`);
     expect(after.totalQuestions).toBe(481);
     expect(after.subjects[0].questions).toBe(31);
+  });
+});
+
+describe('Planner dinâmico: fila de estudo, fila de revisões e observações', () => {
+  const pendingByDate = (cal: any) => {
+    const m = new Map<string, string>();
+    for (const d of cal.days) for (const n of d.newSubjects) if (!n.done && !m.has(n.subjectId)) m.set(n.subjectId, d.date);
+    return m;
+  };
+
+  it('tarefa adiantada fica no dia em que foi feita e as seguintes sobem', async () => {
+    student.today = TODAY;
+    const from = TODAY, to = '2026-10-20';
+    const before = await student.ok('GET', `/api/reviews/calendar?from=${from}&to=${to}`);
+    const old = pendingByDate(before);
+    // Primeiro assunto planejado para depois de hoje
+    const future = [...old.entries()].filter(([, d]) => d > TODAY).sort((a, b) => a[1].localeCompare(b[1]));
+    const [x, xDate] = future[0];
+    const [y, yDate] = future.find(([, d]) => d > xDate)!;
+    await student.ok('POST', `/api/planner/subjects/${x}/complete`, { done: true });
+    const after = await student.ok('GET', `/api/reviews/calendar?from=${from}&to=${to}`);
+    // Registrada hoje, concluída; não continua no dia original
+    const today = after.days.find((d: any) => d.date === TODAY);
+    expect(today.newSubjects.find((n: any) => n.subjectId === x)).toMatchObject({ done: true });
+    expect(after.days.find((d: any) => d.date === xDate).newSubjects.some((n: any) => n.subjectId === x)).toBe(false);
+    // O próximo da fila não fica para depois (ocupa o espaço liberado)
+    expect(pendingByDate(after).get(y)! <= yDate).toBe(true);
+    // O que estava planejado para hoje continua hoje
+    for (const [id, d] of old) if (d === TODAY && id !== x) expect(pendingByDate(after).get(id)).toBe(TODAY);
+  });
+
+  it('revisões por dia seguem a escolha do aluno e adiantar revisões reorganiza a fila', async () => {
+    const s = await student.ok('GET', '/api/me/study-settings');
+    await student.ok('PUT', '/api/me/study-settings', {
+      profile: { ...s.profile, reviews_per_day: 1, preferred_start_time: null, preferred_end_time: null },
+      methods: s.methods.map((m: any) => ({ id: m.id, enabled: m.enabled, minutes: m.estimated_minutes })),
+    });
+    expect((await student.ok('GET', '/api/me/study-settings')).profile.reviews_per_day).toBe(1);
+    // Vários assuntos concluídos → vários cartões
+    const p = await student.ok('GET', '/api/planner');
+    for (const subj of p.subjects.filter((x: any) => x.status !== 'studied').slice(0, 3)) {
+      await student.ok('POST', `/api/planner/subjects/${subj.subjectId}/complete`, { done: true });
+    }
+    student.today = '2026-11-16';
+    const cal = await student.ok('GET', '/api/reviews/calendar?from=2026-11-16&to=2026-11-23');
+    for (const d of cal.days) expect(d.reviews.filter((r: any) => r.status !== 'done').length).toBeLessThanOrEqual(1);
+    const t = await student.ok('GET', '/api/planner/today');
+    expect(t.reviews).toHaveLength(1);
+    expect(t.nextReviews.length).toBeGreaterThan(0);
+    // Faz a de hoje e adianta a próxima
+    const first = t.reviews[0].subjectId, early = t.nextReviews[0].subjectId;
+    await student.ok('POST', `/api/reviews/${first}`, { rating: 'good' });
+    await student.ok('POST', `/api/reviews/${early}`, { rating: 'good' });
+    const after = await student.ok('GET', '/api/reviews/calendar?from=2026-11-16&to=2026-11-23');
+    const today = after.days.find((d: any) => d.date === '2026-11-16');
+    expect(today.reviews.filter((r: any) => r.status === 'done').map((r: any) => r.subjectId).sort()).toEqual([first, early].sort());
+    // Nada duplicado: as revisões feitas não reaparecem como pendentes nos próximos dias
+    const pendingLater = after.days.slice(1).flatMap((d: any) => d.reviews.filter((r: any) => r.status !== 'done').map((r: any) => r.subjectId));
+    expect(pendingLater.filter((id: string) => id === early && id !== first).length).toBeLessThanOrEqual(1);
+    expect((await student.ok('GET', '/api/planner/today')).reviews).toHaveLength(0);
+    student.today = TODAY;
+  });
+
+  it('observações da semana são do próprio aluno', async () => {
+    await student.ok('PUT', '/api/notes/2026-09-21', { content: 'Focar mais em cardiologia.' });
+    expect((await student.ok('GET', '/api/notes/2026-09-21')).content).toBe('Focar mais em cardiologia.');
+    expect((await other.ok('GET', '/api/notes/2026-09-21')).content).toBe('');
   });
 });

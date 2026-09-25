@@ -26,6 +26,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
   const nav = useNavigate();
   const [msg, setMsg] = useState<{ tone: 'positive' | 'negative' | 'neutral'; text: string } | null>(null);
   const [practice, setPractice] = useState({ questions: '', correct: '' });
+  const [early, setEarly] = useState(false);
   const onError = (e: unknown) => setMsg({ tone: 'negative', text: errorMessage(e) });
   const studiedMsg = (r: any) => r.cardCreated && setMsg({ tone: 'positive', text: 'Assunto concluído. A primeira revisão foi agendada.' });
 
@@ -106,9 +107,13 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
             </section>
           )}
           {s.card && !(s.card.nextReview && s.card.nextReview <= today) && (
-            <p className="mt-8 text-[14px] text-ink-2">
-              ↻ Próxima revisão: <span className="text-ink">{s.card.nextReview ? `${shortDate(s.card.nextReview, false)} (${relativeDays(daysBetween(s.card.nextReview, today))})` : 'nenhuma antes da prova'}</span>
-            </p>
+            <div className="mt-8">
+              <p className="text-[14px] text-ink-2">
+                ↻ Próxima revisão: <span className="text-ink">{s.card.nextReview ? `${shortDate(s.card.nextReview, false)} (${relativeDays(daysBetween(s.card.nextReview, today))})` : 'nenhuma antes da prova'}</span>
+                {s.card.nextReview && !early && <> · <button className="text-ink underline underline-offset-4" onClick={() => setEarly(true)}>Adiantar revisão</button></>}
+              </p>
+              {early && <div className="mt-4 animate-in"><p className="mb-3 text-[15px]">Como foi lembrar deste assunto?</p><ReviewButtons subjectId={s.subjectId} onDone={(t) => { setEarly(false); setMsg({ tone: 'positive', text: t }); }} /></div>}
+            </div>
           )}
 
           {msg && <Note tone={msg.tone} className="mt-6">{msg.text}</Note>}

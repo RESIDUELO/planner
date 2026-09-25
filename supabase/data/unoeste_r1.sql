@@ -450,10 +450,10 @@ from (values (2022, 100), (2023, 100), (2024, 100), (2025, 100), (2026, 100)) as
 on conflict (exam_id, year) do update set total_questions = excluded.total_questions, source_name = excluded.source_name,
   source_checked_at = excluded.source_checked_at;
 
--- Próxima prova (o aluno escolhe esta e informa data, inscrição e valor no site)
-insert into public.exam_editions (exam_id, year, status, published_at, notes)
-values ((select e.id from public.exams e join public.institutions i on i.id = e.institution_id where i.abbreviation = 'UNOESTE/HRPP' and e.name = 'R1 Acesso Direto'), 2027, 'published', now(), 'Próxima prova. Data, inscrição e valor são informados por cada aluno no site.')
-on conflict (exam_id, year) do update set notes = excluded.notes;
+-- Próxima prova (data oficial quando houver; inscrição e valor são do aluno)
+insert into public.exam_editions (exam_id, year, status, published_at, notes, exam_date)
+values ((select e.id from public.exams e join public.institutions i on i.id = e.institution_id where i.abbreviation = 'UNOESTE/HRPP' and e.name = 'R1 Acesso Direto'), 2027, 'published', now(), 'Próxima prova. Data oficial: 05/12/2026.', date '2026-12-05')
+on conflict (exam_id, year) do update set notes = excluded.notes, exam_date = excluded.exam_date;
 
 insert into public.questions (exam_edition_id, question_number, summary, correct_answer, annulled, difficulty, question_type, guideline, source, notes)
 select ed.id, v.n, v.summary, v.answer, v.annulled, v.difficulty::public.difficulty, v.qtype, v.guideline, 'Relatório "Análise das provas UNOESTE/HRPP — foco R1" (23/09/2026), Anexo E — questões classificadas', v.notes

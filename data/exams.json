@@ -1,5 +1,5 @@
 {
-  "_comment": "Provas cadastradas (somente por aqui, pelo administrador). Cada entrada vira supabase/data/<id>.sql (npm run data:sql). Data da prova, inscrição e valor NÃO ficam aqui: cada aluno informa os seus no site.",
+  "_comment": "Provas cadastradas (somente por aqui, pelo administrador). Cada entrada vira supabase/data/<id>.sql (npm run data:sql). upcoming.exam_date = data oficial (fixa); sem ela, cada aluno informa a data no site. Inscrição e valor são sempre do aluno.",
   "exams": [
     {
       "id": "famerp_r1",
@@ -20,7 +20,8 @@
       },
       "upcoming": {
         "year": 2027,
-        "notes": "Próxima prova. Data, inscrição e valor são informados por cada aluno no site."
+        "notes": "Próxima prova. Data oficial: 24/11/2026.",
+        "exam_date": "2026-11-24"
       }
     },
     {
@@ -64,7 +65,8 @@
       },
       "upcoming": {
         "year": 2027,
-        "notes": "Próxima prova. Data, inscrição e valor são informados por cada aluno no site."
+        "notes": "Próxima prova. Data oficial: 05/12/2026.",
+        "exam_date": "2026-12-05"
       }
     }
   ]

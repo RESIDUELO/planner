@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { getTheme, setTheme, type ThemePref } from '../lib/theme';
 import { Button, Disclosure, Note, Segmented, Title } from '../components/ui';
+import { REVIEW_OPTIONS } from './Planner';
 
 const WD = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
@@ -31,6 +32,19 @@ export function SettingsPage() {
   const [upg, setUpg] = useState({ name: '', email: '', password: '' });
   const [theme, setThemeState] = useState<ThemePref>(getTheme());
   const [msg, setMsg] = useState<{ tone: 'positive' | 'negative'; text: string } | null>(null);
+
+  const qc = useQueryClient();
+  const saveReviews = async (n: number) => {
+    const s = settings.data;
+    try {
+      await api.put('/api/me/study-settings', {
+        profile: { ...s.profile, reviews_per_day: n, preferred_start_time: s.profile.preferred_start_time?.slice(0, 5) || null, preferred_end_time: s.profile.preferred_end_time?.slice(0, 5) || null },
+        methods: s.methods.map((m: any) => ({ id: m.id, enabled: m.enabled, minutes: m.estimated_minutes })),
+      });
+      for (const k of ['study-settings', 'today', 'week', 'calendar', 'planner']) qc.invalidateQueries({ queryKey: [k] });
+      setMsg({ tone: 'positive', text: `Até ${n} ${n === 1 ? 'revisão' : 'revisões'} por dia.` });
+    } catch (err) { setMsg({ tone: 'negative', text: errorMessage(err) }); }
+  };
 
   const saveName = async (e: FormEvent) => {
     e.preventDefault();
@@ -86,6 +100,13 @@ export function SettingsPage() {
             <Item label="Horas por dia" value={`${s.profile.daily_hours} h`} />
             <Item label="Dias" value={s.weekdays.map((d: number) => WD[d]).join(', ')} />
             <Item label="Questões por dia" value={s.profile.questions_per_day} />
+            <label className="flex items-center justify-between gap-6 py-3 text-[17px]">
+              <span>Revisões por dia</span>
+              <select aria-label="Revisões por dia" className="bg-transparent text-right text-[17px] text-ink-2 outline-none" value={s.profile.reviews_per_day ?? 2}
+                onChange={(e) => saveReviews(Number(e.target.value))}>
+                {REVIEW_OPTIONS.map((n) => <option key={n} value={n}>até {n}</option>)}
+              </select>
+            </label>
             <Item label="Como estudo" value={s.methods.filter((m: any) => m.enabled).map((m: any) => m.name).join(', ')} />
           </>}
         </Group>

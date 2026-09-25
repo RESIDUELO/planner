@@ -74,7 +74,10 @@ function ExamList({ exams, open, setOpen, update, showHistory }: {
                     </>
                   ) : <Tint area="GO" className="text-[14px]">Definir data</Tint>
                 ) : (
-                  <span className="text-[14px] text-ink underline underline-offset-4">Adicionar</span>
+                  <>
+                    {e.date_official && <div className="tabular font-display text-[22px] leading-tight">{shortDate(e.exam_date)}</div>}
+                    <span className="text-[14px] text-ink underline underline-offset-4">Adicionar</span>
+                  </>
                 )}
               </div>
               <ChevronDown className={clsx('h-4 w-4 shrink-0 text-ink-3 transition-transform duration-200 ease-apple', isOpen && 'rotate-180')} />
@@ -124,7 +127,9 @@ function ExamDetails({ exam, update, showHistory }: { exam: any; update: (id: st
 
   return (
     <div className="pb-8 animate-in">
-      <div className="max-w-[12rem]">{input('examDate', 'Data da prova', 'date')}</div>
+      {exam.date_official ? (
+        <p className="text-[15px]">Prova em <span className="font-display text-[22px]">{shortDate(exam.exam_date)}</span> <span className="text-[13px] text-ink-3">· data oficial</span></p>
+      ) : <div className="max-w-[12rem]">{input('examDate', 'Data da prova', 'date')}</div>}
       <div className="mt-2 h-5 text-[13px]">{saved ? <span className="text-ink">✓ Salvo</span> : exam.registration_window !== 'unknown' && <span className="text-ink-3">{w.label}</span>}</div>
 
       <Advanced className="mt-4" label="Inscrição, valor e mais">

@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
+import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
@@ -148,9 +148,9 @@ route('GET', '/api/exams', async ({ ctx }) => {
       const h = hist.get(r.exam_id)!;
       const s: any = (sel as any[]).find((x) => x.exam_edition_id === r.edition_id);
       const g: any = (regs as any[]).find((x) => x.exam_edition_id === r.edition_id);
-      // Data, inscrição e valor: informados pelo próprio aluno
+      // Data oficial (fixa) quando cadastrada; senão, a do aluno. Inscrição e valor: do aluno.
       const mine = {
-        exam_date: s?.exam_date ?? null,
+        exam_date: r.exam_date ?? s?.exam_date ?? null,
         registration_start: s?.registration_start ?? null,
         registration_end: s?.registration_end ?? null,
         registration_fee: s?.registration_fee != null ? Number(s.registration_fee) : null,
@@ -158,6 +158,7 @@ route('GET', '/api/exams', async ({ ctx }) => {
       return {
         ...r,
         ...mine,
+        date_official: !!r.exam_date,
         selected: !!s?.selected, is_primary: !!(s?.selected && s?.is_primary),
         registration_status: g?.status ?? null, registration_number: g?.registration_number ?? null, registration_notes: g?.notes ?? null,
         days_left: mine.exam_date ? diffDays(mine.exam_date, t) : null,
@@ -194,6 +195,11 @@ route('PUT', '/api/me/editions/:id', async ({ ctx, params, body }) => {
     const start = pick(b.registrationStart, cur?.registration_start ?? null);
     const end = pick(b.registrationEnd, cur?.registration_end ?? null);
     if (start && end && start > end) throw badRequest('O início da inscrição precisa ser antes do fim.');
+    // Data oficial cadastrada não é alterável pelo aluno
+    const official: any = await q(ctx.sb.from('exam_editions').select('exam_date').eq('id', id).maybeSingle());
+    if (official?.exam_date && b.examDate !== undefined && b.examDate !== official.exam_date) {
+      throw badRequest('Esta prova tem data oficial cadastrada e ela não pode ser alterada.');
+    }
     await rpc(ctx, 'set_exam_details', {
       p_edition: id,
       p_exam_date: pick(b.examDate, cur?.exam_date ?? null),
@@ -246,17 +252,20 @@ route('PUT', '/api/me/study-settings', async ({ ctx, body }) => {
       study_sunday: z.boolean(),
       preferred_start_time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
       preferred_end_time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+      reviews_per_day: z.number().int().min(1).max(30).optional(),
     }),
     methods: z.array(z.object({ id: uuid, enabled: z.boolean(), minutes: z.number().int().min(5).max(600) })).min(1),
   }).parse(body);
   if (!b.methods.some((m) => m.enabled)) throw badRequest('Selecione pelo menos um método de estudo.');
+  const { reviews_per_day, ...profile } = b.profile;
   await q(ctx.sb.from('study_profiles').upsert({
-    ...b.profile, preferred_start_time: b.profile.preferred_start_time ?? null, preferred_end_time: b.profile.preferred_end_time ?? null,
+    ...profile, preferred_start_time: b.profile.preferred_start_time ?? null, preferred_end_time: b.profile.preferred_end_time ?? null,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' }));
   await q(ctx.sb.from('user_study_methods').upsert(
     b.methods.map((m) => ({ study_method_id: m.id, enabled: m.enabled, estimated_minutes: m.minutes })),
     { onConflict: 'user_id,study_method_id' }));
+  if (reviews_per_day !== undefined) await setReviewsPerDay(ctx, reviews_per_day);
   return { ok: true };
 });
 
@@ -358,3 +367,19 @@ route('GET', '/api/performance', async ({ ctx }) => performanceView(ctx));
 route('GET', '/api/algorithm', async () => ({ priority: PRIORITY, memory: MEMORY, mastery: MASTERY }));
 
 export { selectAll };
+
+// Observações da semana (texto livre do aluno)
+route('GET', '/api/notes/:week', async ({ ctx, params }) => {
+  const uid = await currentUserId(ctx);
+  const week = isoDate.parse(params.week);
+  const r: any = await q(ctx.sb.from('weekly_notes').select('content, updated_at').eq('user_id', uid).eq('week_start', week).maybeSingle());
+  return { week, content: r?.content ?? '', updatedAt: r?.updated_at ?? null };
+});
+
+route('PUT', '/api/notes/:week', async ({ ctx, params, body }) => {
+  const uid = await currentUserId(ctx);
+  const week = isoDate.parse(params.week);
+  const { content } = z.object({ content: z.string().max(5000) }).parse(body);
+  await q(ctx.sb.from('weekly_notes').upsert({ user_id: uid, week_start: week, content, updated_at: new Date().toISOString() }, { onConflict: 'user_id,week_start' }));
+  return { ok: true };
+});

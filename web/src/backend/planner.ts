@@ -9,6 +9,7 @@ import { adjustDueDate, initialRatingFromAccuracy, retrievability, review, type 
 import { dynamicPriority, LEVEL_LABEL, rankSubjects, type ExamInput, type PriorityLevel } from '../../../shared/priority';
 import { buildSchedule, sizeFactors } from '../../../shared/scheduler';
 import { estimateMastery } from '../../../shared/mastery';
+import { assignReviews } from '../../../shared/reviewQueue';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, q, rpc, selectAll, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
@@ -32,16 +33,16 @@ export interface SelectedEdition {
 
 export const editionLabel = (e: { institution: string; exam_name: string }) => `${e.institution} — ${e.exam_name}`;
 
-/** Provas escolhidas, com a data informada pelo próprio aluno. */
+/** Provas escolhidas: data oficial cadastrada ou, sem ela, a informada pelo próprio aluno. */
 export async function loadEditions(ctx: Ctx, editionIds: string[]): Promise<SelectedEdition[]> {
   if (!editionIds.length) return [];
   const uid = await currentUserId(ctx);
   const rows = await q(ctx.sb.from('exam_catalog')
-    .select('edition_id, exam_id, year, total_questions, exam_total_questions, exam_name, institution, institution_name, status')
+    .select('edition_id, exam_id, year, exam_date, total_questions, exam_total_questions, exam_name, institution, institution_name, status')
     .in('edition_id', editionIds).eq('status', 'published'));
   const mine = await q(ctx.sb.from('user_exam_editions').select('exam_edition_id, exam_date').eq('user_id', uid).in('exam_edition_id', editionIds));
   const dateBy = new Map((mine as any[]).map((m) => [m.exam_edition_id, m.exam_date]));
-  return (rows as any[]).map((r) => ({ ...r, exam_date: dateBy.get(r.edition_id) ?? null, is_primary: false }));
+  return (rows as any[]).map((r) => ({ ...r, exam_date: r.exam_date ?? dateBy.get(r.edition_id) ?? null, is_primary: false }));
 }
 
 export async function selectedEditions(ctx: Ctx, userId: string): Promise<SelectedEdition[]> {
@@ -60,16 +61,23 @@ export interface StudyProfile {
   study_sunday: boolean;
   preferred_start_time: string | null;
   preferred_end_time: string | null;
+  /** Máximo de revisões por dia (padrão 2). */
+  reviews_per_day: number;
 }
 
 export const DEFAULT_PROFILE = (today: ISODate): StudyProfile => ({
   start_date: today, daily_hours: 4, study_days_per_week: 6, questions_per_day: 20,
   study_saturday: true, study_sunday: false, preferred_start_time: null, preferred_end_time: null,
+  reviews_per_day: REVIEWS_PER_DAY_DEFAULT,
 });
+
+export const REVIEWS_PER_DAY_DEFAULT = 2;
 
 export async function loadProfile(ctx: Ctx, userId: string): Promise<StudyProfile & { configured: boolean }> {
   const p = await q(ctx.sb.from('study_profiles').select('*').eq('user_id', userId).maybeSingle());
-  return p ? { ...(p as any), daily_hours: Number((p as any).daily_hours), configured: true } : { ...DEFAULT_PROFILE(ctx.today()), configured: false };
+  return p
+    ? { ...(p as any), daily_hours: Number((p as any).daily_hours), reviews_per_day: (p as any).reviews_per_day ?? REVIEWS_PER_DAY_DEFAULT, configured: true }
+    : { ...DEFAULT_PROFILE(ctx.today()), configured: false };
 }
 
 /** Dias da semana de estudo: seg–sex + sáb/dom conforme flags, limitados ao nº de dias/semana. */
@@ -429,6 +437,7 @@ async function evaluateSubject(ctx: Ctx, userId: string, subjectId: string, ps: 
   const studied = selected.length > 0 && selected.every((m) => doneSet.has(m));
   let cardCreated = false;
   if (studied) cardCreated = await ensureCard(ctx, userId, subjectId, ps.study_plan_id, ps.exam_date);
+  await reflowSchedule(ctx, userId);
   return { studied, cardCreated };
 }
 
@@ -501,6 +510,9 @@ export async function logPractice(ctx: Ctx, subjectId: string, body: { questions
   return { performance: performance ? { ...(performance as any), accuracy: Number((performance as any).accuracy) } : null, studied, reviewAnticipated };
 }
 
+/** Momento do registro: agora (ou meio-dia do "hoje" simulado, nos testes). */
+const stamp = (today: ISODate) => (toISODateBR(new Date()) === today ? new Date().toISOString() : `${today}T12:00:00-03:00`);
+
 export async function rateReview(ctx: Ctx, subjectId: string, rating: Rating, timeSpentSeconds: number | null) {
   const userId = await currentUserId(ctx);
   const today = ctx.today();
@@ -512,13 +524,13 @@ export async function rateReview(ctx: Ctx, subjectId: string, rating: Rating, ti
   await q(ctx.sb.from('spaced_repetition_cards').update({
     stability: res.state.stability, difficulty: res.state.difficulty, retrievability: res.retrievabilityAtReview,
     interval_days: res.intervalDays, repetitions: res.state.repetitions, lapses: res.state.lapses,
-    last_review_at: new Date().toISOString(), next_review_at: res.nextReview, last_rating: rating, algorithm_version: MEMORY_VERSION,
+    last_review_at: stamp(today), next_review_at: res.nextReview, last_rating: rating, algorithm_version: MEMORY_VERSION,
   }).eq('id', card.id));
   const last: any = await q(ctx.sb.from('review_logs').select('id').eq('spaced_repetition_card_id', card.id)
     .is('actual_next_review', null).order('reviewed_at', { ascending: false }).limit(1).maybeSingle());
   if (last) await q(ctx.sb.from('review_logs').update({ actual_next_review: today }).eq('id', last.id));
   await q(ctx.sb.from('review_logs').insert({
-    spaced_repetition_card_id: card.id, subject_id: subjectId, rating,
+    spaced_repetition_card_id: card.id, subject_id: subjectId, rating, reviewed_at: stamp(today),
     previous_stability: card.stability, new_stability: res.state.stability,
     previous_difficulty: card.difficulty, new_difficulty: res.state.difficulty,
     previous_interval: card.interval_days, new_interval: res.intervalDays, scheduled_next_review: res.nextReview,
@@ -550,4 +562,120 @@ export async function readjustCards(ctx: Ctx, userId: string, planId: string | n
     changed++;
   }
   return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Planner dinâmico: fila de estudo e fila de revisões
+// ---------------------------------------------------------------------------
+
+/** Salva o limite de revisões por dia (coluna criada em 07_dynamic_planner.sql). */
+export async function setReviewsPerDay(ctx: Ctx, n: number) {
+  const userId = await currentUserId(ctx);
+  await q(ctx.sb.from('study_profiles').update({ reviews_per_day: n }).eq('user_id', userId));
+}
+
+/**
+ * O cronograma é uma fila. Depois de cada conclusão:
+ *  - tarefa adiantada passa a constar no dia em que foi feita (histórico real);
+ *  - o que está planejado para hoje (e o que está atrasado) fica onde está;
+ *  - tudo o que vem depois é redistribuído a partir de amanhã, na ordem de
+ *    prioridade, ocupando o espaço liberado — sem buracos.
+ */
+export async function reflowSchedule(ctx: Ctx, userId: string) {
+  const today = ctx.today();
+  const plan = await activePlan(ctx, userId);
+  if (!plan) return;
+  const tomorrow = addDays(today, 1);
+
+  const progress = await selectAll((a, b) => ctx.sb.from('subject_method_progress').select('subject_id, study_method_id, completed_at').eq('user_id', userId).range(a, b)) as any[];
+  const doneAt = new Map(progress.map((p) => [`${p.subject_id}|${p.study_method_id}`, toISODateBR(p.completed_at)]));
+  const rows = await selectAll((a, b) => ctx.sb.from('study_schedule').select('id, subject_id, study_method_id, scheduled_date, completed')
+    .eq('study_plan_id', plan.id).neq('activity_type', 'review').range(a, b)) as any[];
+
+  // 1) Adiantadas: registradas no dia real da conclusão
+  const moveTo = new Map<ISODate, string[]>();
+  for (const r of rows) {
+    const d = doneAt.get(`${r.subject_id}|${r.study_method_id}`);
+    if (r.completed && d && r.scheduled_date !== d && r.scheduled_date > today) {
+      if (!moveTo.has(d)) moveTo.set(d, []);
+      moveTo.get(d)!.push(r.id);
+    }
+  }
+  for (const [d, ids] of moveTo) {
+    for (let i = 0; i < ids.length; i += 40) await q(ctx.sb.from('study_schedule').update({ scheduled_date: d }).in('id', ids.slice(i, i + 40)));
+  }
+
+  if (tomorrow >= plan.end_date) return;
+
+  // 2) Hoje e atrasadas ficam; o futuro é redistribuído
+  const kept = new Set(rows.filter((r) => !r.completed && r.scheduled_date <= today).map((r) => `${r.subject_id}|${r.study_method_id}`));
+  const profile = await loadProfile(ctx, userId);
+  const allMethods = await loadMethods(ctx, userId);
+  const enabledIds = allMethods.filter((m) => m.enabled).map((m) => m.id);
+  const choices = await loadActivityChoices(ctx, userId);
+  const ps = await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank, historical_percentage, size_factor, exam_date, scheduled')
+    .eq('study_plan_id', plan.id).range(a, b)) as any[];
+  const cards = await selectAll<CardRow>((a, b) => ctx.sb.from('spaced_repetition_cards').select('*').eq('user_id', userId).range(a, b));
+  const cardBy = new Map(cards.map((c) => [c.subject_id, c]));
+  const planExams = await q(ctx.sb.from('study_plan_exams').select('exam_date').eq('study_plan_id', plan.id)) as any[];
+
+  const schedule = buildSchedule({
+    startDate: tomorrow,
+    endDate: plan.end_date,
+    dailyMinutes: Math.round(profile.daily_hours * 60),
+    studyWeekdays: studyWeekdays(profile),
+    questionsPerDay: profile.questions_per_day,
+    methods: allMethods.map((m) => ({ id: m.id, code: m.code, activityType: m.activity_type, minutes: m.estimated_minutes })),
+    subjects: ps.map((s) => {
+      const card = cardBy.get(s.subject_id);
+      const methodIds = choices.get(s.subject_id) ?? enabledIds;
+      return {
+        subjectId: s.subject_id,
+        rank: s.priority_rank,
+        percentage: Number(s.historical_percentage),
+        sizeFactor: Number(s.size_factor),
+        examDate: s.exam_date,
+        completedMethodIds: methodIds.filter((m) => doneAt.has(`${s.subject_id}|${m}`) || kept.has(`${s.subject_id}|${m}`)),
+        methodIds,
+        card: card ? { state: cardState(card), nextReview: card.next_review_at } : null,
+      };
+    }),
+    examDates: planExams.map((e) => e.exam_date).filter(Boolean),
+  });
+
+  await q(ctx.sb.from('study_schedule').delete().eq('study_plan_id', plan.id).eq('completed', false)
+    .gt('scheduled_date', today).neq('activity_type', 'review'));
+  if (schedule.activities.length) {
+    await q(ctx.sb.from('study_schedule').insert(schedule.activities.map((a) => ({
+      user_id: userId, study_plan_id: plan.id, subject_id: a.subjectId, study_method_id: a.methodId, scheduled_date: a.date,
+      activity_type: a.activityType, estimated_minutes: a.minutes, priority: a.priority,
+    }))));
+  }
+  // "Fora do tempo disponível": só o que mudou, em lotes (URLs curtas)
+  const unscheduled = new Set(schedule.unscheduledSubjectIds);
+  for (const flag of [true, false]) {
+    const ids = ps.filter((x) => x.scheduled !== flag && unscheduled.has(x.subject_id) !== flag).map((x) => x.subject_id);
+    for (let i = 0; i < ids.length; i += 40) {
+      await q(ctx.sb.from('study_plan_subjects').update({ scheduled: flag }).eq('study_plan_id', plan.id).in('subject_id', ids.slice(i, i + 40)));
+    }
+  }
+}
+
+/** Revisões já feitas hoje (a primeira, registrada ao concluir o assunto, não conta). */
+export async function reviewsDoneOn(ctx: Ctx, userId: string, day: ISODate) {
+  const logs = await q(ctx.sb.from('review_logs').select('subject_id, previous_interval')
+    .eq('user_id', userId).gte('reviewed_at', `${day}T00:00:00-03:00`).lt('reviewed_at', `${addDays(day, 1)}T00:00:00-03:00`)) as any[];
+  return new Set(logs.filter((l) => l.previous_interval != null).map((l) => l.subject_id)).size;
+}
+
+/** Fila de revisões: subjectId → dia em que a revisão aparece no planner. */
+export async function reviewPlan(ctx: Ctx, userId: string, subjects: PlanSubjectView[]) {
+  const today = ctx.today();
+  const profile = await loadProfile(ctx, userId);
+  const items = subjects.filter((s) => s.card?.nextReview).map((s) => ({
+    id: s.subjectId, due: s.card!.nextReview!, score: s.dynamic.score, examDate: s.examDate,
+  }));
+  return assignReviews(items, {
+    today, perDay: profile.reviews_per_day, studyWeekdays: studyWeekdays(profile), doneToday: await reviewsDoneOn(ctx, userId, today),
+  });
 }

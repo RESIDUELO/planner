@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { BookOpen, CalendarDays, House, RotateCcw, Timer } from 'lucide-react';
+import { BarChart2, BookOpen, CalendarDays, RotateCcw, Timer } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { clock, usePomodoro } from '../lib/pomodoro';
 import { Logo, LogoMark } from './Logo';
@@ -14,11 +14,11 @@ const NAV = [
   { to: '/desempenho', label: 'Desempenho' },
 ];
 const TABS = [
-  { to: '/', label: 'Início', icon: House, end: true },
   { to: '/planner', label: 'Planner', icon: BookOpen },
   { to: '/foco', label: 'Foco', icon: Timer },
   { to: '/revisoes', label: 'Revisões', icon: RotateCcw },
   { to: '/provas', label: 'Provas', icon: CalendarDays },
+  { to: '/desempenho', label: 'Desempenho', icon: BarChart2 },
 ];
 
 function initials(name?: string) {
@@ -48,7 +48,6 @@ export function Layout() {
     <Menu label="Perfil" trigger={
       <span className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-[12px] font-medium text-ink hover:border-ink">{initials(user?.isGuest ? 'Visitante' : user?.name)}</span>
     } items={[
-      { label: 'Desempenho', onClick: () => nav('/desempenho') },
       { label: user?.isGuest ? 'Criar conta' : 'Configurações', onClick: () => nav('/configuracoes') },
       { label: 'Configurações', onClick: () => nav('/configuracoes'), hidden: !user?.isGuest },
       { label: 'Sair', onClick: async () => { await logout(); nav('/login'); }, destructive: true },
@@ -59,7 +58,7 @@ export function Layout() {
     <div className="min-h-full">
       <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-6 px-5 sm:px-8">
-          <Link to="/" className="flex shrink-0 items-center transition-opacity hover:opacity-70" aria-label="Início">
+          <Link to="/planner" className="flex shrink-0 items-center transition-opacity hover:opacity-70" aria-label="Planner">
             <span className="hidden sm:flex"><Logo /></span>
             <span className="flex sm:hidden"><LogoMark /></span>
           </Link>
@@ -84,7 +83,7 @@ export function Layout() {
 
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
         {TABS.map((i) => (
-          <NavLink key={i.to} to={i.to} end={'end' in i} className={({ isActive }) => clsx('flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10px] transition-colors', isActive ? 'text-ink' : 'text-ink-3')}>
+          <NavLink key={i.to} to={i.to} className={({ isActive }) => clsx('flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10px] transition-colors', isActive ? 'text-ink' : 'text-ink-3')}>
             <i.icon className="h-[21px] w-[21px]" strokeWidth={1.5} />
             {i.label}
           </NavLink>

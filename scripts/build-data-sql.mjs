@@ -95,10 +95,10 @@ on conflict (exam_id, year) do update set total_questions = excluded.total_quest
   source_checked_at = excluded.source_checked_at;
 `);
   const u = entry.upcoming;
-  if (u) out.push(`-- Próxima prova (o aluno escolhe esta e informa data, inscrição e valor no site)
-insert into public.exam_editions (exam_id, year, status, published_at, notes)
-values (${examRef}, ${u.year}, 'published', now(), ${lit(u.notes)})
-on conflict (exam_id, year) do update set notes = excluded.notes;
+  if (u) out.push(`-- Próxima prova (data oficial quando houver; inscrição e valor são do aluno)
+insert into public.exam_editions (exam_id, year, status, published_at, notes, exam_date)
+values (${examRef}, ${u.year}, 'published', now(), ${lit(u.notes)}, ${u.exam_date ? `date ${lit(u.exam_date)}` : 'null'})
+on conflict (exam_id, year) do update set notes = excluded.notes, exam_date = excluded.exam_date;
 `);
 
   // Questões

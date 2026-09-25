@@ -7,14 +7,15 @@ import { expect, test, type Page } from '@playwright/test';
 test.describe.configure({ mode: 'serial' });
 
 const student = { name: 'Aluna E2E', email: `aluna${Date.now()}@e2e.test`, password: 'senha-aluna-123' };
-const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+const inDays = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + n * 86_400_000));
+const HOME = /\/planner\/planner$/;
 
 async function login(page: Page, email: string, password: string) {
   await page.goto('login');
   await page.getByLabel('E-mail').fill(email);
   await page.getByLabel('Senha').fill(password);
   await page.locator('form').getByRole('button', { name: 'Entrar' }).click();
-  await expect(page).toHaveURL(/\/planner\/?$/);
+  await expect(page).toHaveURL(HOME);
 }
 
 test('tela de login mostra as três opções', async ({ page }) => {
@@ -27,14 +28,17 @@ test('tela de login mostra as três opções', async ({ page }) => {
   await expect(page).toHaveTitle('Residência Planner');
 });
 
-test('TESTE 1 — criar conta e ver somente as provas cadastradas', async ({ page }) => {
+test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async ({ page }) => {
   await page.goto('login');
   await page.getByRole('tab', { name: 'Criar conta' }).click();
   await page.getByLabel('Nome').fill(student.name);
   await page.getByLabel('E-mail').fill(student.email);
   await page.getByLabel('Senha').fill(student.password);
   await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
-  await expect(page).toHaveURL(/\/planner\/?$/);
+  await expect(page).toHaveURL(HOME);
+  await expect(page.getByRole('heading', { name: 'Planner' })).toBeVisible();
+  await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
+  await expect(page.getByText('Receba seu planner')).toHaveCount(0);
   await page.goto('provas');
   await expect(page.locator('article')).toHaveCount(3);
   for (const i of ['FAMERP', 'HU-UEL', 'UNOESTE/HRPP']) await expect(page.getByTestId(`exam-${i}`)).toBeVisible();
@@ -46,45 +50,65 @@ test('TESTE 20 — não existe área administrativa no site', async ({ page }) =
   await login(page, student.email, student.password);
   await expect(page.getByRole('link', { name: 'Administração' })).toHaveCount(0);
   await page.goto('admin');
-  await expect(page).toHaveURL(/\/planner\/?$/);
+  await expect(page).toHaveURL(HOME);
 });
 
-test('o aluno escolhe a prova e informa data, inscrição e valor (teste 3)', async ({ page }) => {
+test('datas oficiais fixas; inscrição e valor são do aluno (teste 3)', async ({ page }) => {
   await login(page, student.email, student.password);
   await page.goto('provas');
   const card = page.getByTestId('exam-FAMERP');
+  await expect(card).toContainText('24 nov 2026');
+  await expect(page.getByTestId('exam-UNOESTE/HRPP')).toContainText('5 dez 2026');
   await card.locator('button').first().click();
   await card.getByRole('button', { name: 'Adicionar à minha preparação' }).click();
-  await card.getByLabel('Data da prova — FAMERP').fill(inDays(48));
+  await expect(card).toContainText('data oficial');
+  await expect(card.getByLabel('Data da prova — FAMERP')).toHaveCount(0);
   await card.getByRole('button', { name: 'Inscrição, valor e mais' }).click();
   await card.getByLabel('Valor (R$) — FAMERP').fill('450');
   await card.getByLabel('Valor (R$) — FAMERP').blur();
   await expect(card.getByText('Salvo')).toBeVisible();
   await expect(card).toContainText('principal');
-  await page.reload();
-  await expect(page.getByTestId('exam-FAMERP')).toContainText('48 dias');
-  await page.getByTestId('exam-FAMERP').locator('button').first().click();
-  await expect(page.getByTestId('exam-FAMERP').getByLabel('Data da prova — FAMERP')).toHaveValue(inDays(48));
 });
 
-test('TESTES 3, 5–12 — planner, checklist, questões e primeira revisão', async ({ page }) => {
+test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e checklist', async ({ page }) => {
   await login(page, student.email, student.password);
-  await page.goto('planner');
   await expect(page.getByLabel(/Selecionar FAMERP/)).toBeChecked();
-  await expect(page.getByLabel('Data da prova — FAMERP')).toHaveValue(inDays(48));
-  await page.getByRole('button', { name: 'Continuar' }).click();
-  // Sem configurar nada: só marcar como estuda (tempo fica em "Opções avançadas")
-  await expect(page.getByRole('heading', { name: 'Como você estuda?' })).toBeVisible();
+  // Uma tela só: prova e (opcionalmente) como estuda; tempo fica em "Opções avançadas"
+  await expect(page.getByText('Como você estuda?')).toBeVisible();
   await expect(page.getByLabel('Videoaula')).toBeChecked();
   await expect(page.getByText('Horas por dia')).toHaveCount(0);
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
+
   const today = page.getByTestId(`day-${inDays(0)}`);
-  await expect(today.getByTestId('task').first()).toBeVisible();
+  await expect(today.getByTestId('col-subjects').getByTestId('task').first()).toBeVisible();
+  await expect(today.getByTestId('col-reviews')).toContainText('Revisões');
   await expect(today.getByText('Saúde do Trabalhador')).toBeVisible();
   await expect(today).not.toContainText('min');
 
+  // Adiantar: uma tarefa de outro dia concluída hoje aparece hoje, como feita
+  let future = null as null | { name: string };
+  for (let n = 1; n <= 4 && !future; n++) {
+    const t = page.getByTestId(`day-${inDays(n)}`).getByTestId('task').first();
+    if (await t.count()) {
+      const name = (await t.locator('button').first().locator('span').nth(1).textContent())!.trim();
+      await t.getByRole('checkbox').click();
+      future = { name };
+    }
+  }
+  expect(future).not.toBeNull();
+  const moved = today.getByTestId('task').filter({ hasText: future!.name });
+  await expect(moved.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+
+  // Observações da semana: folha pautada, letra de forma, salva sozinha
+  const notes = page.getByLabel('Observações da semana', { exact: true }).locator('textarea').or(page.getByRole('textbox', { name: 'Observações da semana' }));
+  await notes.fill('Focar mais em cardiologia.');
+  await expect(page.getByText('Salvo', { exact: true })).toBeVisible();
+  expect(await notes.evaluate((e) => getComputedStyle(e).fontFamily)).toContain('Patrick Hand');
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Observações da semana' })).toHaveValue('Focar mais em cardiologia.');
+
   // Pomodoro a partir da tarefa, opcional e independente
-  await today.getByRole('button', { name: 'Iniciar Pomodoro — Saúde do Trabalhador' }).click();
+  await page.getByTestId(`day-${inDays(0)}`).getByRole('button', { name: 'Iniciar Pomodoro — Saúde do Trabalhador' }).click();
   await expect(page).toHaveURL(/\/foco$/);
   await expect(page.getByRole('timer')).toHaveText(/^2[45]:\d\d$/);
   await expect(page.getByRole('button', { name: 'Saúde do Trabalhador' })).toBeVisible();
@@ -127,7 +151,6 @@ test('TESTES 15, 17–19 — calendário e persistência após fechar o navegado
   await login(page, student.email, student.password);
   await page.goto('revisoes');
   await expect(page.getByText('Próximos dias')).toBeVisible();
-  await expect(page.getByText('Saúde do Trabalhador').first()).toBeVisible();
   await page.getByRole('button', { name: 'Calendário' }).click();
   await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
   await ctx.close();
@@ -135,8 +158,8 @@ test('TESTES 15, 17–19 — calendário e persistência após fechar o navegado
   const again = await browser.newContext();
   const p2 = await again.newPage();
   await login(p2, student.email, student.password);
-  await expect(p2.getByText('48', { exact: true })).toBeVisible();
-  await expect(p2.getByText(/1 de \d+ assuntos concluídos/)).toBeVisible();
+  await expect(p2.getByText(/FAMERP · 24 nov 2026/)).toBeVisible();
+  await expect(p2.getByRole('textbox', { name: 'Observações da semana' })).toHaveValue('Focar mais em cardiologia.');
   await p2.goto('desempenho');
   await expect(p2.getByText('85%', { exact: true })).toBeVisible();
   await expect(p2.getByText('de acertos em 20 questões')).toBeVisible();
@@ -146,19 +169,17 @@ test('TESTES 15, 17–19 — calendário e persistência após fechar o navegado
 test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => {
   await page.goto('login');
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
-  await expect(page).toHaveURL(/\/planner\/?$/);
+  await expect(page).toHaveURL(HOME);
   await expect(page.getByText('Você está no modo visitante')).toBeVisible();
   await page.goto('provas');
   await expect(page.locator('article')).toHaveCount(3);
-  // A escolha e a data da outra aluna não aparecem para o visitante
+  // A escolha da outra aluna não aparece para o visitante
   await expect(page.getByText('Você ainda não escolheu uma prova.')).toBeVisible();
   await expect(page.getByTestId('exam-FAMERP')).toContainText('Adicionar');
 
-  // Uso sem configuração: prova + data → planner → marcar a primeira tarefa
+  // Sem configuração: prova → planner → marcar a primeira tarefa
   await page.goto('planner');
   await page.getByLabel(/Selecionar FAMERP/).check({ force: true });
-  await page.getByLabel('Data da prova — FAMERP').fill(inDays(60));
-  await page.getByRole('button', { name: 'Continuar' }).click();
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
   const task = page.getByTestId(`day-${inDays(0)}`).getByTestId('task').first();
   const circle = task.getByRole('checkbox');

@@ -528,10 +528,10 @@ from (values (2021, 80), (2022, 80), (2023, 80), (2024, 80), (2025, 80), (2026, 
 on conflict (exam_id, year) do update set total_questions = excluded.total_questions, source_name = excluded.source_name,
   source_checked_at = excluded.source_checked_at;
 
--- Próxima prova (o aluno escolhe esta e informa data, inscrição e valor no site)
-insert into public.exam_editions (exam_id, year, status, published_at, notes)
-values ((select e.id from public.exams e join public.institutions i on i.id = e.institution_id where i.abbreviation = 'FAMERP' and e.name = 'R1 Acesso Direto'), 2027, 'published', now(), 'Próxima prova. Data, inscrição e valor são informados por cada aluno no site.')
-on conflict (exam_id, year) do update set notes = excluded.notes;
+-- Próxima prova (data oficial quando houver; inscrição e valor são do aluno)
+insert into public.exam_editions (exam_id, year, status, published_at, notes, exam_date)
+values ((select e.id from public.exams e join public.institutions i on i.id = e.institution_id where i.abbreviation = 'FAMERP' and e.name = 'R1 Acesso Direto'), 2027, 'published', now(), 'Próxima prova. Data oficial: 24/11/2026.', date '2026-11-24')
+on conflict (exam_id, year) do update set notes = excluded.notes, exam_date = excluded.exam_date;
 
 insert into public.questions (exam_edition_id, question_number, summary, correct_answer, annulled, difficulty, question_type, guideline, source, notes)
 select ed.id, v.n, v.summary, v.answer, v.annulled, v.difficulty::public.difficulty, v.qtype, v.guideline, 'Relatório "Análise das provas R1 FAMERP 2021–2026" (23/09/2026), Anexo — classificação questão por questão', v.notes

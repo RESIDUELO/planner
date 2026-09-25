@@ -1,11 +1,10 @@
 /** "O que estudar hoje?", calendário de revisões, dashboard e desempenho. */
 import { MASTERY, SCHEDULER } from '../../../shared/config';
 import { addDays, diffDays, eachDay, weekday, type ISODate } from '../../../shared/dates';
-import { projectReviews, review, type MemoryState } from '../../../shared/memory';
 import { reviewMinutes } from '../../../shared/scheduler';
 import { dominatedQuestions } from '../../../shared/mastery';
 import { currentUserId, selectAll, type Ctx } from './core';
-import { editionLabel, loadMethods, loadPlanState, loadProfile, readjustCards, selectedEditions, studyWeekdays, toISODateBR, type PlanSubjectView } from './planner';
+import { editionLabel, loadMethods, reviewPlan, loadPlanState, loadProfile, readjustCards, selectedEditions, studyWeekdays, toISODateBR, type PlanSubjectView } from './planner';
 
 /** Limites [início, fim) de um dia no fuso de Brasília. */
 const dayBounds = (d: ISODate) => [`${d}T00:00:00-03:00`, `${addDays(d, 1)}T00:00:00-03:00`] as const;
@@ -22,14 +21,21 @@ export async function todayView(ctx: Ctx) {
   const isStudyDay = studyWeekdays(profile).includes(weekday(today));
   const byId = new Map(subjects.map((s) => [s.subjectId, s]));
 
+  // Fila de revisões: no máximo N por dia (escolha do aluno), as mais antigas primeiro
+  const queue = await reviewPlan(ctx, userId, subjects);
   const reviewsDue = subjects
-    .filter((s) => s.card?.nextReview && s.card.nextReview <= today)
+    .filter((s) => queue.get(s.subjectId) === today)
     .map((s) => ({
       kind: 'review' as const, subjectId: s.subjectId, name: s.name, area: s.area, rank: s.rank, level: s.level,
       levelLabel: s.levelLabel, minutes: reviewMinutes(s.sizeFactor), dueDate: s.card!.nextReview!,
-      overdueDays: diffDays(today, s.card!.nextReview!), retrievability: s.card!.retrievability, score: s.dynamic.score,
+      overdueDays: Math.max(0, diffDays(today, s.card!.nextReview!)), retrievability: s.card!.retrievability, score: s.dynamic.score,
     }))
     .sort((a, b) => b.overdueDays - a.overdueDays || b.score - a.score);
+  // Próximas da fila (para "adiantar revisão")
+  const nextReviews = subjects
+    .filter((s) => { const d = queue.get(s.subjectId); return d && d > today; })
+    .sort((a, b) => queue.get(a.subjectId)!.localeCompare(queue.get(b.subjectId)!) || b.dynamic.score - a.dynamic.score)
+    .slice(0, 5).map((s) => ({ subjectId: s.subjectId, name: s.name, area: s.area, date: queue.get(s.subjectId) }));
 
   const methodName = new Map((await loadMethods(ctx, userId)).map((m) => [m.id, m.name]));
   const doneKeys = new Set(subjects.flatMap((s) => s.checklist.filter((c) => c.done).map((c) => `${s.subjectId}|${c.methodId}`)));
@@ -83,7 +89,7 @@ export async function todayView(ctx: Ctx) {
   return {
     today, isStudyDay, capacityMinutes: capacity, plannedMinutes: used,
     questions: { perDay: qCount, minutes: qMinutes, suggestions: practice },
-    reviews, newSubjects: [...onTime, ...late],
+    reviews, nextReviews, reviewsPerDay: profile.reviews_per_day, newSubjects: [...onTime, ...late],
     overdueReviews: reviews.filter((r) => r.overdueDays > 0).length,
     overdueActivities: late.length,
   };
@@ -95,59 +101,63 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
   const state = await loadPlanState(ctx, userId);
   if (!state) return null;
   const { plan, subjects } = state;
-  const lastDay = addDays(plan.end_date, -1);
   const days = new Map<ISODate, { date: ISODate; reviews: any[]; newSubjects: any[]; exams: string[] }>();
   for (const d of eachDay(from, to)) days.set(d, { date: d, reviews: [], newSubjects: [], exams: [] });
   const push = (date: ISODate, key: 'reviews' | 'newSubjects', v: any) => days.get(date)?.[key].push(v);
   const byId = new Map(subjects.map((s) => [s.subjectId, s]));
 
-  const logs = await selectAll((a, b) => ctx.sb.from('review_logs').select('subject_id, reviewed_at, rating')
+  // Revisões feitas (a primeira, registrada ao concluir o assunto, não é uma revisão)
+  const logs = await selectAll((a, b) => ctx.sb.from('review_logs').select('subject_id, reviewed_at, rating, previous_interval')
     .eq('user_id', userId).gte('reviewed_at', dayBounds(from)[0]).lt('reviewed_at', dayBounds(to)[1]).range(a, b));
+  const seen = new Set<string>();
   for (const l of logs as any[]) {
-    push(toISODateBR(l.reviewed_at), 'reviews', { subjectId: l.subject_id, name: byId.get(l.subject_id)?.name ?? '—', area: byId.get(l.subject_id)?.area, status: 'done', rating: l.rating });
+    if (l.previous_interval == null) continue;
+    const d = toISODateBR(l.reviewed_at);
+    if (seen.has(`${d}|${l.subject_id}`)) continue;
+    seen.add(`${d}|${l.subject_id}`);
+    push(d, 'reviews', { subjectId: l.subject_id, name: byId.get(l.subject_id)?.name ?? '—', area: byId.get(l.subject_id)?.area, status: 'done', rating: l.rating });
   }
 
+  // Revisões pendentes: a fila (limite diário escolhido pelo aluno)
+  const queue = await reviewPlan(ctx, userId, subjects);
   for (const s of subjects) {
-    if (s.card) {
-      const due = s.card.nextReview;
-      if (!due) continue;
-      if (due < today) {
-        push(today, 'reviews', { subjectId: s.subjectId, name: s.name, area: s.area, status: 'overdue', dueDate: due, overdueDays: diffDays(today, due) });
-        continue;
-      }
-      const st: MemoryState = { stability: s.card.stability, difficulty: s.card.difficulty, lastReview: s.card.lastReview, repetitions: s.card.repetitions, lapses: s.card.lapses };
-      projectReviews(st, due, s.examDate, lastDay).forEach((d, i) => push(d, 'reviews', { subjectId: s.subjectId, name: s.name, area: s.area, status: i === 0 ? 'scheduled' : 'projected' }));
-    } else {
-      const last = s.checklist.map((c) => c.scheduledDate).filter(Boolean).sort().pop() as ISODate | undefined;
-      if (!last || !s.scheduled) continue;
-      const first = review(null, 'good', last < today ? today : last, s.examDate);
-      projectReviews(first.state, first.nextReview, s.examDate, lastDay).forEach((d) => push(d, 'reviews', { subjectId: s.subjectId, name: s.name, area: s.area, status: 'projected' }));
+    const d = queue.get(s.subjectId);
+    if (!d || !s.card?.nextReview) continue;
+    push(d, 'reviews', { subjectId: s.subjectId, name: s.name, area: s.area, status: s.card.nextReview < today ? 'overdue' : 'scheduled',
+      dueDate: s.card.nextReview, overdueDays: Math.max(0, diffDays(today, s.card.nextReview)) });
+  }
+
+  // Estudo: pendente no dia planejado; feito no dia em que foi feito (histórico real)
+  const methodName = new Map((await loadMethods(ctx, userId)).map((m) => [m.id, m.name]));
+  const sched = await selectAll((a, b) => ctx.sb.from('study_schedule').select('subject_id, study_method_id, scheduled_date, estimated_minutes')
+    .eq('study_plan_id', plan.id).eq('completed', false).neq('activity_type', 'review').gte('scheduled_date', from).lte('scheduled_date', to).order('priority').range(a, b));
+  const items: { date: ISODate; subjectId: string; methodId: string; done: boolean; at?: string | null }[] = [];
+  const pendingKeys = new Set<string>();
+  for (const s of subjects) {
+    for (const c of s.checklist) {
+      if (!c.done) { pendingKeys.add(`${s.subjectId}|${c.methodId}`); continue; }
+      const d = c.completedAt ? toISODateBR(c.completedAt) : null;
+      if (d && d >= from && d <= to) items.push({ date: d, subjectId: s.subjectId, methodId: c.methodId, done: true, at: c.completedAt });
     }
   }
-
-  const methodName = new Map((await loadMethods(ctx, userId)).map((m) => [m.id, m.name]));
-  const sched = await selectAll((a, b) => ctx.sb.from('study_schedule').select('subject_id, study_method_id, scheduled_date, completed, estimated_minutes')
-    .eq('study_plan_id', plan.id).gte('scheduled_date', from).lte('scheduled_date', to).order('priority').range(a, b));
-  const grouped = new Map<string, any>();
-  const chosen = new Set(subjects.flatMap((s) => s.checklist.map((c) => `${s.subjectId}|${c.methodId}`)));
   for (const r of sched as any[]) {
-    if (!chosen.has(`${r.subject_id}|${r.study_method_id}`)) continue;
-    const key = `${r.scheduled_date}|${r.subject_id}`;
+    if (pendingKeys.has(`${r.subject_id}|${r.study_method_id}`)) items.push({ date: r.scheduled_date, subjectId: r.subject_id, methodId: r.study_method_id, done: false });
+  }
+  const grouped = new Map<string, any>();
+  for (const it of items) {
+    const key = `${it.date}|${it.subjectId}`;
     if (!grouped.has(key)) {
-      const s = byId.get(r.subject_id);
-      grouped.set(key, { date: r.scheduled_date, subjectId: r.subject_id, name: s?.name ?? '—', area: s?.area, specialty: s?.specialty, rank: s?.rank, methods: [], methodIds: [], minutes: 0, completed: true, studied: s?.status === 'studied', progress: s?.progress ?? 0, totalActivities: s?.checklist.length ?? 0 });
+      const s = byId.get(it.subjectId);
+      grouped.set(key, { date: it.date, subjectId: it.subjectId, name: s?.name ?? '—', area: s?.area, specialty: s?.specialty, rank: s?.rank ?? 999,
+        methods: [], methodIds: [], done: true, doneAt: null, studied: s?.status === 'studied', progress: s?.progress ?? 0, totalActivities: s?.checklist.length ?? 0 });
     }
     const g = grouped.get(key);
-    g.methods.push(methodName.get(r.study_method_id) ?? '—');
-    g.methodIds.push(r.study_method_id);
-    g.minutes += r.estimated_minutes;
-    g.completed = g.completed && r.completed;
+    g.methods.push(methodName.get(it.methodId) ?? '—');
+    g.methodIds.push(it.methodId);
+    g.done = g.done && it.done;
+    if (it.at && (!g.doneAt || it.at > g.doneAt)) g.doneAt = it.at;
   }
-  for (const g of grouped.values()) {
-    const done = new Set(byId.get(g.subjectId)?.checklist.filter((c) => c.done).map((c) => c.methodId));
-    g.done = g.methodIds.every((m: string) => done.has(m));
-    push(g.date, 'newSubjects', g);
-  }
+  for (const g of [...grouped.values()].sort((a, b) => Number(b.done) - Number(a.done) || a.rank - b.rank)) push(g.date, 'newSubjects', g);
   for (const e of state.exams as any[]) if (e.exam_date && days.has(e.exam_date)) days.get(e.exam_date)!.exams.push(e.institution);
   return { from, to, today, planEnd: plan.end_date, days: [...days.values()] };
 }

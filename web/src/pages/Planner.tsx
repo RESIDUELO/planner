@@ -1,34 +1,47 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../lib/auth';
 import { ChevronLeft, ChevronRight, Search, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
 import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/format';
 import { areaShort, tintFor } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
-import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
+import { Advanced, Button, CheckButton, CheckCircle, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
 import { SubjectModal, useInvalidateStudy } from '../components/SubjectModal';
 import { addDays, weekday } from '../../../shared/dates';
 
 export function PlannerPage() {
   const q = useQuery({ queryKey: ['planner'], queryFn: () => api.get('/api/planner') });
+  const { user } = useAuth();
   const [setup, setSetup] = useState(false);
   if (q.isLoading) return <Spinner />;
-  if (!q.data?.plan || setup) return <PlannerSetup onDone={() => setSetup(false)} canCancel={!!q.data?.plan} />;
-  return <PlannerView data={q.data} onReconfigure={() => setSetup(true)} />;
+  return (
+    <>
+      {!q.data?.plan || setup
+        ? <PlannerSetup onDone={() => setSetup(false)} canCancel={!!q.data?.plan} />
+        : <PlannerView data={q.data} onReconfigure={() => setSetup(true)} />}
+      {user?.isGuest && (
+        <p className="mx-auto mt-20 max-w-3xl text-[13px] text-ink-3">
+          Você está no modo visitante. <Link to="/configuracoes" className="text-ink underline underline-offset-4">Crie uma conta</Link> para acessar de outros dispositivos.
+        </p>
+      )}
+    </>
+  );
 }
 
 // ============================================================================
-// Montar o planner — o mínimo: provas e como você estuda
+// Começar — tudo numa tela só, dentro do próprio Planner
 // ============================================================================
+
+export const REVIEW_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
 
 function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
   const qc = useQueryClient();
   const exams = useQuery({ queryKey: ['exams'], queryFn: () => api.get<any[]>('/api/exams') });
   const settings = useQuery({ queryKey: ['study-settings'], queryFn: () => api.get('/api/me/study-settings') });
-  const [step, setStep] = useState(0);
-  const [sel, setSel] = useState<string[]>([]);
+  const [sel, setSel] = useState<string[] | null>(null);
   const [primary, setPrimary] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [methods, setMethods] = useState<any[]>([]);
@@ -36,7 +49,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (exams.data && !sel.length) {
+    if (exams.data && sel === null) {
       const s = exams.data.filter((e) => e.selected);
       setSel(s.map((e) => e.edition_id));
       setPrimary(s.find((e) => e.is_primary)?.edition_id ?? s[0]?.edition_id ?? null);
@@ -52,10 +65,14 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const generate = useMutation({
     mutationFn: async () => {
       for (const e of chosen) {
-        if (dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id] });
+        if (!e.date_official && dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id] });
       }
       await api.put('/api/me/study-settings', {
-        profile: { ...profile, daily_hours: Number(profile.daily_hours), study_days_per_week: Number(profile.study_days_per_week), questions_per_day: Number(profile.questions_per_day), preferred_start_time: profile.preferred_start_time?.slice(0, 5) || null, preferred_end_time: profile.preferred_end_time?.slice(0, 5) || null },
+        profile: {
+          ...profile, daily_hours: Number(profile.daily_hours), study_days_per_week: Number(profile.study_days_per_week),
+          questions_per_day: Number(profile.questions_per_day), reviews_per_day: Number(profile.reviews_per_day ?? 2),
+          preferred_start_time: profile.preferred_start_time?.slice(0, 5) || null, preferred_end_time: profile.preferred_end_time?.slice(0, 5) || null,
+        },
         methods: methods.map((m) => ({ id: m.id, enabled: m.enabled, minutes: Number(m.minutes) })),
       });
       return api.post('/api/planner/generate', { editionIds: sel, primaryEditionId: primary, startDate: profile.start_date });
@@ -64,13 +81,13 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
     onError: (e) => setError(errorMessage(e)),
   });
 
-  if (exams.isLoading || settings.isLoading || !profile) return <Spinner />;
+  if (exams.isLoading || settings.isLoading || !profile || sel === null) return <Spinner />;
   const available = (exams.data ?? []).filter((e) => e.days_left == null || e.days_left > 0);
   const chosen = available.filter((e) => sel.includes(e.edition_id));
-  const dateOf = (e: any) => dates[e.edition_id] ?? e.exam_date ?? '';
+  const dateOf = (e: any) => (e.date_official ? e.exam_date : dates[e.edition_id] ?? e.exam_date ?? '');
   const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const enabledMethods = methods.filter((m) => m.enabled);
-  const canNext = sel.length > 0 && !!primary && !missingDate;
+  const ready = chosen.length > 0 && !!primary && !missingDate && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
 
   const toggleExam = (id: string) => {
     const on = sel.includes(id);
@@ -81,124 +98,125 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   };
 
   return (
-    <div className="mx-auto max-w-xl">
-      <div className="mb-10 flex items-center justify-between animate-fade">
-        <Eyebrow>Passo {step + 1} de 2</Eyebrow>
-        {canCancel && <Button variant="plain" size="sm" onClick={onDone}>Cancelar</Button>}
-      </div>
-      <h1 key={step} className="font-display text-[44px] leading-[1.05] animate-in sm:text-[56px]">{step === 0 ? 'Qual prova você vai fazer?' : 'Como você estuda?'}</h1>
+    <div className="mx-auto max-w-2xl">
+      <Title eyebrow="Seu planner começa aqui" trailing={canCancel ? <Button variant="plain" size="sm" onClick={onDone}>Cancelar</Button> : undefined}>Planner</Title>
 
-      <div key={`s${step}`} className="mt-10 animate-in">
-        {step === 0 && (available.length === 0 ? (
-          <p className="text-[17px] text-ink-2">Ainda não há provas disponíveis.</p>
-        ) : (
-          <>
-            <div className="border-t border-line">
-              {available.map((e) => {
-                const on = sel.includes(e.edition_id);
-                return (
-                  <div key={e.edition_id} className="border-b border-line py-5">
-                    <label className="flex cursor-pointer items-center gap-4">
-                      <input type="checkbox" className="sr-only" checked={on} aria-label={`Selecionar ${e.institution}`} onChange={() => toggleExam(e.edition_id)} />
-                      <CheckCircle on={on} />
-                      <span className="flex-1">
-                        <span className="block font-display text-[26px] leading-tight">{e.institution}</span>
-                        <span className="block text-[13px] text-ink-2">{e.exam_name} · {e.history.message}</span>
-                      </span>
-                    </label>
-                    {on && (
-                      <div className="mt-4 ml-10 flex flex-wrap items-end gap-x-6 gap-y-3 animate-in">
+      <section className="-mt-4 animate-in">
+        <div className="flex items-baseline gap-3">
+          <span className="font-display text-[28px]">Qual prova você vai fazer?</span>
+        </div>
+        {available.length === 0 ? <p className="mt-4 text-[17px] text-ink-2">Ainda não há provas disponíveis.</p> : (
+          <div className="mt-4 border-t border-line">
+            {available.map((e) => {
+              const on = sel.includes(e.edition_id);
+              return (
+                <div key={e.edition_id} className="border-b border-line py-4">
+                  <label className="flex cursor-pointer items-center gap-4">
+                    <input type="checkbox" className="sr-only" checked={on} aria-label={`Selecionar ${e.institution}`} onChange={() => toggleExam(e.edition_id)} />
+                    <CheckCircle on={on} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-display text-[24px] leading-tight">{e.institution}</span>
+                      <span className="block text-[13px] text-ink-2">{e.exam_name}</span>
+                    </span>
+                    {e.date_official && <span className="shrink-0 text-right text-[14px]">{shortDate(e.exam_date)}<span className="block text-[11px] text-ink-3">data oficial</span></span>}
+                  </label>
+                  {on && (!e.date_official || chosen.length > 1) && (
+                    <div className="mt-3 ml-10 flex flex-wrap items-end gap-x-6 gap-y-3 animate-in">
+                      {!e.date_official && (
                         <Field label="Data da prova" className="w-44">
                           <input type="date" className="field" aria-label={`Data da prova — ${e.institution}`} min={todayBR()}
                             value={dateOf(e)} onChange={(ev) => setDates({ ...dates, [e.edition_id]: ev.target.value })} />
                         </Field>
-                        {chosen.length > 1 && (
-                          <label className="flex items-center gap-2 pb-2.5 text-[15px] text-ink-2">
-                            <input type="radio" name="primary" className="accent-[var(--ink)]" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
-                          </label>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {chosen.length > 1 && <p className="mt-4 text-[13px] text-ink-3">Com mais de uma prova, a principal e a mais próxima pesam mais no plano.</p>}
-          </>
-        ))}
-
-        {step === 1 && (
-          <>
-            <p className="-mt-4 mb-6 text-[15px] text-ink-2">Marque o que você costuma fazer. Um assunto fica concluído quando você fizer tudo o que marcou.</p>
-            <div className="flex flex-wrap gap-2.5">
-              {methods.map((m, i) => (
-                <label key={m.id} className={clsx('cursor-pointer rounded-full border px-4 py-2 text-[16px] transition select-none',
-                  m.enabled ? 'border-ink bg-ink text-canvas' : 'border-line text-ink hover:border-ink')}>
-                  <input type="checkbox" className="sr-only" checked={m.enabled} aria-label={m.name}
-                    onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />
-                  {m.name}
-                </label>
-              ))}
-            </div>
-            {chosen.some((e) => e.history.sufficiency === 'insufficient' || e.history.sufficiency === 'none') && (
-              <Note className="mt-8">Algumas provas têm poucos dados históricos: {chosen.filter((e) => !['good', 'limited'].includes(e.history.sufficiency)).map((e) => `${e.institution} (${e.history.message})`).join('; ')}</Note>
-            )}
-
-            <Advanced className="mt-12 border-t border-line pt-5">
-              <div className="space-y-8">
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Horas por dia">
-                    <input type="number" min={0.5} max={16} step={0.5} className="field" value={profile.daily_hours} onChange={(e) => setProfile({ ...profile, daily_hours: e.target.value })} />
-                  </Field>
-                  <Field label="Questões por dia">
-                    <input type="number" min={0} max={500} className="field" value={profile.questions_per_day} onChange={(e) => setProfile({ ...profile, questions_per_day: e.target.value })} />
-                  </Field>
-                  <Field label="Dias de estudo por semana">
-                    <input type="number" min={1} max={7} className="field" value={profile.study_days_per_week} onChange={(e) => setProfile({ ...profile, study_days_per_week: e.target.value })} />
-                  </Field>
-                  <Field label="Começar em">
-                    <input type="date" className="field" value={profile.start_date} onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
-                  </Field>
-                </div>
-                <div className="border-y border-line">
-                  <div className="flex items-center justify-between py-3"><span className="text-[15px]">Estudo aos sábados</span><Toggle label="Estudo aos sábados" checked={profile.study_saturday} onChange={(v) => setProfile({ ...profile, study_saturday: v })} /></div>
-                  <div className="flex items-center justify-between border-t border-line py-3"><span className="text-[15px]">Estudo aos domingos</span><Toggle label="Estudo aos domingos" checked={profile.study_sunday} onChange={(v) => setProfile({ ...profile, study_sunday: v })} /></div>
-                </div>
-                {enabledMethods.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-[13px] text-ink-2">Tempo estimado por atividade (usado só para distribuir os assuntos nos dias)</p>
-                    <div className="space-y-2">
-                      {enabledMethods.map((m) => (
-                        <label key={m.id} className="flex items-center justify-between gap-4 text-[15px]">
-                          {m.name}
-                          <span className="flex items-center gap-2 text-ink-2">
-                            <input type="number" min={5} max={600} className="field w-20 text-right" aria-label={`Minutos — ${m.name}`} value={m.minutes}
-                              onChange={(e) => setMethods(methods.map((x) => (x.id === m.id ? { ...x, minutes: e.target.value } : x)))} /> min
-                          </span>
+                      )}
+                      {chosen.length > 1 && (
+                        <label className="flex items-center gap-2 pb-2.5 text-[14px] text-ink-2">
+                          <input type="radio" name="primary" className="accent-[var(--ink)]" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
                         </label>
-                      ))}
+                      )}
                     </div>
-                  </div>
-                )}
-              </div>
-            </Advanced>
-            {error && <Note tone="negative" className="mt-6">{error}</Note>}
-          </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
-      </div>
+      </section>
 
-      <div className="mt-14 flex items-center justify-between">
-        {step > 0 ? <Button variant="plain" onClick={() => setStep(0)}>Voltar</Button> : <span />}
-        {step === 0
-          ? <Button size="lg" disabled={!canNext} onClick={() => setStep(1)}>Continuar</Button>
-          : <Button size="lg" disabled={!enabledMethods.length || !(Number(profile.daily_hours) > 0)} loading={generate.isPending} onClick={() => { setError(null); generate.mutate(); }}>Criar meu planner</Button>}
-      </div>
+      {chosen.length > 0 && (
+        <section className="mt-12 animate-in">
+          <span className="font-display text-[28px]">Como você estuda?</span>
+          <p className="mt-1 text-[14px] text-ink-2">Opcional. Um assunto fica concluído quando você faz tudo o que marcou aqui.</p>
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            {methods.map((m, i) => (
+              <label key={m.id} className={clsx('cursor-pointer rounded-full border px-4 py-2 text-[15px] transition select-none',
+                m.enabled ? 'border-ink bg-ink text-canvas' : 'border-line text-ink hover:border-ink')}>
+                <input type="checkbox" className="sr-only" checked={m.enabled} aria-label={m.name}
+                  onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />
+                {m.name}
+              </label>
+            ))}
+          </div>
+
+          <Advanced className="mt-10 border-t border-line pt-5">
+            <div className="space-y-8">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Horas por dia">
+                  <input type="number" min={0.5} max={16} step={0.5} className="field" value={profile.daily_hours} onChange={(e) => setProfile({ ...profile, daily_hours: e.target.value })} />
+                </Field>
+                <Field label="Revisões por dia">
+                  <select className="field" aria-label="Revisões por dia" value={profile.reviews_per_day ?? 2} onChange={(e) => setProfile({ ...profile, reviews_per_day: Number(e.target.value) })}>
+                    {REVIEW_OPTIONS.map((n) => <option key={n} value={n}>até {n}</option>)}
+                  </select>
+                </Field>
+                <Field label="Questões por dia">
+                  <input type="number" min={0} max={500} className="field" value={profile.questions_per_day} onChange={(e) => setProfile({ ...profile, questions_per_day: e.target.value })} />
+                </Field>
+                <Field label="Dias de estudo por semana">
+                  <input type="number" min={1} max={7} className="field" value={profile.study_days_per_week} onChange={(e) => setProfile({ ...profile, study_days_per_week: e.target.value })} />
+                </Field>
+                <Field label="Começar em">
+                  <input type="date" className="field" value={profile.start_date} onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
+                </Field>
+              </div>
+              <div className="border-y border-line">
+                <div className="flex items-center justify-between py-3"><span className="text-[15px]">Estudo aos sábados</span><Toggle label="Estudo aos sábados" checked={profile.study_saturday} onChange={(v) => setProfile({ ...profile, study_saturday: v })} /></div>
+                <div className="flex items-center justify-between border-t border-line py-3"><span className="text-[15px]">Estudo aos domingos</span><Toggle label="Estudo aos domingos" checked={profile.study_sunday} onChange={(v) => setProfile({ ...profile, study_sunday: v })} /></div>
+              </div>
+              {enabledMethods.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[13px] text-ink-2">Tempo estimado por atividade (usado só para distribuir os assuntos nos dias)</p>
+                  <div className="space-y-2">
+                    {enabledMethods.map((m) => (
+                      <label key={m.id} className="flex items-center justify-between gap-4 text-[15px]">
+                        {m.name}
+                        <span className="flex items-center gap-2 text-ink-2">
+                          <input type="number" min={5} max={600} className="field w-20 text-right" aria-label={`Minutos — ${m.name}`} value={m.minutes}
+                            onChange={(e) => setMethods(methods.map((x) => (x.id === m.id ? { ...x, minutes: e.target.value } : x)))} /> min
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Advanced>
+
+          {chosen.some((e) => e.history.sufficiency === 'insufficient' || e.history.sufficiency === 'none') && (
+            <Note className="mt-8">Algumas provas têm poucos dados históricos: {chosen.filter((e) => !['good', 'limited'].includes(e.history.sufficiency)).map((e) => `${e.institution} (${e.history.message})`).join('; ')}</Note>
+          )}
+          {error && <Note tone="negative" className="mt-6">{error}</Note>}
+          <div className="mt-10">
+            <Button size="lg" disabled={!ready} loading={generate.isPending} onClick={() => { setError(null); generate.mutate(); }}>Criar meu planner</Button>
+            {missingDate && <p className="mt-3 text-[13px] text-ink-3">Informe a data da prova para continuar.</p>}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
 // ============================================================================
-// Planner — semana editorial, sem horários
+// Planner — semana editorial: assuntos | revisões
 // ============================================================================
 
 const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -212,12 +230,13 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   const qc = useQueryClient();
   const replan = useMutation({ mutationFn: () => api.post('/api/planner/replan'), onSuccess: () => qc.invalidateQueries() });
   const exam = data.exams.find((e: any) => e.is_primary) ?? data.exams[0];
+  const left = exam?.exam_date ? daysBetween(exam.exam_date, todayBR()) : null;
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Title eyebrow={exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}` : data.plan.name.replace(/^Planner /, '')}
+    <div className="mx-auto max-w-3xl">
+      <Title eyebrow={exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : data.plan.name.replace(/^Planner /, '')}
         trailing={<Menu items={[
-          { label: 'Recalcular a partir de hoje', onClick: () => replan.mutate() },
+          { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate() },
           { label: 'Reconfigurar planner', onClick: onReconfigure },
           { label: 'Sobre este plano', onClick: () => setAbout(true) },
         ]} />}>
@@ -240,7 +259,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   );
 }
 
-/** Marca/desmarca as atividades daquele dia (ou o assunto inteiro). */
+/** Marca/desmarca as atividades daquele dia (ou o assunto inteiro). O servidor reorganiza a fila. */
 export function useCheck() {
   const invalidate = useInvalidateStudy();
   return useMutation({
@@ -252,6 +271,12 @@ export function useCheck() {
   });
 }
 
+/** ✓ Revisão feita (lembrou bem). Outras respostas ficam na folha do assunto. */
+function useReviewDone() {
+  const invalidate = useInvalidateStudy();
+  return useMutation({ mutationFn: (subjectId: string) => api.post(`/api/reviews/${subjectId}`, { rating: 'good' }), onSettled: invalidate });
+}
+
 function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean }) {
   const today = todayBR();
   const [from, setFrom] = useState(mondayOf(today));
@@ -259,6 +284,7 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
   const week = useQuery({ queryKey: ['week', from], queryFn: () => api.get(`/api/reviews/calendar?from=${from}&to=${to}`) });
   const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });
   const check = useCheck();
+  const reviewDone = useReviewDone();
   const isThisWeek = from === mondayOf(today);
   const late = isThisWeek ? (t.data?.newSubjects ?? []).filter((s: any) => s.overdue) : [];
   const [a, b] = [from, to].map((d) => d.split('-').map(Number));
@@ -295,21 +321,27 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
         <div>
           {(week.data?.days ?? []).map((d: any) => (
             <DayBlock key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
-              onCheck={(item, done) => check.mutate({ subjectId: item.subjectId, methodIds: item.methodIds, done })} />
+              onCheck={(item, done) => check.mutate({ subjectId: item.subjectId, methodIds: item.methodIds, done })}
+              onReview={(id) => reviewDone.mutate(id)} busy={check.isPending || reviewDone.isPending} />
           ))}
         </div>
       )}
-      <p className="mt-16 text-[13px] text-ink-3">Toque no círculo para concluir · toque no nome para ver o assunto.</p>
+
+      <WeekNotes week={from} />
     </div>
   );
 }
 
-function DayBlock({ day, today, onOpen, onCheck, questions }: { day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; questions?: any }) {
+function ColumnHead({ children }: { children: string }) {
+  return <div className="border-b border-ink/70 pb-1.5 text-[10.5px] font-medium tracking-[0.18em] text-ink-2 uppercase">{children}</div>;
+}
+
+function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy }: {
+  day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; onReview: (id: string) => void; questions?: any; busy?: boolean;
+}) {
   const isToday = day.date === today;
   const past = day.date < today;
-  // A "revisão" registrada ao concluir o assunto no mesmo dia não aparece duplicada
-  const studiedHere = new Set((day.newSubjects as any[]).map((n) => n.subjectId));
-  const reviews = (day.reviews as any[]).filter((r, i, arr) => arr.findIndex((x) => x.subjectId === r.subjectId) === i && !(r.status === 'done' && studiedHere.has(r.subjectId)));
+  const reviews = (day.reviews as any[]).filter((r, i, arr) => arr.findIndex((x) => x.subjectId === r.subjectId) === i);
   const empty = !day.newSubjects.length && !reviews.length && !day.exams.length;
   if (past && empty) return (
     <section data-testid={`day-${day.date}`} className="mb-5 flex items-baseline gap-3 text-ink-3 animate-in">
@@ -319,38 +351,48 @@ function DayBlock({ day, today, onOpen, onCheck, questions }: { day: any; today:
     </section>
   );
   return (
-    <section data-testid={`day-${day.date}`} aria-label={isToday ? 'Hoje' : undefined} className="mb-12 animate-in">
+    <section data-testid={`day-${day.date}`} aria-label={isToday ? 'Hoje' : undefined} className="mb-14 animate-in">
       <div className="flex items-baseline gap-3">
         <span className={clsx('w-9 text-[11px] font-medium tracking-[0.16em] uppercase', isToday ? 'text-today' : 'text-ink-2')}>{WD[weekday(day.date)]}</span>
         <span className={clsx('tabular font-display text-[40px] leading-none', isToday ? 'text-today' : past ? 'text-ink-3' : 'text-ink')}>{Number(day.date.slice(8))}</span>
-        <span className={clsx('h-px flex-1 translate-y-[-0.35em]', isToday ? 'bg-today' : 'bg-ink/80')} />
+        {day.exams.map((e: string) => <span key={e} className="tint tint-rose self-center text-[13px] font-medium">Prova · {e}</span>)}
+        <span className="flex-1" />
         {isToday && <span className="text-[11px] tracking-[0.16em] text-today uppercase">hoje</span>}
       </div>
-      <ul className="mt-2 pl-12">
-        {day.exams.map((e: string) => (
-          <li key={e} className="py-3"><span className="tint tint-rose text-[15px] font-medium">Prova · {e}</span></li>
-        ))}
-        {day.newSubjects.map((n: any) => (
-          <TaskRow key={n.subjectId} item={{ ...n, done: n.done ?? n.studied }} detail={n.methodIds.length < n.totalActivities ? n.methods.join(' · ') : undefined}
-            pomodoro={isToday} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} />
-        ))}
-        {reviews.map((r: any) => (
-          <li key={`r${r.subjectId}`} className="flex items-center gap-4 border-b border-line/70 py-3 last:border-0">
-            <button onClick={() => onOpen(r.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
-              <span className={clsx('text-[16px]', r.status === 'done' ? 'text-ink-3 line-through decoration-1' : r.status === 'projected' ? 'text-ink-2' : 'text-ink')}>↻ {r.name}</span>
-              <span className={clsx('ml-2 text-[12px]', r.status === 'overdue' ? 'text-today' : 'text-ink-3')}>
-                {r.status === 'overdue' ? `revisão atrasada` : r.status === 'done' ? 'revisado' : r.status === 'projected' ? 'revisão prevista' : 'revisão'}
-              </span>
-            </button>
-            {(r.status === 'scheduled' || r.status === 'overdue') && day.date <= today && (
-              <button onClick={() => onOpen(r.subjectId)} className="text-[13px] text-ink-2 underline underline-offset-4 hover:text-ink">Revisar</button>
-            )}
-          </li>
-        ))}
-        {empty && <li className="py-3 text-[14px] text-ink-3">Livre</li>}
-      </ul>
+
+      <div className="mt-4 grid gap-x-10 gap-y-7 sm:pl-12 md:grid-cols-2">
+        <div data-testid="col-subjects">
+          <ColumnHead>Assuntos</ColumnHead>
+          <ul>
+            {day.newSubjects.map((n: any) => (
+              <TaskRow key={n.subjectId} item={{ ...n, done: n.done }} detail={!n.done && n.methodIds.length < n.totalActivities ? n.methods.join(' · ') : undefined}
+                pomodoro={isToday} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} disabled={busy} />
+            ))}
+            {!day.newSubjects.length && <li className="py-3 text-[14px] text-ink-3">{past ? '—' : 'Livre'}</li>}
+          </ul>
+        </div>
+        <div data-testid="col-reviews" className={clsx(!reviews.length && 'hidden md:block')}>
+          <ColumnHead>Revisões</ColumnHead>
+          <ul>
+            {reviews.map((r: any) => {
+              const done = r.status === 'done';
+              return (
+                <li key={`r${r.subjectId}`} className="flex items-center gap-4 border-b border-line/70 py-3 last:border-0" data-testid="review">
+                  <button onClick={() => onOpen(r.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
+                    <span className={clsx('block text-[16px] leading-snug', done && 'text-ink-3 line-through decoration-1')}>{r.name}</span>
+                    {r.status === 'overdue' && <span className="text-[11px] text-today">atrasada</span>}
+                  </button>
+                  <CheckButton on={done} disabled={done || busy} onChange={() => onReview(r.subjectId)} label={`Revisão feita — ${r.name}`} />
+                </li>
+              );
+            })}
+            {!reviews.length && <li className="py-3 text-[14px] text-ink-3">—</li>}
+          </ul>
+        </div>
+      </div>
+
       {questions?.perDay > 0 && questions.suggestions.length > 0 && (
-        <p className="mt-3 pl-12 text-[13px] text-ink-2">
+        <p className="mt-4 text-[13px] text-ink-2 sm:pl-12">
           Questões sugeridas:{' '}
           {questions.suggestions.map((s: any, i: number) => (
             <span key={s.subjectId}>{i > 0 && ', '}<button className="underline decoration-line underline-offset-4 hover:decoration-ink" onClick={() => onOpen(s.subjectId)}>{s.name}</button> ({s.questions})</span>
@@ -361,24 +403,59 @@ function DayBlock({ day, today, onOpen, onCheck, questions }: { day: any; today:
   );
 }
 
-export function TaskRow({ item, onOpen, onCheck, detail, pomodoro }: { item: { subjectId: string; name: string; area?: string; specialty?: string | null; done: boolean }; onOpen: (id: string) => void; onCheck: (done: boolean) => void; detail?: string; pomodoro?: boolean }) {
+/** Observações da semana: uma folha pautada, salva sozinha. */
+function WeekNotes({ week }: { week: string }) {
+  const q = useQuery({ queryKey: ['notes', week], queryFn: () => api.get(`/api/notes/${week}`) });
+  const [text, setText] = useState('');
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const last = useRef('');
+  useEffect(() => { const c = q.data?.content ?? ''; setText(c); last.current = c; setState('idle'); }, [q.data, week]);
+  const save = async (content: string) => {
+    if (content === last.current) return;
+    setState('saving');
+    try { await api.put(`/api/notes/${week}`, { content }); last.current = content; setState('saved'); } catch { setState('error'); }
+  };
+  const onChange = (v: string) => {
+    setText(v);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => save(v), 800);
+  };
+  const lines = Math.max(7, text.split('\n').length + 2);
+  return (
+    <section className="mt-20 animate-in" aria-label="Observações da semana">
+      <div className="flex items-baseline gap-3">
+        <span className="font-display text-[30px] italic">Observações da semana</span>
+        <span className="h-px flex-1 bg-line" />
+      </div>
+      <div className="notebook mt-5">
+        <textarea className="notebook-text" rows={lines} value={text} disabled={q.isLoading} aria-label="Observações da semana"
+          placeholder="Escreva o que quiser lembrar nesta semana…" onChange={(e) => onChange(e.target.value)}
+          onBlur={() => { clearTimeout(timer.current); save(text); }} />
+      </div>
+      <p className="mt-2 h-4 text-right text-[12px] text-ink-3">{state === 'saving' ? 'Salvando…' : state === 'saved' ? 'Salvo' : state === 'error' ? 'Não foi possível salvar' : ''}</p>
+    </section>
+  );
+}
+
+export function TaskRow({ item, onOpen, onCheck, detail, pomodoro, disabled }: { item: { subjectId: string; name: string; area?: string; specialty?: string | null; done: boolean }; onOpen: (id: string) => void; onCheck: (done: boolean) => void; detail?: string; pomodoro?: boolean; disabled?: boolean }) {
   const p = usePomodoro();
   const nav = useNavigate();
   return (
     <li className="group flex items-center gap-4 border-b border-line/70 py-3 last:border-0" data-testid="task">
       <button onClick={() => onOpen(item.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
         <Tint area={item.area} className={clsx('text-[10.5px] font-medium tracking-[0.14em] uppercase', item.done && 'opacity-50')}>{item.specialty || areaShort(item.area)}</Tint>
-        <span className={clsx('mt-1 block text-[17px] leading-snug', item.done && 'text-ink-3 line-through decoration-1')}>{item.name}</span>
-        {detail && !item.done && <span className="block text-[12px] text-ink-3">{detail}</span>}
+        <span className={clsx('mt-1 block text-[16px] leading-snug', item.done && 'text-ink-3 line-through decoration-1')}>{item.name}</span>
+        {detail && <span className="block text-[12px] text-ink-3">{detail}</span>}
       </button>
       {!item.done && (
         <button onClick={() => { p.start({ subject: { id: item.subjectId, name: item.name, area: item.area } }); nav('/foco'); }}
           aria-label={`Iniciar Pomodoro — ${item.name}`} title="Iniciar Pomodoro"
           className={clsx('flex items-center gap-1.5 rounded-full text-[12px] text-ink-3 transition hover:text-ink', !pomodoro && 'opacity-0 group-hover:opacity-100 focus:opacity-100')}>
-          <Timer className="h-4 w-4" strokeWidth={1.5} />{pomodoro && <span className="hidden sm:inline">Iniciar Pomodoro</span>}
+          <Timer className="h-4 w-4" strokeWidth={1.5} />
         </button>
       )}
-      <CheckButton on={item.done} onChange={onCheck} label={`Concluir ${item.name}`} />
+      <CheckButton on={item.done} onChange={onCheck} disabled={disabled} label={`Concluir ${item.name}`} />
     </li>
   );
 }
