@@ -99,11 +99,25 @@ export function roundTo5(x: number): number {
   return Math.max(5, Math.round(x / 5) * 5);
 }
 
+/**
+ * Tamanho relativo do assunto: sqrt(% / referência), limitado a
+ * [sizeFactorMin, sizeFactorMax]. A referência é a mediana dos assuntos que,
+ * juntos, cobrem os primeiros 80% das questões — assim a cauda de assuntos
+ * raríssimos não infla o tempo dos assuntos centrais.
+ */
 export function sizeFactors(percentages: number[]): number[] {
-  const sorted = [...percentages].filter((p) => p > 0).sort((a, b) => a - b);
-  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 1;
+  const sorted = [...percentages].filter((p) => p > 0).sort((a, b) => b - a);
+  const total = sorted.reduce((t, p) => t + p, 0);
+  const core: number[] = [];
+  let acc = 0;
+  for (const p of sorted) {
+    core.push(p);
+    acc += p;
+    if (acc >= total * SCHEDULER.sizeReferenceCoverage) break;
+  }
+  const ref = core.length ? core[Math.floor(core.length / 2)] : 1;
   return percentages.map((p) => {
-    const f = Math.sqrt((p || median) / (median || 1));
+    const f = Math.sqrt((p || ref) / (ref || 1));
     return Math.round(Math.min(SCHEDULER.sizeFactorMax, Math.max(SCHEDULER.sizeFactorMin, f)) * 10) / 10;
   });
 }

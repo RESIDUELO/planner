@@ -51,6 +51,7 @@ export interface PerExamSubject {
   estimatedQuestions: number;
   rank: number | null;
   level: PriorityLevel | null;
+  byYear: { year: number; questions: number }[];
 }
 
 export interface RankedSubject {
@@ -145,6 +146,7 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
         estimatedQuestions: est,
         rank,
         level: rank ? levelForRank(rank, nSubjects) : null,
+        byYear: s?.byYear ?? e.stats.years.map((year) => ({ year, questions: 0 })),
       });
       if (!s) continue;
       percentage += w.weight * s.percentage;

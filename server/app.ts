@@ -35,7 +35,7 @@ export async function buildApp(opts: AppOptions = {}) {
 
   const dir = opts.staticDir;
   if (dir && existsSync(dir)) {
-    await app.register(fastifyStatic, { root: dir, wildcard: false });
+    await app.register(fastifyStatic, { root: dir });
     // SPA: qualquer rota fora de /api devolve o index.html
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/')) return reply.status(404).send({ error: 'Rota não encontrada.' });

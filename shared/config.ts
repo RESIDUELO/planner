@@ -101,7 +101,9 @@ export const SCHEDULER = {
   finalPhaseShare: 0.1,
   finalPhaseMaxDays: 14,
   finalPhaseMinSpanDays: 21,
-  /** Tamanho do assunto: sqrt(% / mediana), limitado a este intervalo. */
-  sizeFactorMin: 0.6,
-  sizeFactorMax: 1.8,
+  /** Tamanho do assunto: sqrt(% / referência), limitado a este intervalo. */
+  sizeFactorMin: 0.5,
+  sizeFactorMax: 1.5,
+  /** Referência = mediana dos assuntos que cobrem esta fração das questões. */
+  sizeReferenceCoverage: 0.8,
 } as const;
