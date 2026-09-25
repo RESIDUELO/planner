@@ -462,3 +462,64 @@ describe('Desfazer questões e zerar o perfil', () => {
     expect((await student.ok('GET', '/api/planner')).subjects.filter((s: any) => s.status === 'studied').length).toBe(studentBefore);
   });
 });
+
+describe('Cronograma pessoal (só administradores)', () => {
+  let admin: Client;
+  let tplId: string;
+  const day = (cal: any, d: string) => cal.days.find((x: any) => x.date === d);
+  const names = (cal: any, d: string) => day(cal, d).newSubjects.map((n: any) => n.name);
+
+  it('não aparece para quem não é administrador', async () => {
+    await dbQuery(readFileSync('supabase/data/cronograma_medcof_unoeste_v3.sql', 'utf8'));
+    await dbQuery(readFileSync('supabase/data/cronograma_medcof_unoeste_v3.sql', 'utf8'));
+    expect(await student.ok('GET', '/api/templates')).toEqual([]);
+    const { rows } = await dbQuery(`select id from plan_templates where code = 'medcof_unoeste_v3'`);
+    expect((await student.req('POST', '/api/planner/generate-template', { templateId: rows[0].id })).status).toBe(404);
+  });
+
+  it('o administrador gera o planner com as datas do cronograma e o que já estudou concluído', async () => {
+    admin = new Client();
+    admin.today = '2026-09-28';
+    await admin.ok('POST', '/api/auth/register', { name: 'Admin', email: 'admin-cronograma@teste.com', password: 'senha-admin-123' });
+    await dbQuery(`update user_profiles set role = 'admin' where user_id = (select id from auth.users where email = 'admin-cronograma@teste.com')`);
+    const list = await admin.ok('GET', '/api/templates');
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ lessons: 45, studied: 27, examDate: '2026-12-05' });
+    tplId = list[0].id;
+    const s = await admin.ok('GET', '/api/me/study-settings');
+    await admin.ok('PUT', '/api/me/study-settings', {
+      profile: { ...s.profile, preferred_start_time: null, preferred_end_time: null },
+      methods: s.methods.map((m: any) => ({ id: m.id, enabled: ['video', 'flashcards'].includes(m.code), minutes: m.estimated_minutes })),
+    });
+    await admin.ok('POST', '/api/planner/generate-template', { templateId: tplId });
+    const p = await admin.ok('GET', '/api/planner');
+    expect(p.plan.end_date).toBe('2026-12-05');
+    expect(p.subjects).toHaveLength(107);
+    expect(p.subjects.filter((x: any) => x.status === 'studied')).toHaveLength(27);
+    const cal = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
+    expect(names(cal, '2026-09-28')).toEqual(['Vigilância em Saúde e Processo Epidêmico']);
+    expect(names(cal, '2026-10-02')).toEqual(['Técnica cirúrgica: fios, antissepsia e instrumental']);
+    expect(names(cal, '2026-10-03')).toEqual(['Questões — baralhos mais frágeis (03/10)']);
+    expect(names(cal, '2026-10-04')).toEqual([]);
+    const d = await admin.ok('GET', `/api/planner/subjects/${p.subjects[0].subjectId}`);
+    expect(d.subject.perExam[0].template.focus).toMatch(/SINAN/);
+    expect(d.explanation).toMatch(/Aula do seu cronograma MEDCOF para 28\/09/);
+  });
+
+  it('aula adiantada fica no dia feito; as seguintes sobem nos dias de aula; sábado não se move', async () => {
+    const p = await admin.ok('GET', '/api/planner');
+    const vac = p.subjects.find((x: any) => x.name === 'Vacinação na Pediatria');
+    await admin.ok('POST', `/api/planner/subjects/${vac.subjectId}/complete`, { done: true });
+    const cal = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-01&to=2026-10-10');
+    // Registrada no dia em que foi feita (hoje real), não mais em 30/09
+    const doneDays = cal.days.filter((x: any) => x.newSubjects.some((n: any) => n.name === 'Vacinação na Pediatria' && n.done));
+    expect(doneDays).toHaveLength(1);
+    expect(doneDays[0].date <= '2026-09-28').toBe(true);
+    expect(names(cal, '2026-09-29')).toEqual(['Sangramentos de Primeira Metade da Gestação']);
+    expect(names(cal, '2026-09-30')).toEqual(['Derrame Pleural e Pneumonia Adquirida na Comunidade (PAC)']);
+    expect(names(cal, '2026-10-01')).toEqual(['Técnica cirúrgica: fios, antissepsia e instrumental']);
+    expect(names(cal, '2026-10-02')).toEqual(['Atenção Primária à Saúde']);
+    expect(names(cal, '2026-10-03')).toEqual(['Questões — baralhos mais frágeis (03/10)']);
+    expect(names(cal, '2026-10-10')).toEqual(['Simulado UNOESTE — R1 2022 completa (10/10)']);
+  });
+});

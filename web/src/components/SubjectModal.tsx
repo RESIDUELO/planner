@@ -61,6 +61,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
 
   const d = q.data;
   const s = d?.subject;
+  const tpl = s?.perExam?.[0]?.template;
   const today = todayBR();
   const busy = toggle.isPending || complete.isPending || activities.isPending;
   const doneCount = s?.checklist.filter((c: any) => c.done).length ?? 0;
@@ -82,6 +83,8 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
               {studied ? <span className="text-ink">✓ Concluído</span> : `${doneCount} de ${s.checklist.length} ${s.checklist.length === 1 ? 'atividade' : 'atividades'}`}
             </p>
           </header>
+
+          {tpl && <TemplateInfo t={tpl} />}
 
           <ul className="mt-8 border-t border-line" aria-label="Atividades">
             {s.checklist.map((c: any) => (
@@ -235,5 +238,29 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
         </div>
       )}
     </Sheet>
+  );
+}
+
+const COLOR_TINT: Record<string, string> = { Diamante: 'tint-sky', Verde: 'tint-mint', Amarela: 'tint-butter', Bônus: 'tint-lilac', Resumo: 'tint-peach' };
+
+/** Dados do cronograma pessoal: aula, foco dos cards e questões da prova para fazer. */
+function TemplateInfo({ t }: { t: any }) {
+  const byYear = new Map<number, number[]>();
+  for (const [y, n] of t.refs ?? []) byYear.set(y, [...(byYear.get(y) ?? []), n]);
+  const br = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
+  return (
+    <section className="mt-6 border-l-2 border-line pl-4 text-[14px]" aria-label="Do seu cronograma">
+      <p className="text-[11px] tracking-[0.16em] text-ink-2 uppercase">Do seu cronograma</p>
+      {t.lesson && (
+        <p className="mt-2">Aula MEDCOF: <span className="text-ink">{t.lesson}</span>
+          {t.color && <span className={`tint ${COLOR_TINT[t.color.split('/')[0]] ?? 'tint-peach'} ml-2 text-[11px]`}>{t.color}</span>}</p>
+      )}
+      {t.kind === 'studied' && <p className="mt-1 text-ink-2">Já estudado · {t.cards} cards no Anki{t.fragile ? ' · baralho frágil' : ''} · questões no sábado {br(t.saturday)}</p>}
+      {t.focus && <p className="mt-1 text-ink-2">Foco para os cards: <span className="text-ink">{t.focus}</span></p>}
+      {t.detail && <p className="mt-1 text-ink-2">{t.detail}</p>}
+      {byYear.size > 0 && (
+        <p className="mt-1 text-ink-2">Questões da UNOESTE: {[...byYear].map(([y, ns]) => `${y}: ${ns.map((n) => `Q${n}`).join(', ')}`).join(' · ')}</p>
+      )}
+    </section>
   );
 }

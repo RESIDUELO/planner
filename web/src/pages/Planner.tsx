@@ -41,6 +41,8 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const qc = useQueryClient();
   const exams = useQuery({ queryKey: ['exams'], queryFn: () => api.get<any[]>('/api/exams') });
   const settings = useQuery({ queryKey: ['study-settings'], queryFn: () => api.get('/api/me/study-settings') });
+  const templates = useQuery({ queryKey: ['templates'], queryFn: () => api.get<any[]>('/api/templates') });
+  const [tplId, setTplId] = useState<string | null>(null);
   const [sel, setSel] = useState<string[] | null>(null);
   const [primary, setPrimary] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -64,7 +66,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 
   const generate = useMutation({
     mutationFn: async () => {
-      for (const e of chosen) {
+      for (const e of tplId ? [] : chosen) {
         if (!e.date_official && dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id] });
       }
       await api.put('/api/me/study-settings', {
@@ -75,6 +77,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
         },
         methods: methods.map((m) => ({ id: m.id, enabled: m.enabled, minutes: Number(m.minutes) })),
       });
+      if (tplId) return api.post('/api/planner/generate-template', { templateId: tplId });
       return api.post('/api/planner/generate', { editionIds: sel, primaryEditionId: primary, startDate: profile.start_date });
     },
     onSuccess: () => { qc.invalidateQueries(); onDone(); },
@@ -87,7 +90,8 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const dateOf = (e: any) => (e.date_official ? e.exam_date : dates[e.edition_id] ?? e.exam_date ?? '');
   const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const enabledMethods = methods.filter((m) => m.enabled);
-  const ready = chosen.length > 0 && !!primary && !missingDate && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
+  const ready = (tplId ? true : chosen.length > 0 && !!primary && !missingDate) && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
+  const tpls = templates.data ?? [];
 
   const toggleExam = (id: string) => {
     const on = sel.includes(id);
@@ -101,9 +105,32 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
     <div className="mx-auto max-w-2xl">
       <Title eyebrow="Seu planner começa aqui" trailing={canCancel ? <Button variant="plain" size="sm" onClick={onDone}>Cancelar</Button> : undefined}>Planner</Title>
 
-      <section className="-mt-4 animate-in">
+      {tpls.length > 0 && (
+        <section className="-mt-4 mb-12 animate-in" aria-label="Só para você">
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-[28px] italic">Só para você</span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+          <div className="mt-4 border-t border-line">
+            {tpls.map((t: any) => (
+              <label key={t.id} className="flex cursor-pointer items-center gap-4 border-b border-line py-4">
+                <input type="checkbox" className="sr-only" checked={tplId === t.id} aria-label={`Usar ${t.name}`}
+                  onChange={() => setTplId(tplId === t.id ? null : t.id)} />
+                <CheckCircle on={tplId === t.id} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-[24px] leading-tight">{t.name}</span>
+                  <span className="block text-[13px] text-ink-2">{t.lessons} aulas a partir de {shortDate(t.startDate, false)} · {t.studied} temas já estudados · prova em {shortDate(t.examDate)}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-3 text-[13px] text-ink-3">Visível só para administradores. Segue as datas do seu cronograma; o que você já estudou entra como concluído.</p>
+        </section>
+      )}
+
+      <section className={clsx('animate-in', tpls.length ? '' : '-mt-4', tplId && 'pointer-events-none opacity-40')} aria-disabled={!!tplId}>
         <div className="flex items-baseline gap-3">
-          <span className="font-display text-[28px]">Qual prova você vai fazer?</span>
+          <span className="font-display text-[28px]">{tpls.length ? 'Ou escolha uma prova' : 'Qual prova você vai fazer?'}</span>
         </div>
         {available.length === 0 ? <p className="mt-4 text-[17px] text-ink-2">Ainda não há provas disponíveis.</p> : (
           <div className="mt-4 border-t border-line">
@@ -142,7 +169,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
         )}
       </section>
 
-      {chosen.length > 0 && (
+      {(chosen.length > 0 || tplId) && (
         <section className="mt-12 animate-in">
           <span className="font-display text-[28px]">Como você estuda?</span>
           <p className="mt-1 text-[14px] text-ink-2">Opcional. Um assunto fica concluído quando você faz tudo o que marcou aqui.</p>
@@ -201,7 +228,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
             </div>
           </Advanced>
 
-          {chosen.some((e) => e.history.sufficiency === 'insufficient' || e.history.sufficiency === 'none') && (
+          {!tplId && chosen.some((e) => e.history.sufficiency === 'insufficient' || e.history.sufficiency === 'none') && (
             <Note className="mt-8">Algumas provas têm poucos dados históricos: {chosen.filter((e) => !['good', 'limited'].includes(e.history.sufficiency)).map((e) => `${e.institution} (${e.history.message})`).join('; ')}</Note>
           )}
           {error && <Note tone="negative" className="mt-6">{error}</Note>}

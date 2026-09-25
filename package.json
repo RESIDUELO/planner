@@ -15,7 +15,7 @@
     "test:unit": "vitest run tests/unit",
     "test:api": "vitest run tests/api",
     "test:e2e": "playwright test",
-    "data:sql": "node scripts/build-data-sql.mjs"
+    "data:sql": "node scripts/build-data-sql.mjs && node scripts/build-template-sql.mjs"
   },
   "engines": {
     "node": ">=20"

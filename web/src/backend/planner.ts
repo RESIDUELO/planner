@@ -13,6 +13,7 @@ import { assignReviews } from '../../../shared/reviewQueue';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, q, rpc, selectAll, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
+import { reflowTemplate, replanTemplate } from './templates';
 
 // ---------------------------------------------------------------------------
 // Seleção de provas e configuração
@@ -266,6 +267,7 @@ export async function replan(ctx: Ctx): Promise<string> {
   const today = ctx.today();
   const plan = await activePlan(ctx, userId);
   if (!plan) throw badRequest('Nenhum planner ativo.');
+  if (plan.settings_snapshot?.template) return replanTemplate(ctx);
   const exams = await q(ctx.sb.from('study_plan_exams').select('exam_edition_id, is_primary, exam_date').eq('study_plan_id', plan.id));
   const primary = (exams as any[]).find((e) => e.is_primary) ?? exams[0];
   const hasFutureDate = (exams as any[]).some((e) => e.exam_date && e.exam_date > today);
@@ -605,6 +607,8 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
     for (let i = 0; i < ids.length; i += 40) await q(ctx.sb.from('study_schedule').update({ scheduled_date: d }).in('id', ids.slice(i, i + 40)));
   }
 
+  // Cronograma pessoal: a fila anda nos dias de aula do próprio cronograma
+  if (plan.settings_snapshot?.template) return reflowTemplate(ctx, plan);
   if (tomorrow >= plan.end_date) return;
 
   // 2) Hoje e atrasadas ficam; o futuro é redistribuído

@@ -11,6 +11,7 @@ import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApi
 import { loadExamHistories, loadSubjectsInfo } from './history';
 import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
+import { generateFromTemplate, listTemplates } from './templates';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
 interface Route { method: string; re: RegExp; keys: string[]; handler: Handler }
@@ -307,7 +308,8 @@ route('GET', '/api/planner/subjects/:id', async ({ ctx, params }) => {
   const primary = s.exams.find((e: any) => e.is_primary) as any;
   const n = subj.yearsAnalyzed;
   const pct = (subj.percentage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
-  const explanation = s.exams.length === 1
+  const tpl = (subj.perExam?.[0] as any)?.template;
+  const explanation = tpl ? templateExplanation(subj, tpl, primary?.institution) : s.exams.length === 1
     ? `${subj.name} está em #${subj.rank} porque representou ${pct}% das questões das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'} de ${primary?.institution ?? 'sua prova'}.`
     : `${subj.name} está em #${subj.rank} porque representou, em média ponderada, ${pct}% das questões das provas selecionadas (peso maior para a prova principal e para as provas mais próximas).`;
   return {
@@ -390,3 +392,19 @@ route('POST', '/api/me/reset', async ({ ctx }) => {
   await rpc(ctx, 'reset_my_data', {});
   return { ok: true };
 });
+
+// Cronogramas pessoais (só administradores)
+route('GET', '/api/templates', async ({ ctx }) => listTemplates(ctx));
+route('POST', '/api/planner/generate-template', async ({ ctx, body }) => {
+  const { templateId } = z.object({ templateId: uuid }).parse(body);
+  return { planId: await generateFromTemplate(ctx, templateId) };
+});
+
+function templateExplanation(subj: any, t: any, inst = 'UNOESTE') {
+  const br = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
+  const caiu = subj.estimatedQuestions > 0 ? ` Caiu ${Math.round(subj.annualAverage * subj.yearsAnalyzed)} vez(es) na ${inst} de 2022 a 2026.` : '';
+  if (t.kind === 'lesson') return `Aula do seu cronograma MEDCOF para ${br(t.date)}.${caiu}${t.core ? ` Núcleo ${t.core}.` : ''}`;
+  if (t.kind === 'studied') return `Tema que você já estudou (${t.cards} cards no Anki${t.fragile ? ', baralho frágil' : ''}). Revisão por questões no sábado ${br(t.saturday)}.${caiu}`;
+  if (t.kind === 'reserve') return `Aula de reserva: para trocar um tema que você já domina ou se sobrar tempo.${caiu}`;
+  return t.detail ?? '';
+}
