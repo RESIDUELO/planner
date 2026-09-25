@@ -13,7 +13,7 @@ import { assignReviews } from '../../../shared/reviewQueue';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, q, rpc, selectAll, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { reflowTemplate, replanTemplate } from './templates';
+import { ensureStudiedReviews, reflowTemplate, replanTemplate } from './templates';
 
 // ---------------------------------------------------------------------------
 // Seleção de provas e configuração
@@ -322,6 +322,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
   const today = ctx.today();
   const plan = await activePlan(ctx, userId);
   if (!plan) return null;
+  await ensureStudiedReviews(ctx, userId, plan);
 
   const planExams = await q(ctx.sb.from('study_plan_exams').select('*').eq('study_plan_id', plan.id));
   const catalog = await q(ctx.sb.from('exam_catalog').select('edition_id, year, total_questions, exam_name, exam_total_questions, institution, exam_id')

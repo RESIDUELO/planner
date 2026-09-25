@@ -136,6 +136,7 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
       settings_snapshot: {
         profile, methods: methods.map((m) => ({ id: m.id, code: m.code, minutes: m.estimated_minutes })), studyWeekdays: studyWeekdays(profile),
         template: { id: t.id, code: t.code, slots: lessonSlots, lessons: dated.filter((i) => i.kind === 'lesson').map((i) => ids.get(i.slug)) },
+        studiedReviews: STUDIED_REVIEWS_VERSION,
       },
       summary: {
         template: { code: t.code, name: t.name, description: t.description, source: data.source },
@@ -155,26 +156,34 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
   return planId;
 }
 
+/** Versão da regra das revisões dos temas já estudados (planners antigos são corrigidos sozinhos). */
+const STUDIED_REVIEWS_VERSION = 2;
+
 /**
- * Temas já estudados entram na fila de revisões, por ordem de importância:
- * mais questões na prova primeiro; no empate, baralho frágil e depois o que
- * caiu em mais anos. A fila respeita o limite de revisões por dia e os dias de
- * estudo, a partir do início do cronograma. Cartões que já existem (revisões
- * feitas no site) não são tocados.
+ * Temas já estudados (Anki) entram na fila de REVISÕES, por ordem de
+ * importância: mais questões na prova primeiro; no empate, baralho frágil e
+ * depois o que caiu em mais anos. Começam hoje (estão vencidos desde o último
+ * estudo) e respeitam o limite de revisões por dia e os dias de estudo.
+ * Temas já revisados no site mantêm a data que a revisão deu.
  */
 async function scheduleStudiedReviews(ctx: Ctx, userId: string, planId: string, data: TemplateData, ids: Map<string, string>,
   examDate: ISODate, profile: Awaited<ReturnType<typeof loadProfile>>) {
   const today = ctx.today();
   const years = (i: TemplateItem) => (i.byYear ?? []).filter((x) => x > 0).length;
-  const studied = data.items.filter((i) => i.kind === 'studied')
+  const reviewed = new Set(((await selectAll((a, b) => ctx.sb.from('review_logs').select('subject_id').eq('user_id', userId)
+    .not('previous_interval', 'is', null).range(a, b))) as any[]).map((r) => r.subject_id));
+  const studied = data.items.filter((i) => i.kind === 'studied' && !reviewed.has(ids.get(i.slug)))
     .sort((a, b) => (b.total ?? 0) - (a.total ?? 0) || Number(!!b.fragile) - Number(!!a.fragile) || years(b) - years(a) || a.name.localeCompare(b.name));
   if (!studied.length) return;
-  const existing = new Set(((await selectAll((a, b) => ctx.sb.from('spaced_repetition_cards').select('subject_id').eq('user_id', userId).range(a, b))) as any[])
-    .map((c) => c.subject_id));
-  const start = data.startDate > today ? data.startDate : today;
-  const due = assignReviews(studied.map((i, k) => ({ id: i.slug, due: start, score: studied.length - k, examDate })),
-    { today: start, perDay: profile.reviews_per_day, studyWeekdays: studyWeekdays(profile) });
-  const rows = studied.filter((i) => !existing.has(ids.get(i.slug))).map((i) => {
+  const cards = (await selectAll((a, b) => ctx.sb.from('spaced_repetition_cards').select('id, subject_id').eq('user_id', userId).range(a, b))) as any[];
+  const cardBy = new Map(cards.map((c) => [c.subject_id, c.id]));
+  const due = assignReviews(studied.map((i, k) => ({ id: i.slug, due: today, score: studied.length - k, examDate })),
+    { today, perDay: profile.reviews_per_day, studyWeekdays: studyWeekdays(profile) });
+  // Cartão que já existe e nunca foi revisado no site: só reposiciona na fila
+  for (const i of studied.filter((x) => cardBy.has(ids.get(x.slug)))) {
+    await q(ctx.sb.from('spaced_repetition_cards').update({ next_review_at: due.get(i.slug), study_plan_id: planId }).eq('id', cardBy.get(ids.get(i.slug))));
+  }
+  const rows = studied.filter((i) => !cardBy.has(ids.get(i.slug))).map((i) => {
     const res = review(null, i.fragile ? 'hard' : 'good', data.studiedAt, examDate);
     return {
       user_id: userId, subject_id: ids.get(i.slug), study_plan_id: planId, stability: res.state.stability, difficulty: res.state.difficulty,
@@ -183,7 +192,26 @@ async function scheduleStudiedReviews(ctx: Ctx, userId: string, planId: string, 
       algorithm_version: MEMORY_VERSION,
     };
   });
-  if (rows.length) await q(ctx.sb.from('spaced_repetition_cards').insert(rows));
+  if (rows.length) await q(ctx.sb.from('spaced_repetition_cards').upsert(rows, { onConflict: 'user_id,subject_id', ignoreDuplicates: true }));
+}
+
+/**
+ * Corrige planners de cronograma criados antes desta regra: cria/reposiciona
+ * as revisões dos temas já estudados. Roda uma vez por planner.
+ */
+export async function ensureStudiedReviews(ctx: Ctx, userId: string, plan: any) {
+  const snap = plan.settings_snapshot ?? {};
+  if (!snap.template?.id || snap.studiedReviews === STUDIED_REVIEWS_VERSION) return false;
+  const t: any = await q(ctx.sb.from('plan_templates').select('data').eq('id', snap.template.id).maybeSingle());
+  if (!t) return false;
+  const data = t.data as TemplateData;
+  const ids = await resolveSubjects(ctx, data.items.filter((i) => i.kind === 'studied').map((i) => i.slug));
+  const profile = await loadProfile(ctx, userId);
+  await scheduleStudiedReviews(ctx, userId, plan.id, data, ids, plan.end_date, profile);
+  const next = { ...snap, studiedReviews: STUDIED_REVIEWS_VERSION };
+  await q(ctx.sb.from('study_plans').update({ settings_snapshot: next }).eq('id', plan.id));
+  plan.settings_snapshot = next;
+  return true;
 }
 
 /**

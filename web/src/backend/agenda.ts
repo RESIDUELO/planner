@@ -134,6 +134,8 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
   const items: { date: ISODate; subjectId: string; methodId: string; done: boolean; at?: string | null }[] = [];
   const pendingKeys = new Set<string>();
   for (const s of subjects) {
+    // Tema que já vinha estudado (cronograma): aparece em Revisões, não como aula
+    if ((s.perExam?.[0] as any)?.template?.kind === 'studied') continue;
     for (const c of s.checklist) {
       if (!c.done) { pendingKeys.add(`${s.subjectId}|${c.methodId}`); continue; }
       const d = c.completedAt ? toISODateBR(c.completedAt) : null;

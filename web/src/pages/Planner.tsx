@@ -261,7 +261,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Title eyebrow={exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : data.plan.name.replace(/^Planner /, '')}
+      <Title eyebrow={data.plan.summary?.template ? `${data.plan.name} · ${shortDate(exam?.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : data.plan.name.replace(/^Planner /, '')}
         trailing={<Menu items={[
           { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate() },
           { label: 'Reconfigurar planner', onClick: onReconfigure },

@@ -513,6 +513,25 @@ describe('Cronograma pessoal (só administradores)', () => {
     expect(d.explanation).toMatch(/Aula do seu cronograma MEDCOF para 28\/09/);
   });
 
+  it('temas já estudados ficam em Revisões (não em Assuntos) e planner antigo é corrigido sozinho', async () => {
+    // Nada de "aula feita" no dia do último estudo no Anki
+    const old = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-07&to=2026-09-13');
+    expect(old.days.flatMap((x: any) => x.newSubjects)).toEqual([]);
+    // Simula um planner criado antes: revisões empurradas para longe e sem a marca da regra
+    await dbQuery(`update spaced_repetition_cards set next_review_at = '2026-11-01'
+      where user_id = (select id from auth.users where email = 'admin-cronograma@teste.com')`);
+    await dbQuery(`update study_plans set settings_snapshot = settings_snapshot - 'studiedReviews'
+      where user_id = (select id from auth.users where email = 'admin-cronograma@teste.com') and status = 'active'`);
+    admin.today = '2026-09-25';
+    await admin.ok('GET', '/api/planner');
+    const rv = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-25&to=2026-10-20');
+    expect(day(rv, '2026-09-25').reviews.map((r: any) => r.name)).toEqual(['Trauma: xABCDE, via aérea e choque', 'Trauma de tórax']);
+    expect(rv.days.flatMap((x: any) => x.reviews.filter((r: any) => r.status !== 'done'))).toHaveLength(27);
+    const t = await admin.ok('GET', '/api/planner/today');
+    expect(t.reviews).toHaveLength(2);
+    admin.today = '2026-09-28';
+  });
+
   it('aula adiantada fica no dia feito; as seguintes sobem nos dias de aula; sábado não se move', async () => {
     const p = await admin.ok('GET', '/api/planner');
     const vac = p.subjects.find((x: any) => x.name === 'Vacinação na Pediatria');
