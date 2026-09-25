@@ -294,7 +294,7 @@ grant select, update on public.user_profiles to rp_app;
 -- Individuais
 grant select, insert, update, delete on public.user_exams, public.user_exam_editions, public.registrations,
   public.study_profiles, public.user_study_methods, public.study_plans, public.study_plan_exams,
-  public.study_plan_subjects, public.study_schedule, public.spaced_repetition_cards to rp_app;
+  public.study_plan_subjects, public.study_schedule, public.spaced_repetition_cards, public.subject_method_progress to rp_app;
 grant select, insert on public.review_logs, public.question_practice_logs, public.user_question_attempts to rp_app;
 grant update (actual_next_review) on public.review_logs to rp_app;
 grant delete on public.question_practice_logs to rp_app;
@@ -310,7 +310,7 @@ do $$ declare t text; begin
     'subjects','subject_aliases','questions','question_subjects','study_methods','algorithm_versions','admin_audit_logs',
     'import_batches','user_exams','user_exam_editions','registrations','study_profiles','user_study_methods','study_plans',
     'study_plan_exams','study_plan_subjects','study_schedule','user_question_attempts','question_practice_logs',
-    'user_subject_performance','spaced_repetition_cards','review_logs']
+    'user_subject_performance','spaced_repetition_cards','review_logs','subject_method_progress']
   loop
     execute format('alter table public.%I enable row level security', t);
   end loop;
@@ -373,7 +373,7 @@ create policy update_profiles on public.user_profiles for update to rp_app
 do $$ declare t text; begin
   foreach t in array array['user_exams','user_exam_editions','registrations','study_profiles','user_study_methods',
     'study_plans','study_plan_exams','study_plan_subjects','study_schedule','user_question_attempts',
-    'question_practice_logs','user_subject_performance','spaced_repetition_cards','review_logs']
+    'question_practice_logs','user_subject_performance','spaced_repetition_cards','review_logs','subject_method_progress']
   loop
     execute format('create policy owner_all on public.%I for all to rp_app using (user_id = (select app.current_user_id())) with check (user_id = (select app.current_user_id()))', t);
   end loop;

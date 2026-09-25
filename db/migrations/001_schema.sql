@@ -357,6 +357,7 @@ create table public.study_plan_subjects (
   priority_level        text not null,
   estimated_questions   numeric(10,3) not null,  -- questões esperadas na próxima prova
   size_factor           numeric(6,3) not null default 1,
+  exam_date             date,                    -- prova mais próxima em que o assunto cai (limita revisões)
   scheduled             boolean not null default true,
   per_exam              jsonb not null default '[]'::jsonb,
   primary key (study_plan_id, subject_id)
@@ -380,6 +381,15 @@ create table public.study_schedule (
 create index study_schedule_user_date_idx on public.study_schedule(user_id, scheduled_date);
 create unique index study_schedule_one_per_method on public.study_schedule(study_plan_id, subject_id, study_method_id)
   where activity_type <> 'review';
+
+-- Checklist por assunto × método (independe do planner: sobrevive a replanejamentos)
+create table public.subject_method_progress (
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  subject_id      uuid not null references public.subjects(id),
+  study_method_id uuid not null references public.study_methods(id),
+  completed_at    timestamptz not null default now(),
+  primary key (user_id, subject_id, study_method_id)
+);
 
 create table public.user_question_attempts (
   id                    uuid primary key default gen_random_uuid(),
