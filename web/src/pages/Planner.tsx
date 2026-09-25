@@ -29,7 +29,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const [primary, setPrimary] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [methods, setMethods] = useState<any[]>([]);
-  const [targetDate, setTargetDate] = useState('');
+  const [dates, setDates] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,11 +48,14 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 
   const generate = useMutation({
     mutationFn: async () => {
+      for (const e of chosen) {
+        if (dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id] });
+      }
       await api.put('/api/me/study-settings', {
         profile: { ...profile, daily_hours: Number(profile.daily_hours), study_days_per_week: Number(profile.study_days_per_week), questions_per_day: Number(profile.questions_per_day), preferred_start_time: profile.preferred_start_time?.slice(0, 5) || null, preferred_end_time: profile.preferred_end_time?.slice(0, 5) || null },
         methods: methods.map((m) => ({ id: m.id, enabled: m.enabled, minutes: Number(m.minutes) })),
       });
-      return api.post('/api/planner/generate', { editionIds: sel, primaryEditionId: primary, startDate: profile.start_date, targetDate: targetDate || null });
+      return api.post('/api/planner/generate', { editionIds: sel, primaryEditionId: primary, startDate: profile.start_date });
     },
     onSuccess: () => { qc.invalidateQueries(); onDone(); },
     onError: (e) => setError(errorMessage(e)),
@@ -61,13 +64,14 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   if (exams.isLoading || settings.isLoading || !profile) return <Spinner />;
   const available = (exams.data ?? []).filter((e) => e.days_left == null || e.days_left > 0);
   const chosen = available.filter((e) => sel.includes(e.edition_id));
-  const needsTarget = chosen.length > 0 && chosen.every((e) => !e.exam_date);
+  const dateOf = (e: any) => dates[e.edition_id] ?? e.exam_date ?? '';
+  const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const steps = ['Provas', 'Tempo', 'Como você estuda?', 'Revisar'];
   const enabledMethods = methods.filter((m) => m.enabled);
   const perSubject = enabledMethods.reduce((t, m) => t + Number(m.minutes || 0), 0);
 
   const canNext = [
-    sel.length > 0 && !!primary && (!needsTarget || !!targetDate),
+    sel.length > 0 && !!primary && !missingDate,
     Number(profile.daily_hours) > 0,
     enabledMethods.length > 0,
     true,
@@ -106,23 +110,27 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
                           if (!primary && !on) setPrimary(e.edition_id);
                         }} />
                       <div className="min-w-0">
-                        <div className="font-medium text-slate-900">{e.institution} — {e.exam_name} {e.year}</div>
-                        <div className="text-xs text-slate-500">{e.exam_date ? `${dateBR(e.exam_date)} · ${e.days_left} dias` : 'Data não cadastrada'} · {e.history.message}</div>
+                        <div className="font-medium text-slate-900">{e.institution} — {e.exam_name}</div>
+                        <div className="text-xs text-slate-500">{e.history.message}</div>
                       </div>
                     </label>
                     {on && (
-                      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                        <input type="radio" name="primary" className="accent-brand-600" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
-                      </label>
+                      <>
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                          Data da prova
+                          <input type="date" className="input w-auto py-1" aria-label={`Data da prova — ${e.institution}`}
+                            value={dates[e.edition_id] ?? e.exam_date ?? ''} min={todayBR()}
+                            onChange={(ev) => setDates({ ...dates, [e.edition_id]: ev.target.value })} />
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                          <input type="radio" name="primary" className="accent-brand-600" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
+                        </label>
+                      </>
                     )}
                   </div>
                 );
               })}
-              {needsTarget && (
-                <Field label="Data-alvo do planejamento" hint="As provas escolhidas não têm data cadastrada. Informe até quando quer planejar.">
-                  <input type="date" className="input max-w-xs" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
-                </Field>
-              )}
+              <p className="text-xs text-slate-500">A data de cada prova fica salva só na sua conta (você também pode editá-la na página Provas).</p>
             </div>
           )
         )}
@@ -170,7 +178,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
         {step === 3 && (
           <div className="space-y-4 text-sm">
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-lg bg-slate-50 p-4"><div className="text-xs text-slate-500">Provas</div>{chosen.map((e) => <div key={e.edition_id} className="font-medium">{e.institution} {e.year}{e.edition_id === primary && ' (principal)'}</div>)}</div>
+              <div className="rounded-lg bg-slate-50 p-4"><div className="text-xs text-slate-500">Provas</div>{chosen.map((e) => <div key={e.edition_id} className="font-medium">{e.institution} — {dateBR(dateOf(e))}{e.edition_id === primary && ' (principal)'}</div>)}</div>
               <div className="rounded-lg bg-slate-50 p-4"><div className="text-xs text-slate-500">Tempo</div><div className="font-medium">{profile.daily_hours} h/dia · {profile.study_days_per_week} dias/semana</div><div className="text-slate-600">{profile.questions_per_day} questões/dia · início {dateBR(profile.start_date)}</div></div>
               <div className="rounded-lg bg-slate-50 p-4"><div className="text-xs text-slate-500">Métodos</div><div className="font-medium">{enabledMethods.map((m) => m.name).join(', ')}</div></div>
             </div>

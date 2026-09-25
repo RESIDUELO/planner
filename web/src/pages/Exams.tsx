@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { CalendarDays, ClipboardList, ExternalLink, FileText, Star } from 'lucide-react';
+import { CalendarDays, Check, ClipboardList, FileText, Star } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
-import { dateBR, money, REG_STATUS, WINDOW_LABEL } from '../lib/format';
+import { REG_STATUS, WINDOW_LABEL } from '../lib/format';
 import { Alert, Badge, Button, Empty, Modal, PageHeader, Spinner, MiniBars } from '../components/ui';
 
 export function ExamsPage() {
@@ -25,7 +25,7 @@ export function ExamsPage() {
   const selected = (q.data ?? []).filter((e) => e.selected);
   return (
     <>
-      <PageHeader title="Provas" subtitle="Somente as provas cadastradas e publicadas pela administração aparecem aqui."
+      <PageHeader title="Provas" subtitle="Escolha entre as provas com análise de questões cadastrada. A data, a inscrição e o valor você mesmo informa."
         action={selected.length > 0 && <Link to="/planner"><Button>Montar planner com {selected.length} {selected.length === 1 ? 'prova' : 'provas'}</Button></Link>} />
       {err && <div className="mb-4"><Alert tone="late">{err}</Alert></div>}
       <div className="mb-4 flex gap-2 text-sm">
@@ -35,7 +35,7 @@ export function ExamsPage() {
       </div>
       {list.length === 0 ? (
         <Empty icon={<ClipboardList className="h-10 w-10" />} title="Nenhuma prova disponível">
-          {filter === 'all' ? 'A administração ainda não publicou nenhuma prova.' : 'Nenhuma prova neste filtro.'}
+          {filter === 'all' ? 'Ainda não há provas com análise de questões cadastrada.' : 'Nenhuma prova neste filtro.'}
         </Empty>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -47,18 +47,13 @@ export function ExamsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-xs font-semibold tracking-wide text-brand-600 uppercase">{e.institution}{e.board ? ` · ${e.board}` : ''}</div>
-                    <h3 className="mt-0.5 font-semibold text-slate-900">{e.exam_name} {e.year}</h3>
+                    <h3 className="mt-0.5 font-semibold text-slate-900">{e.exam_name}</h3>
                     <div className="truncate text-xs text-slate-500">{e.institution_name}{e.city ? ` — ${e.city}/${e.state}` : ''}</div>
                   </div>
                   {e.is_primary && <Badge tone="brand"><Star className="h-3 w-3" /> Principal</Badge>}
                 </div>
 
-                <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <div><dt className="text-xs text-slate-500">Data da prova</dt><dd className="font-medium">{dateBR(e.exam_date)}{e.days_left != null && e.days_left >= 0 && <span className="text-xs text-slate-500"> · {e.days_left} dias</span>}</dd></div>
-                  <div><dt className="text-xs text-slate-500">Inscrição</dt><dd className="font-medium">{e.registration_start || e.registration_end ? `${dateBR(e.registration_start)} – ${dateBR(e.registration_end)}` : '—'}</dd></div>
-                  <div><dt className="text-xs text-slate-500">Valor</dt><dd className="font-medium">{money(e.registration_fee)}</dd></div>
-                  <div><dt className="text-xs text-slate-500">Vagas</dt><dd className="font-medium">{e.number_of_vacancies ?? '—'}</dd></div>
-                </dl>
+                <ExamDetails exam={e} onSave={(body) => m.mutate({ id: e.edition_id, body })} />
 
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge tone={w.tone}>{w.label}</Badge>
@@ -88,12 +83,6 @@ export function ExamsPage() {
                     <Button size="sm" variant="ghost" onClick={() => m.mutate({ id: e.edition_id, body: { isPrimary: true } })}><Star className="h-3.5 w-3.5" /> Tornar principal</Button>
                   )}
                 </div>
-                {(e.source_name || e.source_checked_at) && (
-                  <p className="mt-3 text-[11px] text-slate-400">
-                    Fonte: {e.source_url ? <a className="underline" href={e.source_url} target="_blank" rel="noreferrer">{e.source_name ?? 'link'} <ExternalLink className="inline h-3 w-3" /></a> : e.source_name}
-                    {e.source_checked_at && ` · conferido em ${dateBR(e.source_checked_at)}`}
-                  </p>
-                )}
               </article>
             );
           })}
@@ -138,5 +127,46 @@ function HistoryModal({ exam, onClose }: { exam: any; onClose: () => void }) {
         </>
       )}
     </Modal>
+  );
+}
+
+/** Data da prova, inscrição e valor: informados pelo próprio aluno (salvos ao sair do campo). */
+function ExamDetails({ exam, onSave }: { exam: any; onSave: (body: any) => void }) {
+  const initial = () => ({
+    examDate: exam.exam_date ?? '', registrationStart: exam.registration_start ?? '',
+    registrationEnd: exam.registration_end ?? '', registrationFee: exam.registration_fee != null ? String(exam.registration_fee) : '',
+  });
+  const [v, setV] = useState(initial);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setV(initial()), [exam.exam_date, exam.registration_start, exam.registration_end, exam.registration_fee]);
+  const save = (key: keyof typeof v, value: string) => {
+    const current = initial()[key];
+    if (value === current) return;
+    onSave({ [key]: key === 'registrationFee' ? (value === '' ? null : Number(value)) : value || null });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+  const field = (key: keyof typeof v, label: string, type: string, extra: any = {}) => (
+    <label className="block">
+      <span className="text-xs text-slate-500">{label}</span>
+      <input type={type} className="input mt-0.5 py-1.5" aria-label={`${label} — ${exam.institution}`} value={v[key]} {...extra}
+        onChange={(ev) => setV({ ...v, [key]: ev.target.value })} onBlur={(ev) => save(key, ev.target.value)} />
+    </label>
+  );
+  return (
+    <div className="mt-4 rounded-lg bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-600">
+        <span>Seus dados desta prova</span>
+        {saved ? <span className="flex items-center gap-1 text-ok-700"><Check className="h-3.5 w-3.5" /> salvo</span>
+          : exam.days_left != null && exam.days_left >= 0 ? <span className="text-brand-700">{exam.days_left} dias</span> : null}
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        {field('examDate', 'Data da prova', 'date')}
+        {field('registrationFee', 'Valor (R$)', 'number', { min: 0, step: '0.01', placeholder: '0,00' })}
+        {field('registrationStart', 'Inscrição: início', 'date')}
+        {field('registrationEnd', 'Inscrição: fim', 'date')}
+      </div>
+      {!exam.exam_date && <p className="mt-2 text-xs text-warn-700">Informe a data da prova para o planner calcular o tempo até ela.</p>}
+    </div>
   );
 }

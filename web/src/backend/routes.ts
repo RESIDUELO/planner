@@ -3,16 +3,14 @@
  * só que dentro do navegador, falando direto com o Supabase.
  */
 import { z } from 'zod';
-import { MASTERY, MEMORY, PRIORITY, SCHEDULER } from '../../../shared/config';
+import { MASTERY, MEMORY, PRIORITY } from '../../../shared/config';
 import { diffDays, type ISODate } from '../../../shared/dates';
 import { RATINGS, type Rating } from '../../../shared/memory';
-import { computeExamStats, sufficiencyMessage } from '../../../shared/stats';
-import { levelForRank, LEVEL_LABEL } from '../../../shared/priority';
+import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
 import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
-import { commitImport, parseFile, previewImport, slugify, type Resolution } from './importer';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
 interface Route { method: string; re: RegExp; keys: string[]; handler: Handler }
@@ -53,13 +51,6 @@ export function registrationWindow(e: { registration_start: string | null; regis
 
 async function profileOf(ctx: Ctx, userId: string) {
   return q(ctx.sb.from('user_profiles').select('name, role, active').eq('user_id', userId).maybeSingle()) as Promise<any>;
-}
-
-async function requireAdmin(ctx: Ctx) {
-  const id = await currentUserId(ctx);
-  const p = await profileOf(ctx, id);
-  if (p?.role !== 'admin') throw new ApiError(403, 'Área restrita a administradores.');
-  return id;
 }
 
 // ============================================================================
@@ -144,27 +135,40 @@ route('PATCH', '/api/auth/profile', async ({ ctx, body }) => {
 route('GET', '/api/exams', async ({ ctx }) => {
   const uid = await currentUserId(ctx);
   const t = ctx.today();
-  const rows = await q(ctx.sb.from('exam_catalog').select('*').eq('status', 'published')
-    .order('exam_date', { ascending: true, nullsFirst: false }).order('institution').order('year', { ascending: false }));
-  const sel = await q(ctx.sb.from('user_exam_editions').select('exam_edition_id, selected, is_primary').eq('user_id', uid));
+  const rows = await q(ctx.sb.from('exam_catalog').select('*').eq('status', 'published').order('institution').order('year', { ascending: false }));
+  const sel = await q(ctx.sb.from('user_exam_editions').select('*').eq('user_id', uid));
   const regs = await q(ctx.sb.from('registrations').select('exam_edition_id, status, registration_number, notes').eq('user_id', uid));
   const hist = await loadExamHistories(ctx, [...new Set((rows as any[]).map((r) => r.exam_id))]);
-  return (rows as any[]).map((r) => {
-    const h = hist.get(r.exam_id)!;
-    const s: any = (sel as any[]).find((x) => x.exam_edition_id === r.edition_id);
-    const g: any = (regs as any[]).find((x) => x.exam_edition_id === r.edition_id);
-    return {
-      ...r,
-      selected: !!s?.selected, is_primary: !!(s?.selected && s?.is_primary),
-      registration_status: g?.status ?? null, registration_number: g?.registration_number ?? null, registration_notes: g?.notes ?? null,
-      days_left: r.exam_date ? diffDays(r.exam_date, t) : null,
-      registration_window: registrationWindow(r, t),
-      history: {
-        editionsAnalyzed: h.stats.editionsAnalyzed, years: h.stats.years, questions: h.stats.totalQuestions,
-        classified: h.stats.classifiedQuestions, sufficiency: h.stats.sufficiency, message: sufficiencyMessage(h.stats.editionsAnalyzed),
-      },
-    };
-  });
+  const qCount = new Map<string, number>();
+  for (const h of hist.values()) for (const e of h.editions) qCount.set(e.id, e.questionCount);
+  return (rows as any[])
+    // Edições com questões cadastradas são o histórico (base da análise), não provas a fazer.
+    .filter((r) => (qCount.get(r.edition_id) ?? 0) === 0)
+    .map((r) => {
+      const h = hist.get(r.exam_id)!;
+      const s: any = (sel as any[]).find((x) => x.exam_edition_id === r.edition_id);
+      const g: any = (regs as any[]).find((x) => x.exam_edition_id === r.edition_id);
+      // Data, inscrição e valor: informados pelo próprio aluno
+      const mine = {
+        exam_date: s?.exam_date ?? null,
+        registration_start: s?.registration_start ?? null,
+        registration_end: s?.registration_end ?? null,
+        registration_fee: s?.registration_fee != null ? Number(s.registration_fee) : null,
+      };
+      return {
+        ...r,
+        ...mine,
+        selected: !!s?.selected, is_primary: !!(s?.selected && s?.is_primary),
+        registration_status: g?.status ?? null, registration_number: g?.registration_number ?? null, registration_notes: g?.notes ?? null,
+        days_left: mine.exam_date ? diffDays(mine.exam_date, t) : null,
+        registration_window: registrationWindow(mine, t),
+        history: {
+          editionsAnalyzed: h.stats.editionsAnalyzed, years: h.stats.years, questions: h.stats.totalQuestions,
+          classified: h.stats.classifiedQuestions, sufficiency: h.stats.sufficiency, message: sufficiencyMessage(h.stats.editionsAnalyzed),
+        },
+      };
+    })
+    .sort((a, b) => (a.exam_date ?? '9999').localeCompare(b.exam_date ?? '9999') || a.institution.localeCompare(b.institution));
 });
 
 route('PUT', '/api/me/editions/:id', async ({ ctx, params, body }) => {
@@ -176,7 +180,28 @@ route('PUT', '/api/me/editions/:id', async ({ ctx, params, body }) => {
     status: z.enum(['not_interested', 'want_to', 'pending', 'registered', 'closed', 'taken']).nullable().optional(),
     registrationNumber: z.string().max(100).nullable().optional(),
     notes: z.string().max(2000).nullable().optional(),
+    examDate: isoDate.nullable().optional(),
+    registrationStart: isoDate.nullable().optional(),
+    registrationEnd: isoDate.nullable().optional(),
+    registrationFee: z.number().nonnegative().max(100000).nullable().optional(),
   }).parse(body);
+  const detailKeys = ['examDate', 'registrationStart', 'registrationEnd', 'registrationFee'] as const;
+  if (detailKeys.some((k) => b[k] !== undefined)) {
+    const uid = await currentUserId(ctx);
+    const cur: any = await q(ctx.sb.from('user_exam_editions').select('exam_date, registration_start, registration_end, registration_fee')
+      .eq('user_id', uid).eq('exam_edition_id', id).maybeSingle());
+    const pick = <T>(v: T | undefined, old: T) => (v === undefined ? old : v);
+    const start = pick(b.registrationStart, cur?.registration_start ?? null);
+    const end = pick(b.registrationEnd, cur?.registration_end ?? null);
+    if (start && end && start > end) throw badRequest('O início da inscrição precisa ser antes do fim.');
+    await rpc(ctx, 'set_exam_details', {
+      p_edition: id,
+      p_exam_date: pick(b.examDate, cur?.exam_date ?? null),
+      p_registration_start: start,
+      p_registration_end: end,
+      p_registration_fee: pick(b.registrationFee, cur?.registration_fee ?? null),
+    });
+  }
   if (b.selected !== undefined || b.isPrimary !== undefined) {
     await rpc(ctx, 'set_edition_selection', { p_edition: id, p_selected: b.selected ?? (b.isPrimary ? true : null), p_primary: b.isPrimary ?? null });
   }
@@ -320,240 +345,5 @@ route('POST', '/api/reviews/:subjectId', async ({ ctx, params, body }) => {
 route('GET', '/api/dashboard', async ({ ctx }) => dashboardView(ctx));
 route('GET', '/api/performance', async ({ ctx }) => performanceView(ctx));
 route('GET', '/api/algorithm', async () => ({ priority: PRIORITY, memory: MEMORY, mastery: MASTERY }));
-
-// ============================================================================
-// Administração (1ª barreira aqui; a 2ª é o RLS/funções do banco)
-// ============================================================================
-const optText = (max = 2000) => z.string().trim().max(max).nullable().optional().transform((v) => (v === '' ? null : v ?? null));
-const optUrl = z.string().trim().max(1000).nullable().optional()
-  .transform((v) => (v === '' ? null : v ?? null))
-  .refine((v) => v == null || /^https?:\/\//i.test(v), 'URL deve começar com http:// ou https://');
-const optDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal('').transform(() => null));
-
-const institutionSchema = z.object({
-  name: z.string().trim().min(2).max(200),
-  abbreviation: z.string().trim().min(2).max(40),
-  state: z.string().trim().length(2).toUpperCase().nullable().optional().or(z.literal('').transform(() => null)),
-  city: optText(120), website: optUrl, logo_url: optUrl, active: z.boolean().optional(),
-});
-const boardSchema = z.object({
-  name: z.string().trim().min(2).max(200), abbreviation: z.string().trim().min(2).max(40), website: optUrl, active: z.boolean().optional(),
-});
-const examSchema = z.object({
-  institution_id: uuid, board_id: uuid.nullable().optional(), name: z.string().trim().min(2).max(200), description: optText(),
-  total_questions: z.number().int().positive().nullable().optional(), duration_minutes: z.number().int().positive().nullable().optional(),
-  official_url: optUrl, active: z.boolean().optional(),
-});
-const editionSchema = z.object({
-  exam_id: uuid, year: z.number().int().min(1990).max(2100), exam_date: optDate, registration_start: optDate, registration_end: optDate,
-  registration_fee: z.number().nonnegative().max(100000).nullable().optional(), number_of_vacancies: z.number().int().nonnegative().nullable().optional(),
-  total_questions: z.number().int().positive().nullable().optional(), edital_url: optUrl, answer_key_url: optUrl, result_url: optUrl,
-  source_name: optText(300), source_url: optUrl, source_checked_at: optDate, notes: optText(),
-});
-const areaSchema = z.object({ parent_id: uuid.nullable().optional(), name: z.string().trim().min(2).max(200), sort_order: z.number().int().optional(), active: z.boolean().optional() });
-const subjectSchema = z.object({
-  medical_area_id: uuid, parent_subject_id: uuid.nullable().optional(), name: z.string().trim().min(2).max(300), description: optText(), active: z.boolean().optional(),
-});
-const questionSchema = z.object({
-  exam_edition_id: uuid, question_number: z.number().int().positive(), statement: optText(20000), summary: optText(2000),
-  alternative_a: optText(5000), alternative_b: optText(5000), alternative_c: optText(5000), alternative_d: optText(5000), alternative_e: optText(5000),
-  correct_answer: z.enum(['A', 'B', 'C', 'D', 'E']).nullable().optional(), annulled: z.boolean().optional(), explanation: optText(20000),
-  difficulty: z.enum(['easy', 'medium', 'hard']).nullable().optional(), question_type: optText(200), guideline: optText(300),
-  source: optText(500), notes: optText(), active: z.boolean().optional(),
-});
-
-const clean = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
-const insertRow = (ctx: Ctx, table: string, data: Record<string, unknown>) => q(ctx.sb.from(table).insert(clean(data)).select().single());
-async function updateRow(ctx: Ctx, table: string, id: string, data: Record<string, unknown>) {
-  const d = clean(data);
-  if (!Object.keys(d).length) return q(ctx.sb.from(table).select().eq('id', id).single());
-  const rows = await q(ctx.sb.from(table).update(d).eq('id', id).select());
-  if (!(rows as any[]).length) throw notFound();
-  return (rows as any[])[0];
-}
-async function uniqueSlug(ctx: Ctx, table: 'subjects' | 'medical_areas', name: string, exceptId?: string) {
-  const base = slugify(name);
-  const rows = await q(ctx.sb.from(table).select('id, slug').like('slug', `${base}%`));
-  const taken = new Set((rows as any[]).filter((r) => r.id !== exceptId).map((r) => r.slug));
-  let slug = base;
-  for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`;
-  return slug;
-}
-
-function adminRoute(method: string, pattern: string, handler: Handler) {
-  route(method, pattern, async (a) => { await requireAdmin(a.ctx); return handler(a); });
-}
-
-adminRoute('GET', '/api/admin/dashboard', async ({ ctx }) => rpc(ctx, 'admin_dashboard'));
-
-adminRoute('GET', '/api/admin/institutions', async ({ ctx }) => q(ctx.sb.from('admin_institutions').select('*').order('abbreviation')));
-adminRoute('POST', '/api/admin/institutions', async ({ ctx, body }) => insertRow(ctx, 'institutions', institutionSchema.parse(body)));
-adminRoute('PUT', '/api/admin/institutions/:id', async ({ ctx, params, body }) => updateRow(ctx, 'institutions', uuid.parse(params.id), institutionSchema.partial().parse(body)));
-
-adminRoute('GET', '/api/admin/boards', async ({ ctx }) => q(ctx.sb.from('examining_boards').select('*').order('abbreviation')));
-adminRoute('POST', '/api/admin/boards', async ({ ctx, body }) => insertRow(ctx, 'examining_boards', boardSchema.parse(body)));
-adminRoute('PUT', '/api/admin/boards/:id', async ({ ctx, params, body }) => updateRow(ctx, 'examining_boards', uuid.parse(params.id), boardSchema.partial().parse(body)));
-
-adminRoute('GET', '/api/admin/exams', async ({ ctx }) => q(ctx.sb.from('admin_exams').select('*').order('institution').order('name')));
-adminRoute('POST', '/api/admin/exams', async ({ ctx, body }) => insertRow(ctx, 'exams', examSchema.parse(body)));
-adminRoute('PUT', '/api/admin/exams/:id', async ({ ctx, params, body }) => updateRow(ctx, 'exams', uuid.parse(params.id), examSchema.partial().parse(body)));
-
-adminRoute('GET', '/api/admin/editions', async ({ ctx, query }) => {
-  let b = ctx.sb.from('admin_editions').select('*');
-  const examId = query.get('examId');
-  if (examId) b = b.eq('exam_id', uuid.parse(examId));
-  return q(b.order('institution').order('exam_name').order('year', { ascending: false }));
-});
-adminRoute('GET', '/api/admin/editions/:id', async ({ ctx, params }) => {
-  const ed: any = await q(ctx.sb.from('admin_editions').select('*').eq('id', uuid.parse(params.id)).maybeSingle());
-  if (!ed) throw notFound('Edição');
-  const counts = { questions: ed.questions, annulled: ed.annulled, classified: ed.classified, with_statement: ed.with_statement };
-  const expected = ed.total_questions ?? ed.exam_total_questions;
-  const checks = [
-    { key: 'date', ok: !!ed.exam_date, label: 'Data da prova cadastrada' },
-    { key: 'registration', ok: !!(ed.registration_start || ed.registration_end), label: 'Período de inscrição cadastrado' },
-    { key: 'fee', ok: ed.registration_fee != null, label: 'Valor da inscrição cadastrado' },
-    { key: 'source', ok: !!(ed.source_name || ed.source_url), label: 'Fonte dos dados informada' },
-    { key: 'questions', ok: counts.questions > 0, label: 'Questões cadastradas (para análise histórica)' },
-    { key: 'total', ok: !expected || counts.questions === 0 || counts.questions === expected, label: `Nº de questões confere com o total previsto${expected ? ` (${expected})` : ''}` },
-    { key: 'classified', ok: counts.questions === 0 || counts.classified === counts.questions, label: 'Todas as questões classificadas' },
-  ];
-  return { edition: ed, counts, checks };
-});
-adminRoute('POST', '/api/admin/editions', async ({ ctx, body }) => {
-  const uid = await currentUserId(ctx);
-  return insertRow(ctx, 'exam_editions', { ...editionSchema.parse(body), status: 'draft', registered_by: uid });
-});
-adminRoute('PUT', '/api/admin/editions/:id', async ({ ctx, params, body }) =>
-  updateRow(ctx, 'exam_editions', uuid.parse(params.id), editionSchema.partial().omit({ exam_id: true }).parse(body)));
-adminRoute('POST', '/api/admin/editions/:id/status', async ({ ctx, params, body }) => {
-  const { status } = z.object({ status: z.enum(['draft', 'published', 'archived']) }).parse(body);
-  return updateRow(ctx, 'exam_editions', uuid.parse(params.id), { status, published_at: status === 'published' ? new Date().toISOString() : undefined });
-});
-
-adminRoute('GET', '/api/admin/areas', async ({ ctx }) => q(ctx.sb.from('admin_areas').select('*').order('sort_order').order('name')));
-adminRoute('POST', '/api/admin/areas', async ({ ctx, body }) => {
-  const d = areaSchema.parse(body);
-  if (d.parent_id) {
-    const p: any = await q(ctx.sb.from('medical_areas').select('parent_id').eq('id', d.parent_id).maybeSingle());
-    if (!p) throw badRequest('Área-mãe inexistente.');
-    if (p.parent_id) throw badRequest('Use no máximo dois níveis: grande área → especialidade.');
-  }
-  return insertRow(ctx, 'medical_areas', { ...d, slug: await uniqueSlug(ctx, 'medical_areas', d.name) });
-});
-adminRoute('PUT', '/api/admin/areas/:id', async ({ ctx, params, body }) => {
-  const id = uuid.parse(params.id);
-  const d = areaSchema.partial().parse(body);
-  return updateRow(ctx, 'medical_areas', id, { ...d, slug: d.name ? await uniqueSlug(ctx, 'medical_areas', d.name, id) : undefined });
-});
-
-adminRoute('GET', '/api/admin/subjects', async ({ ctx }) => rpc(ctx, 'admin_subjects'));
-adminRoute('POST', '/api/admin/subjects', async ({ ctx, body }) => {
-  const d = subjectSchema.parse(body);
-  return insertRow(ctx, 'subjects', { ...d, slug: await uniqueSlug(ctx, 'subjects', d.name) });
-});
-adminRoute('PUT', '/api/admin/subjects/:id', async ({ ctx, params, body }) => {
-  const id = uuid.parse(params.id);
-  const d = subjectSchema.partial().parse(body);
-  if (d.parent_subject_id) {
-    // Evita ciclos: o novo pai não pode descender deste assunto
-    let cur: string | null = d.parent_subject_id;
-    for (let i = 0; cur && i < 50; i++) {
-      if (cur === id) throw badRequest('Hierarquia inválida: o assunto não pode ser pai de si mesmo.');
-      const row: any = await q(ctx.sb.from('subjects').select('parent_subject_id').eq('id', cur).maybeSingle());
-      cur = row?.parent_subject_id ?? null;
-    }
-  }
-  return updateRow(ctx, 'subjects', id, { ...d, slug: d.name ? await uniqueSlug(ctx, 'subjects', d.name, id) : undefined });
-});
-adminRoute('POST', '/api/admin/subjects/:id/merge', async ({ ctx, params, body }) => {
-  const { targetId } = z.object({ targetId: uuid }).parse(body);
-  await rpc(ctx, 'merge_subject', { p_source: uuid.parse(params.id), p_target: targetId });
-  return { ok: true };
-});
-adminRoute('POST', '/api/admin/subjects/:id/aliases', async ({ ctx, params, body }) => {
-  const { alias } = z.object({ alias: z.string().trim().min(2).max(300) }).parse(body);
-  return insertRow(ctx, 'subject_aliases', { subject_id: uuid.parse(params.id), alias });
-});
-adminRoute('DELETE', '/api/admin/subjects/:id/aliases/:alias', async ({ ctx, params }) => {
-  await q(ctx.sb.from('subject_aliases').delete().eq('subject_id', uuid.parse(params.id)).eq('alias', params.alias));
-  return { ok: true };
-});
-
-adminRoute('GET', '/api/admin/editions/:id/questions', async ({ ctx, params }) => rpc(ctx, 'admin_edition_questions', { p_edition: uuid.parse(params.id) }));
-adminRoute('POST', '/api/admin/questions', async ({ ctx, body }) => {
-  const d = questionSchema.parse(body);
-  if (!d.annulled && !d.correct_answer) throw badRequest('Informe o gabarito ou marque a questão como anulada.');
-  if (!d.statement && !d.summary) throw badRequest('Informe o enunciado ou o resumo do que a questão cobra.');
-  return insertRow(ctx, 'questions', d);
-});
-adminRoute('PUT', '/api/admin/questions/:id', async ({ ctx, params, body }) =>
-  updateRow(ctx, 'questions', uuid.parse(params.id), questionSchema.partial().omit({ exam_edition_id: true }).parse(body)));
-adminRoute('PUT', '/api/admin/questions/:id/subjects', async ({ ctx, params, body }) => {
-  const links = z.array(z.object({ subjectId: uuid, weight: z.number().gt(0).max(1).default(1), isPrimary: z.boolean().default(false) })).max(5).parse(body);
-  if (links.length && links.filter((l) => l.isPrimary).length !== 1) throw badRequest('Marque exatamente um assunto principal.');
-  if (new Set(links.map((l) => l.subjectId)).size !== links.length) throw badRequest('Assunto repetido.');
-  await rpc(ctx, 'set_question_subjects', { p_question: uuid.parse(params.id), p_links: links });
-  return { ok: true };
-});
-
-adminRoute('GET', '/api/admin/exams/:id/stats', async ({ ctx, params, query }) => {
-  const id = uuid.parse(params.id);
-  const includeDrafts = query.get('includeDrafts') !== 'false';
-  const leaf = query.get('level') === 'leaf';
-  const exam: any = await q(ctx.sb.from('admin_exams').select('*').eq('id', id).maybeSingle());
-  if (!exam) throw notFound('Prova');
-  const hist = (await loadExamHistories(ctx, [id], includeDrafts)).get(id)!;
-  const stats = leaf
-    ? computeExamStats(hist.editions.map((e) => ({ id: e.id, year: e.year, questionCount: e.questionCount })),
-      hist.links.map((l) => ({ questionId: l[0], editionId: l[1], subjectId: l[5], weight: Number(l[4]) })))
-    : hist.stats;
-  const info = await loadSubjectsInfo(ctx, stats.subjects.map((s) => s.subjectId));
-  return {
-    exam, editions: hist.editions, includeDrafts, message: sufficiencyMessage(stats.editionsAnalyzed), ...stats,
-    subjects: stats.subjects.map((s, i) => ({ ...s, rank: i + 1, name: info.get(s.subjectId)?.name, area: info.get(s.subjectId)?.area, level: LEVEL_LABEL[levelForRank(i + 1, stats.subjects.length)] })),
-  };
-});
-
-const importBody = z.object({
-  examId: uuid, filename: z.string().min(1).max(300), content: z.string().min(1),
-  resolutions: z.record(z.string(), z.union([
-    z.object({ action: z.literal('map'), id: uuid }), z.object({ action: z.literal('create') }), z.object({ action: z.literal('ignore') }),
-  ])).optional(),
-  source: optText(500),
-});
-adminRoute('POST', '/api/admin/import/preview', async ({ ctx, body }) => {
-  const b = importBody.parse(body);
-  return previewImport(ctx, b.examId, await parseFile(b.filename, b.content));
-});
-adminRoute('POST', '/api/admin/import/commit', async ({ ctx, body }) => {
-  const b = importBody.parse(body);
-  if (!b.resolutions) throw badRequest('Confirmação ausente.');
-  return commitImport(ctx, b.examId, b.filename, await parseFile(b.filename, b.content), b.resolutions as Record<string, Resolution>, b.source ?? null);
-});
-adminRoute('GET', '/api/admin/import/batches', async ({ ctx }) => q(ctx.sb.from('admin_import_batches').select('*').order('created_at', { ascending: false }).limit(50)));
-
-adminRoute('GET', '/api/admin/users', async ({ ctx }) => rpc(ctx, 'admin_users'));
-adminRoute('PUT', '/api/admin/users/:userId', async ({ ctx, params, body }) => {
-  const d = z.object({ role: z.enum(['admin', 'user']).optional(), active: z.boolean().optional() }).parse(body);
-  const rows = await q(ctx.sb.from('user_profiles').update(clean(d)).eq('user_id', uuid.parse(params.userId)).select('user_id'));
-  if (!(rows as any[]).length) throw notFound('Usuário');
-  return { ok: true };
-});
-
-adminRoute('GET', '/api/admin/logs', async ({ ctx, query }) => {
-  const page = Math.max(1, Number(query.get('page') ?? 1) || 1);
-  const entity = query.get('entity');
-  let b = ctx.sb.from('admin_audit_logs').select('*', { count: 'exact' });
-  if (entity) b = b.eq('entity', entity);
-  const { data, count, error } = await b.order('changed_at', { ascending: false }).order('id', { ascending: false }).range((page - 1) * 50, page * 50 - 1);
-  if (error) throw toApiError(error);
-  return { rows: data, total: count ?? 0, page, pageSize: 50 };
-});
-
-adminRoute('GET', '/api/admin/algorithms', async ({ ctx }) => ({
-  versions: await q(ctx.sb.from('algorithm_versions').select('*').order('created_at')),
-  parameters: { priority: PRIORITY, memory: MEMORY, scheduler: SCHEDULER, mastery: MASTERY },
-}));
 
 export { selectAll };

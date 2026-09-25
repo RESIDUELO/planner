@@ -30,15 +30,18 @@ export interface SelectedEdition {
   is_primary: boolean;
 }
 
-export const editionLabel = (e: { institution: string; year: number; exam_name: string }) =>
-  `${e.institution} ${e.year} — ${e.exam_name}`;
+export const editionLabel = (e: { institution: string; exam_name: string }) => `${e.institution} — ${e.exam_name}`;
 
+/** Provas escolhidas, com a data informada pelo próprio aluno. */
 export async function loadEditions(ctx: Ctx, editionIds: string[]): Promise<SelectedEdition[]> {
   if (!editionIds.length) return [];
+  const uid = await currentUserId(ctx);
   const rows = await q(ctx.sb.from('exam_catalog')
-    .select('edition_id, exam_id, year, exam_date, total_questions, exam_total_questions, exam_name, institution, institution_name, status')
+    .select('edition_id, exam_id, year, total_questions, exam_total_questions, exam_name, institution, institution_name, status')
     .in('edition_id', editionIds).eq('status', 'published'));
-  return (rows as any[]).map((r) => ({ ...r, is_primary: false }));
+  const mine = await q(ctx.sb.from('user_exam_editions').select('exam_edition_id, exam_date').eq('user_id', uid).in('exam_edition_id', editionIds));
+  const dateBy = new Map((mine as any[]).map((m) => [m.exam_edition_id, m.exam_date]));
+  return (rows as any[]).map((r) => ({ ...r, exam_date: dateBy.get(r.edition_id) ?? null, is_primary: false }));
 }
 
 export async function selectedEditions(ctx: Ctx, userId: string): Promise<SelectedEdition[]> {
@@ -128,7 +131,7 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
   const startDate = maxDate(params.startDate, today)!;
   const futureDates = eds.map((e) => e.exam_date).filter((d): d is string => !!d && d > startDate);
   const endDate = params.targetDate ?? maxDate(...futureDates);
-  if (!endDate) throw badRequest('As provas selecionadas não têm data cadastrada. Informe uma data-alvo para o planejamento.');
+  if (!endDate) throw badRequest('Informe a data da prova (futura) de pelo menos uma das provas selecionadas.');
   if (endDate <= startDate) throw badRequest('A data-alvo precisa ser posterior à data de início.');
 
   const histories = await loadExamHistories(ctx, [...new Set(eds.map((e) => e.exam_id))]);

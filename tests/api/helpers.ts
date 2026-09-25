@@ -4,8 +4,6 @@
  * navegador (web/src/backend) para exercitar o sistema de ponta a ponta.
  */
 import pg from 'pg';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { createCtx, ApiError } from '../../web/src/backend/core';
 import { handle } from '../../web/src/backend/routes';
@@ -53,13 +51,6 @@ export class Client {
   }
 }
 
-export async function createAdmin(email: string, password: string) {
-  const c = new Client();
-  await c.ok('POST', '/api/auth/register', { name: 'Admin Teste', email, password });
-  await dbQuery(`select public.make_admin($1)`, [email]);
-  return c;
-}
-
 /** Chamada crua à API REST do Supabase com o token de um usuário (simula requisição forjada). */
 export async function rest(token: string, method: string, path: string, body?: unknown) {
   const r = await fetch(`${sbEnv.url}/rest/v1${path}`, {
@@ -71,13 +62,4 @@ export async function rest(token: string, method: string, path: string, body?: u
   let json: any = null;
   try { json = JSON.parse(text); } catch { json = text; }
   return { status: r.status, body: json };
-}
-
-export function importFile(name: string) {
-  const path = join(process.cwd(), 'data', 'import', name);
-  return { filename: name, content: readFileSync(path).toString('base64') };
-}
-
-export function createAll(preview: { unknown: { key: string }[] }) {
-  return Object.fromEntries(preview.unknown.map((u) => [u.key, { action: 'create' as const }]));
 }

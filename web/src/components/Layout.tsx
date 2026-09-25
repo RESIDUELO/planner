@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { BarChart3, CalendarCheck, ClipboardList, LayoutDashboard, LogOut, Settings, Shield, BookOpenCheck } from 'lucide-react';
+import { BarChart3, CalendarCheck, ClipboardList, LayoutDashboard, LogOut, Settings, BookOpenCheck } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { Logo } from './Logo';
 
@@ -16,7 +16,7 @@ const NAV = [
 export function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
-  const items = user?.role === 'admin' ? [...NAV, { to: '/admin', label: 'Administração', icon: Shield }] : NAV;
+  const items = NAV;
   return (
     <div className="min-h-full lg:pl-64">
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-slate-200 bg-white lg:flex">
@@ -41,9 +41,6 @@ export function Layout() {
 
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
         <Logo />
-        {user?.role === 'admin' && (
-          <NavLink to="/admin" className="rounded-md p-2 text-slate-500 hover:bg-slate-100" aria-label="Administração"><Shield className="h-5 w-5" /></NavLink>
-        )}
       </header>
 
       <main className="mx-auto max-w-7xl px-4 pt-6 pb-28 sm:px-6 lg:px-8 lg:pb-12">

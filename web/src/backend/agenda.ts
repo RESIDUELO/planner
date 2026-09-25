@@ -139,7 +139,7 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
     g.completed = g.completed && r.completed;
   }
   for (const g of grouped.values()) push(g.date, 'newSubjects', g);
-  for (const e of state.exams as any[]) if (e.exam_date && days.has(e.exam_date)) days.get(e.exam_date)!.exams.push(`${e.institution} ${e.year}`);
+  for (const e of state.exams as any[]) if (e.exam_date && days.has(e.exam_date)) days.get(e.exam_date)!.exams.push(e.institution);
   return { from, to, today, planEnd: plan.end_date, days: [...days.values()] };
 }
 
@@ -179,7 +179,7 @@ export async function dashboardView(ctx: Ctx) {
 
   const dominated = (exams as any[]).map((e) => ({
     editionId: e.exam_edition_id,
-    label: `${e.institution} ${e.year}`,
+    label: e.institution,
     examName: e.exam_name,
     examDate: e.exam_date,
     daysLeft: e.exam_date ? diffDays(e.exam_date, today) : null,

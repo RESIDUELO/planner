@@ -6,6 +6,11 @@ Plataforma que transforma o **histórico das provas cadastradas pelo administrad
 
 **provas → questões → classificação → frequência → ranking → planner → checklist → desempenho → repetição espaçada → calendário → cobertura estimada**
 
+## Quem alimenta a base
+
+- **Administrador (fora do site):** envia a análise das questões que mais caíram. Com ela são gerados `data/import/*.json` e `data/exams.json`, e `npm run data:sql` gera `supabase/data/<prova>.sql` para rodar no SQL Editor. O site **não tem** área de cadastro.
+- **Aluno (no site):** escolhe entre as provas cadastradas e informa **a data da prova, o período de inscrição e o valor**. Esses dados ficam só na conta dele.
+
 ## Regra fundamental: base fechada
 
 O sistema **só conhece o que o administrador cadastra**. Não há scraping, busca na internet, APIs externas nem atualização automática de datas, valores ou questões. Se só três provas forem cadastradas, só essas três existem. O `schema.sql` não cria instituições, provas, edições, questões nem assuntos: as únicas tabelas pré-populadas são `study_methods` e `algorithm_versions`, que são configuração do sistema.
@@ -46,12 +51,7 @@ scripts/              Supabase local para testes, conversor PDF → importação
 
    Nunca use a chave `service_role` no site.
 5. **GitHub Pages**: em **Settings → Pages → Build and deployment → Source**, escolha **GitHub Actions**. Cada push na branch padrão publica o site (workflow [`deploy.yml`](.github/workflows/deploy.yml); para publicar na hora, use **Actions → Publicar no GitHub Pages → Run workflow**) em `https://<usuário>.github.io/<repositório>/`.
-6. **Administrador**: crie sua conta pelo próprio site. Depois, no SQL Editor do Supabase, rode:
-   ```sql
-   select public.make_admin('seu-email@exemplo.com');
-   ```
-   Saia e entre de novo: o menu **Administração** aparece.
-7. **Dados**: em **Administração → Nova prova**, cadastre instituição, prova e edição. Depois use **Importação** com os arquivos de `data/import/`.
+6. **Provas**: rode no SQL Editor os arquivos de [`supabase/data/`](supabase/data), um por prova (ex.: `famerp_r1.sql`). Eles podem ser rodados de novo sem duplicar nada.
 
 ## Desenvolvimento local
 
@@ -106,19 +106,19 @@ Como o navegador fala direto com o banco, **todas** as regras de acesso vivem no
 
 **Questões potencialmente dominadas.** Σ (questões esperadas do assunto × domínio estimado), onde domínio = acerto suavizado × memória atual. A interface deixa claro que é uma estimativa, não uma promessa.
 
-## Importação (seções 42–43)
+## Como uma prova entra na base
 
-Aceita CSV, XLSX e JSON, com colunas `year, question_number, area, specialty, subject, subsubject, summary|statement, alternative_a…e, correct_answer, annulled, difficulty, question_type, guideline, source, notes` (também em português: `ano, numero, assunto, gabarito, anulada…`).
+1. O administrador envia a análise (PDF ou planilha) das questões que mais caíram.
+2. A classificação questão a questão vira `data/import/<prova>.json` (para os relatórios em PDF: `scripts/pdf-annex-to-import.py`), e a prova é registrada em `data/exams.json`.
+3. `npm run data:sql` gera `supabase/data/<prova>.sql`. Esse arquivo:
+   - cadastra instituição, prova, grandes áreas, especialidades, assuntos e subassuntos;
+   - cadastra as edições históricas (publicadas, com as questões) e a "próxima prova", que o aluno escolhe;
+   - pode ser rodado de novo sem duplicar nada, e termina com uma conferência da contagem.
+4. O arquivo é rodado no SQL Editor do Supabase. Nenhum assunto nasce automaticamente de fonte externa: tudo vem do arquivo revisado.
 
-1. **Prévia**: mostra válidas, inválidas, duplicadas, anuladas, edições que serão criadas e áreas/assuntos **não encontrados**. Nada é gravado nesta etapa.
-2. **Decisão**: para cada item não encontrado, o admin escolhe entre associar a um existente (vira alias reconhecido nas próximas importações), criar novo ou ignorar.
-3. **Confirmação**: insere tudo numa transação. Edições novas nascem como **rascunho**.
+Provas já preparadas: **FAMERP** R1 (480 questões, 2021–2026), **HU-UEL** R1 (550, 2021–2026) e **UNOESTE/HRPP** R1 (500, 2022–2026). Os relatórios não trazem o enunciado das questões, só o resumo do que cada uma cobra.
 
-### Dados dos relatórios enviados
-
-`scripts/pdf-annex-to-import.py` converte os anexos de classificação dos três relatórios PDF em `data/import/` (conferido: FAMERP 480 questões com 23 anuladas; UEL 550 com 11 anuladas; UNOESTE R1 500 com 6 anuladas, mais as R+). **Esses arquivos não são carregados automaticamente**: o admin os importa pela tela de Importação. Os relatórios não trazem o enunciado das questões, só o resumo do que cada uma cobra, e por isso o enunciado fica vazio.
-
-As três instituições nomeiam os assuntos de formas diferentes ("Saúde do Trabalhador" × "Saúde do trabalhador (CAT, NR, …)"). Para que a prioridade combinada do modo multiprova cruze os assuntos, use **Admin → Assuntos → Mesclar**: as questões são reclassificadas, o nome antigo vira alias e nada é apagado.
+Cada instituição nomeia os assuntos de um jeito ("Saúde do Trabalhador" × "Saúde do trabalhador (CAT, NR, …)"). Para a prioridade combinada do modo multiprova cruzar melhor as provas, os nomes podem ser unificados num próximo arquivo de dados, sem apagar nada.
 
 ## Testes
 
@@ -130,14 +130,14 @@ PW_CHROMIUM_PATH=/caminho/chrome npm run test:e2e  # navegador, com o site compi
 
 | Seção 58 | Onde |
 |---|---|
-| 1 criar usuário · 2 visitante · 20 bloqueio /admin | `e2e/app.spec.ts`, `api/flow.test.ts` |
+| 1 criar usuário · 2 visitante · 20 sem área administrativa no site | `e2e/app.spec.ts`, `api/flow.test.ts` |
 | 3–4 uma e três provas | `api/flow.test.ts` (multiprova com FAMERP + UEL + UNOESTE) e E2E |
 | 5–8 métodos, planner, checklist | API + E2E |
 | 9–12 20 questões / 17 acertos, domínio, 1ª revisão | API + E2E |
 | 13–14 "Again" antecipa revisão | `api/flow.test.ts`, `unit/memory.test.ts` |
 | 15–16 calendário, revisões atrasadas | API (data simulada) + E2E |
 | 17–19 persistência | API (nova sessão) + E2E (novo contexto de navegador) |
-| 21–25 admin, rascunho invisível, publicação, questões → estatísticas | API + E2E |
+| 21–25 base só pelo administrador, rascunho invisível, questões → estatísticas | `api/flow.test.ts` (dados via `supabase/data/*.sql`) |
 | RLS contra requisições forjadas | `api/flow.test.ts › Segurança` |
 
 ## Preparado para evoluir
