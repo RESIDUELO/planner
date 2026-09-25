@@ -7,6 +7,9 @@
  * os dias de aula livres, sem mexer em sábados, simulados e revisão final.
  */
 import { type ISODate } from '../../../shared/dates';
+import { MEMORY_VERSION } from '../../../shared/config';
+import { review } from '../../../shared/memory';
+import { assignReviews } from '../../../shared/reviewQueue';
 import { badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
 import { activePlan, loadEditions, loadMethods, loadProfile, readjustCards, saveSelection, studyWeekdays } from './planner';
 
@@ -147,8 +150,40 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
       activities,
     },
   });
+  await scheduleStudiedReviews(ctx, userId, planId, data, ids, examDate, profile);
   await readjustCards(ctx, userId, planId);
   return planId;
+}
+
+/**
+ * Temas já estudados entram na fila de revisões, por ordem de importância:
+ * mais questões na prova primeiro; no empate, baralho frágil e depois o que
+ * caiu em mais anos. A fila respeita o limite de revisões por dia e os dias de
+ * estudo, a partir do início do cronograma. Cartões que já existem (revisões
+ * feitas no site) não são tocados.
+ */
+async function scheduleStudiedReviews(ctx: Ctx, userId: string, planId: string, data: TemplateData, ids: Map<string, string>,
+  examDate: ISODate, profile: Awaited<ReturnType<typeof loadProfile>>) {
+  const today = ctx.today();
+  const years = (i: TemplateItem) => (i.byYear ?? []).filter((x) => x > 0).length;
+  const studied = data.items.filter((i) => i.kind === 'studied')
+    .sort((a, b) => (b.total ?? 0) - (a.total ?? 0) || Number(!!b.fragile) - Number(!!a.fragile) || years(b) - years(a) || a.name.localeCompare(b.name));
+  if (!studied.length) return;
+  const existing = new Set(((await selectAll((a, b) => ctx.sb.from('spaced_repetition_cards').select('subject_id').eq('user_id', userId).range(a, b))) as any[])
+    .map((c) => c.subject_id));
+  const start = data.startDate > today ? data.startDate : today;
+  const due = assignReviews(studied.map((i, k) => ({ id: i.slug, due: start, score: studied.length - k, examDate })),
+    { today: start, perDay: profile.reviews_per_day, studyWeekdays: studyWeekdays(profile) });
+  const rows = studied.filter((i) => !existing.has(ids.get(i.slug))).map((i) => {
+    const res = review(null, i.fragile ? 'hard' : 'good', data.studiedAt, examDate);
+    return {
+      user_id: userId, subject_id: ids.get(i.slug), study_plan_id: planId, stability: res.state.stability, difficulty: res.state.difficulty,
+      retrievability: 1, interval_days: res.intervalDays, repetitions: res.state.repetitions, lapses: res.state.lapses,
+      last_review_at: `${data.studiedAt}T12:00:00-03:00`, next_review_at: due.get(i.slug), last_rating: i.fragile ? 'hard' : 'good',
+      algorithm_version: MEMORY_VERSION,
+    };
+  });
+  if (rows.length) await q(ctx.sb.from('spaced_repetition_cards').insert(rows));
 }
 
 /**

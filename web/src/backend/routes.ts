@@ -404,7 +404,7 @@ function templateExplanation(subj: any, t: any, inst = 'UNOESTE') {
   const br = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
   const caiu = subj.estimatedQuestions > 0 ? ` Caiu ${Math.round(subj.annualAverage * subj.yearsAnalyzed)} vez(es) na ${inst} de 2022 a 2026.` : '';
   if (t.kind === 'lesson') return `Aula do seu cronograma MEDCOF para ${br(t.date)}.${caiu}${t.core ? ` Núcleo ${t.core}.` : ''}`;
-  if (t.kind === 'studied') return `Tema que você já estudou (${t.cards} cards no Anki${t.fragile ? ', baralho frágil' : ''}). Revisão por questões no sábado ${br(t.saturday)}.${caiu}`;
+  if (t.kind === 'studied') return `Tema que você já estudou (${t.cards} cards no Anki${t.fragile ? ', baralho frágil' : ''}). Entra nas revisões do site por ordem de importância e também nas questões do sábado ${br(t.saturday)}.${caiu}`;
   if (t.kind === 'reserve') return `Aula de reserva: para trocar um tema que você já domina ou se sobrar tempo.${caiu}`;
   return t.detail ?? '';
 }

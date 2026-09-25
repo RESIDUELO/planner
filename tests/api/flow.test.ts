@@ -501,6 +501,13 @@ describe('Cronograma pessoal (só administradores)', () => {
     expect(names(cal, '2026-10-02')).toEqual(['Técnica cirúrgica: fios, antissepsia e instrumental']);
     expect(names(cal, '2026-10-03')).toEqual(['Questões — baralhos mais frágeis (03/10)']);
     expect(names(cal, '2026-10-04')).toEqual([]);
+    // Temas já estudados na fila de revisões, por importância (até 2 por dia)
+    const rv = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-20');
+    const pending = rv.days.map((x: any) => x.reviews.filter((r: any) => r.status !== 'done'));
+    for (const r of pending) expect(r.length).toBeLessThanOrEqual(2);
+    expect(pending.flat()).toHaveLength(27);
+    expect(day(rv, '2026-09-28').reviews.map((r: any) => r.name)).toEqual(['Trauma: xABCDE, via aérea e choque', 'Trauma de tórax']);
+    expect(day(rv, '2026-10-04').reviews).toEqual([]); // domingo não é dia de estudo
     const d = await admin.ok('GET', `/api/planner/subjects/${p.subjects[0].subjectId}`);
     expect(d.subject.perExam[0].template.focus).toMatch(/SINAN/);
     expect(d.explanation).toMatch(/Aula do seu cronograma MEDCOF para 28\/09/);
