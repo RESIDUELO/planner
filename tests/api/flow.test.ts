@@ -1,14 +1,12 @@
 /**
- * Fluxo completo (seção 58) contra um PostgreSQL real, com RLS ativo.
+ * Fluxo completo (seção 58) contra um Supabase local (PostgreSQL + Auth +
+ * PostgREST) com RLS ativo, usando a mesma camada de dados do navegador.
  * Os testes rodam em sequência e compartilham o estado do banco.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import pg from 'pg';
-import type { FastifyInstance } from 'fastify';
-import { Client, createAdmin, createAll, importFile, OWNER_URL, ownerQuery, resetDatabase, startApp, stopApp } from './helpers';
+import { Client, createAdmin, createAll, dbQuery, importFile, rest, setStack, startStack, type LocalSupabase } from './helpers';
 
-let app: FastifyInstance;
-const admin = () => new Client(app);
+let stack: LocalSupabase;
 let adm: Client;
 let student: Client;
 let other: Client;
@@ -16,18 +14,18 @@ const ids: Record<string, string> = {};
 const TODAY = '2026-09-25';
 
 beforeAll(async () => {
-  await resetDatabase();
-  app = await startApp();
+  stack = await startStack();
+  setStack(stack);
   await createAdmin('admin@teste.com', 'senha-admin-123');
-  adm = admin();
+  adm = new Client();
   adm.today = TODAY;
   await adm.ok('POST', '/api/auth/login', { email: 'admin@teste.com', password: 'senha-admin-123' });
-});
-afterAll(async () => stopApp(app));
+}, 120_000);
+afterAll(async () => stack?.stop());
 
 describe('Base vazia', () => {
   it('sem cadastro do administrador, o sistema não conhece nenhuma prova', async () => {
-    const guest = new Client(app);
+    const guest = new Client();
     await guest.ok('POST', '/api/auth/guest');
     expect(await guest.ok('GET', '/api/exams')).toEqual([]);
   });
@@ -48,7 +46,7 @@ describe('Administração (testes 21–25)', () => {
   });
 
   it('rascunho não aparece para usuários (teste 23)', async () => {
-    student = new Client(app);
+    student = new Client();
     student.today = TODAY;
     await student.ok('POST', '/api/auth/register', { name: 'Aluna Teste', email: 'aluna@teste.com', password: 'senha-aluna-123' });
     expect(await student.ok('GET', '/api/exams')).toEqual([]);
@@ -64,9 +62,9 @@ describe('Administração (testes 21–25)', () => {
     expect(preview.annulled).toBe(23);
     expect(preview.unknown.length).toBeGreaterThan(100);
     expect(preview.unknown.some((u: any) => u.kind === 'area')).toBe(true);
-    const n = await ownerQuery('select count(*)::int as n from public.questions');
+    const n = await dbQuery('select count(*)::int as n from public.questions');
     expect(n.rows[0].n).toBe(0);
-    const s = await ownerQuery('select count(*)::int as n from public.subjects');
+    const s = await dbQuery('select count(*)::int as n from public.subjects');
     expect(s.rows[0].n).toBe(0);
   });
 
@@ -128,38 +126,27 @@ describe('Segurança (teste 20 e RLS)', () => {
     expect((await student.req('POST', '/api/admin/institutions', { name: 'Hack', abbreviation: 'HK' })).status).toBe(403);
   });
 
-  it('o banco recusa escrita global de não-admin mesmo sem passar pela rota', async () => {
-    // Simula uma requisição forjada: sessão válida de aluno, acesso direto ao banco com o papel da API.
-    const token = student.cookie.split('=')[1];
-    const { createHash } = await import('node:crypto');
-    const hash = createHash('sha256').update(token).digest('hex');
-    const c = new pg.Client({ connectionString: OWNER_URL });
-    await c.connect();
-    const attempt = async (sql: string, params: unknown[] = []) => {
-      await c.query('begin');
-      await c.query('set local role rp_app');
-      await c.query(`select set_config('app.session', $1, true)`, [hash]);
-      try {
-        const r = await c.query(sql, params);
-        await c.query('rollback');
-        return { ok: true, rowCount: r.rowCount };
-      } catch (e: any) {
-        await c.query('rollback');
-        return { ok: false, code: e.code };
-      }
-    };
-    expect(await attempt(`insert into public.institutions(name, abbreviation) values ('X', 'XX')`)).toMatchObject({ ok: false, code: '42501' });
-    expect(await attempt(`update public.exam_editions set registration_fee = 1`)).toMatchObject({ ok: true, rowCount: 0 });
-    expect(await attempt(`delete from public.institutions`)).toMatchObject({ ok: false, code: '42501' });
-    expect(await attempt(`delete from public.questions`)).toMatchObject({ ok: false, code: '42501' });
-    expect(await attempt(`update public.user_profiles set role = 'admin'`)).toMatchObject({ ok: false, code: '42501' });
-    expect(await attempt(`select * from auth.users`)).toMatchObject({ ok: false, code: '42501' });
-    expect(await attempt(`insert into public.admin_audit_logs(entity, action) values ('x', 'y')`)).toMatchObject({ ok: false, code: '42501' });
+  it('o banco recusa escrita global de não-admin mesmo sem passar pelo app', async () => {
+    // Requisições forjadas direto na API REST do Supabase com o token de um aluno.
+    const token = await student.accessToken();
+    const me = (await student.sb.auth.getUser()).data.user!.id;
+    const denied = (r: { status: number; body: any }) => r.status >= 400 && r.body?.code === '42501';
+    expect(denied(await rest(token, 'POST', '/institutions', { name: 'X', abbreviation: 'XX' }))).toBe(true);
+    const upd = await rest(token, 'PATCH', '/exam_editions?id=not.is.null', { registration_fee: 1 });
+    expect(upd.body).toEqual([]);
+    expect(denied(await rest(token, 'DELETE', '/institutions?id=not.is.null'))).toBe(true);
+    expect(denied(await rest(token, 'DELETE', '/questions?id=not.is.null'))).toBe(true);
+    expect(denied(await rest(token, 'PATCH', `/user_profiles?user_id=eq.${me}`, { role: 'admin' }))).toBe(true);
+    expect(denied(await rest(token, 'POST', '/admin_audit_logs', { entity: 'x', action: 'y' }))).toBe(true);
+    expect(denied(await rest(token, 'POST', '/rpc/make_admin', { p_email: 'aluna@teste.com' }))).toBe(true);
+    expect(denied(await rest(token, 'POST', '/rpc/admin_users', {}))).toBe(true);
+    expect((await rest(token, 'GET', '/users')).status).toBe(404); // auth.users não é exposto
     // Rascunhos invisíveis
-    await ownerQuery(`insert into public.exam_editions(exam_id, year, status) values ($1, 2030, 'draft')`, [ids.famerpExam]);
-    const drafts = await attempt(`select 1 from public.exam_editions where status = 'draft'`);
-    expect(drafts).toMatchObject({ ok: true, rowCount: 0 });
-    await c.end();
+    await dbQuery(`insert into public.exam_editions(exam_id, year, status) values ($1, 2030, 'draft')`, [ids.famerpExam]);
+    expect((await rest(token, 'GET', '/exam_editions?status=eq.draft')).body).toEqual([]);
+    // Sem login, nada é lido
+    const anon = await fetch(`${stack.url}/rest/v1/institutions`, { headers: { apikey: stack.anonKey } });
+    expect(anon.status).toBeGreaterThanOrEqual(400);
   });
 });
 
@@ -204,7 +191,7 @@ describe('Aluno (testes 1–19)', () => {
     // Somente os métodos escolhidos aparecem no checklist
     expect(p.subjects[0].checklist.map((c: any) => c.code)).toEqual(['video', 'flashcards', 'questions']);
     // Nunca agenda mais que as horas disponíveis
-    const load = await ownerQuery(`select scheduled_date, sum(estimated_minutes)::int as m from public.study_schedule group by 1`);
+    const load = await dbQuery(`select scheduled_date, sum(estimated_minutes)::int as m from public.study_schedule group by 1`);
     for (const r of load.rows) expect(r.m).toBeLessThanOrEqual(240);
     ids.subject1 = p.subjects[0].subjectId;
     ids.subject2 = p.subjects[1].subjectId;
@@ -299,14 +286,14 @@ describe('Aluno (testes 1–19)', () => {
     const p = await student.ok('GET', '/api/planner');
     expect(p.plan.start_date).toBe('2026-10-25');
     expect(p.subjects.find((s: any) => s.subjectId === ids.subject1).status).toBe('studied');
-    const past = await ownerQuery(`select count(*)::int as n from public.study_schedule s join public.study_plans p on p.id = s.study_plan_id
+    const past = await dbQuery(`select count(*)::int as n from public.study_schedule s join public.study_plans p on p.id = s.study_plan_id
                                     where p.status = 'active' and s.scheduled_date < '2026-10-25'`);
     expect(past.rows[0].n).toBe(0);
     student.today = TODAY;
   });
 
   it('persistência: nova sessão encontra tudo (testes 17–19)', async () => {
-    const again = new Client(app);
+    const again = new Client();
     again.today = TODAY;
     await again.ok('POST', '/api/auth/login', { email: 'aluna@teste.com', password: 'senha-aluna-123' });
     const p = await again.ok('GET', '/api/planner');
@@ -316,7 +303,7 @@ describe('Aluno (testes 1–19)', () => {
   });
 
   it('um usuário não vê os dados de outro', async () => {
-    other = new Client(app);
+    other = new Client();
     await other.ok('POST', '/api/auth/register', { name: 'Outro', email: 'outro@teste.com', password: 'senha-outro-123' });
     expect((await other.ok('GET', '/api/planner')).plan).toBeNull();
     expect((await other.ok('GET', '/api/performance')).logs).toEqual([]);
@@ -327,7 +314,7 @@ describe('Aluno (testes 1–19)', () => {
 
 describe('Visitante (teste 2)', () => {
   it('usa o planner e pode converter em conta mantendo o progresso', async () => {
-    const g = new Client(app);
+    const g = new Client();
     g.today = TODAY;
     await g.ok('POST', '/api/auth/guest');
     const me = await g.ok('GET', '/api/auth/me');
@@ -340,7 +327,7 @@ describe('Visitante (teste 2)', () => {
     });
     await g.ok('POST', '/api/planner/generate', { editionIds: [ids.famerp2027], primaryEditionId: ids.famerp2027, startDate: TODAY });
     await g.ok('POST', '/api/auth/upgrade', { name: 'Ex-visitante', email: 'exvisitante@teste.com', password: 'senha-exvis-123' });
-    const g2 = new Client(app);
+    const g2 = new Client();
     await g2.ok('POST', '/api/auth/login', { email: 'exvisitante@teste.com', password: 'senha-exvis-123' });
     expect((await g2.ok('GET', '/api/auth/me')).user.role).toBe('user');
     const p = await g2.ok('GET', '/api/planner');

@@ -20,7 +20,11 @@ export function SettingsPage() {
   };
   const upgrade = async (e: FormEvent) => {
     e.preventDefault();
-    try { await api.post('/api/auth/upgrade', upg); await refresh(); setMsg({ tone: 'ok', text: 'Conta criada! Seu progresso foi mantido.' }); } catch (err) { setMsg({ tone: 'late', text: errorMessage(err) }); }
+    try {
+      const r = await api.post('/api/auth/upgrade', upg);
+      await refresh();
+      setMsg({ tone: 'ok', text: r.needsConfirmation ? 'Quase lá: confirme o e-mail que enviamos. Seu progresso já está mantido.' : 'Conta criada! Seu progresso foi mantido.' });
+    } catch (err) { setMsg({ tone: 'late', text: errorMessage(err) }); }
   };
   const s = settings.data;
   const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];

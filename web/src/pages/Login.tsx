@@ -13,6 +13,7 @@ export function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState<'form' | 'guest' | null>(null);
 
   if (user) return <Navigate to={loc.state?.from ?? '/'} replace />;
@@ -21,9 +22,17 @@ export function LoginPage() {
     e.preventDefault();
     setBusy('form');
     setError(null);
+    setInfo(null);
     try {
       if (mode === 'login') await api.post('/api/auth/login', { email: form.email, password: form.password });
-      else await api.post('/api/auth/register', form);
+      else {
+        const r = await api.post('/api/auth/register', form);
+        if (r.needsConfirmation) {
+          setInfo('Conta criada! Enviamos um e-mail de confirmação: clique no link e depois entre com sua senha.');
+          setMode('login');
+          return;
+        }
+      }
       await refresh();
       nav(loc.state?.from ?? '/', { replace: true });
     } catch (err) {
@@ -81,6 +90,7 @@ export function LoginPage() {
               <input className="input" type="password" required minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
             </Field>
             {error && <Alert tone="late">{error}</Alert>}
+            {info && <Alert tone="ok">{info}</Alert>}
             <Button type="submit" className="w-full" loading={busy === 'form'}>{mode === 'login' ? 'Entrar' : 'Criar conta'}</Button>
           </form>
 

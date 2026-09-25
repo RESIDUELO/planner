@@ -1,7 +1,7 @@
 /**
  * Importação de questões (CSV, XLSX, JSON) — seções 42 e 43.
  *
- * Fluxo em duas etapas, sem estado no servidor:
+ * Roda no navegador do administrador. Fluxo em duas etapas:
  *   1. preview: lê o arquivo, valida linha a linha, detecta duplicadas e
  *      lista áreas/assuntos NÃO encontrados. Nada é gravado.
  *   2. commit: o administrador reenvia o arquivo com uma decisão para cada
@@ -11,9 +11,7 @@
  * Nenhum assunto é criado automaticamente.
  */
 import Papa from 'papaparse';
-import readXlsxFile from 'read-excel-file/node';
-import { many, one, type Db } from '../db';
-import { badRequest } from '../errors';
+import { badRequest, currentUserId, q, rpc, type Ctx } from './core';
 
 export interface ImportRow {
   line: number;
@@ -153,13 +151,21 @@ export interface ParsedFile {
   meta: { source?: string | null; exam_hint?: unknown };
 }
 
+function decodeBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 export async function parseFile(filename: string, contentBase64: string): Promise<ParsedFile> {
-  const buf = Buffer.from(contentBase64, 'base64');
+  const bytes = decodeBase64(contentBase64);
+  const text = () => new TextDecoder('utf-8').decode(bytes);
   const ext = filename.toLowerCase().split('.').pop();
   if (ext === 'json') {
     let doc: any;
     try {
-      doc = JSON.parse(buf.toString('utf8'));
+      doc = JSON.parse(text());
     } catch {
       throw badRequest('JSON inválido.');
     }
@@ -168,15 +174,15 @@ export async function parseFile(filename: string, contentBase64: string): Promis
     return { format: 'json', rows: list.map((r: any, i: number) => toRow(r ?? {}, i + 1)), meta: { source: doc?.source ?? null, exam_hint: doc?.exam_hint } };
   }
   if (ext === 'csv') {
-    const text = buf.toString('utf8').replace(/^﻿/, '');
-    const res = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
+    const res = Papa.parse<Record<string, string>>(text().replace(/^\uFEFF/, ''), { header: true, skipEmptyLines: true });
     if (res.errors.length && !res.data.length) throw badRequest(`CSV inválido: ${res.errors[0].message}`);
     return { format: 'csv', rows: res.data.map((r, i) => toRow(r, i + 2)), meta: {} };
   }
   if (ext === 'xlsx') {
     let sheet: unknown[][];
     try {
-      const parsed: any = await readXlsxFile(buf);
+      const { default: readXlsxFile } = await import('read-excel-file/browser');
+      const parsed: any = await readXlsxFile(new Blob([bytes as BlobPart]));
       sheet = Array.isArray(parsed?.[0]?.data) ? parsed[0].data : parsed;
     } catch {
       throw badRequest('Planilha XLSX inválida.');
@@ -218,11 +224,8 @@ interface Catalog {
   aliases: { alias: string; subject_id: string }[];
 }
 
-async function loadCatalog(db: Db): Promise<Catalog> {
-  const areas = await many(db, `select id, parent_id, name from public.medical_areas where active`);
-  const subjects = await many(db, `select id, parent_subject_id, medical_area_id, name from public.subjects where active`);
-  const aliases = await many(db, `select alias::text as alias, subject_id from public.subject_aliases`);
-  return { areas, subjects, aliases };
+async function loadCatalog(ctx: Ctx): Promise<Catalog> {
+  return rpc<Catalog>(ctx, 'admin_catalog');
 }
 
 const keyOf = (kind: UnknownKind, ...names: (string | null)[]) => `${kind}:${names.map((n) => norm(n)).join('>')}`;
@@ -254,8 +257,9 @@ interface ResolvedRow {
  * Resolve as linhas contra o catálogo. Com `resolutions`, aplica as decisões do
  * administrador (criando áreas/assuntos quando pedido — somente no commit).
  */
-async function resolveRows(db: Db, rows: ImportRow[], resolutions: Record<string, Resolution> | null, create: boolean) {
-  const cat = await loadCatalog(db);
+async function resolveRows(ctx: Ctx, rows: ImportRow[], resolutions: Record<string, Resolution> | null, create: boolean) {
+  const cat = await loadCatalog(ctx);
+  const slugs = create ? await existingSlugs(ctx) : { subjects: new Set<string>(), medical_areas: new Set<string>() };
   const unknown = new Map<string, UnknownItem>();
   const created = new Map<string, string>();
   const areaPath = (id: string) => {
@@ -282,7 +286,8 @@ async function resolveRows(db: Db, rows: ImportRow[], resolutions: Record<string
     if (res.action === 'ignore') return null;
     if (res.action === 'map') {
       if (create && (kind === 'subject' || kind === 'subsubject')) {
-        await db.query(`insert into public.subject_aliases(subject_id, alias) values ($1, $2) on conflict (alias) do nothing`, [res.id, name]);
+        const { error } = await ctx.sb.from('subject_aliases').insert({ subject_id: res.id, alias: name });
+        if (error && error.code !== '23505') throw error;
       }
       created.set(key, res.id);
       return res.id;
@@ -290,16 +295,14 @@ async function resolveRows(db: Db, rows: ImportRow[], resolutions: Record<string
     if (!create) return 'pending-create';
     let id: string;
     if (kind === 'area' || kind === 'specialty') {
-      const r = await one<{ id: string }>(db,
-        `insert into public.medical_areas(parent_id, name, slug) values ($1, $2, $3) returning id`,
-        [parent.areaId ?? null, name, await uniqueSlug(db, 'medical_areas', name)]);
-      id = r!.id;
+      const r: any = await q(ctx.sb.from('medical_areas')
+        .insert({ parent_id: parent.areaId ?? null, name, slug: uniqueSlug(slugs.medical_areas, name) }).select('id').single());
+      id = r.id;
       cat.areas.push({ id, parent_id: parent.areaId ?? null, name });
     } else {
-      const r = await one<{ id: string }>(db,
-        `insert into public.subjects(medical_area_id, parent_subject_id, name, slug) values ($1, $2, $3, $4) returning id`,
-        [parent.areaId, parent.subjectId ?? null, name, await uniqueSlug(db, 'subjects', name)]);
-      id = r!.id;
+      const r: any = await q(ctx.sb.from('subjects')
+        .insert({ medical_area_id: parent.areaId, parent_subject_id: parent.subjectId ?? null, name, slug: uniqueSlug(slugs.subjects, name) }).select('id').single());
+      id = r.id;
       cat.subjects.push({ id, parent_subject_id: parent.subjectId ?? null, medical_area_id: parent.areaId!, name });
     }
     created.set(key, id);
@@ -385,10 +388,17 @@ async function resolveRows(db: Db, rows: ImportRow[], resolutions: Record<string
   return { resolved: out, unknown: [...unknown.values()] };
 }
 
-async function uniqueSlug(db: Db, table: 'subjects' | 'medical_areas', name: string) {
+async function existingSlugs(ctx: Ctx) {
+  const subjects = await q(ctx.sb.from('subjects').select('slug').range(0, 100000));
+  const areas = await q(ctx.sb.from('medical_areas').select('slug').range(0, 100000));
+  return { subjects: new Set((subjects as any[]).map((r) => r.slug)), medical_areas: new Set((areas as any[]).map((r) => r.slug)) };
+}
+
+function uniqueSlug(taken: Set<string>, name: string) {
   const base = slugify(name);
   let slug = base;
-  for (let i = 2; await one(db, `select 1 from public.${table} where slug = $1`, [slug]); i++) slug = `${base}-${i}`;
+  for (let i = 2; taken.has(slug); i++) slug = `${base}-${i}`;
+  taken.add(slug);
   return slug;
 }
 
@@ -396,13 +406,12 @@ async function uniqueSlug(db: Db, table: 'subjects' | 'medical_areas', name: str
 // Preview e commit
 // ---------------------------------------------------------------------------
 
-export async function previewImport(db: Db, examId: string, file: ParsedFile) {
-  const exam = await one(db, `select e.id, e.name, i.abbreviation from public.exams e join public.institutions i on i.id = e.institution_id where e.id = $1`, [examId]);
+export async function previewImport(ctx: Ctx, examId: string, file: ParsedFile) {
+  const exam: any = await q(ctx.sb.from('admin_exams').select('id, name, institution').eq('id', examId).maybeSingle());
   if (!exam) throw badRequest('Prova não encontrada.');
-  const existing = await many<{ year: number; question_number: number }>(db,
-    `select ed.year, q.question_number from public.questions q join public.exam_editions ed on ed.id = q.exam_edition_id where ed.exam_id = $1`, [examId]);
-  const existingKeys = new Set(existing.map((e) => `${e.year}#${e.question_number}`));
-  const editions = await many<{ year: number; status: string }>(db, `select year, status from public.exam_editions where exam_id = $1`, [examId]);
+  const existing = await rpc<{ questions: [number, number][]; editions: { year: number; status: string }[] }>(ctx, 'admin_existing_questions', { p_exam: examId });
+  const existingKeys = new Set(existing.questions.map(([y, n]) => `${y}#${n}`));
+  const editions = existing.editions;
   const seen = new Set<string>();
 
   const valid: ImportRow[] = [];
@@ -416,10 +425,10 @@ export async function previewImport(db: Db, examId: string, file: ParsedFile) {
     seen.add(k);
     valid.push(r);
   }
-  const { unknown } = await resolveRows(db, valid, null, false);
+  const { unknown } = await resolveRows(ctx, valid, null, false);
   const years = [...new Set(valid.map((r) => r.year!))].sort();
   return {
-    exam,
+    exam: { id: exam.id, name: exam.name, abbreviation: exam.institution },
     format: file.format,
     source: file.meta.source ?? null,
     examHint: file.meta.exam_hint ?? null,
@@ -440,72 +449,30 @@ export async function previewImport(db: Db, examId: string, file: ParsedFile) {
 }
 
 export async function commitImport(
-  db: Db, userId: string, examId: string, filename: string, file: ParsedFile,
-  resolutions: Record<string, Resolution>, source: string | null,
+  ctx: Ctx, examId: string, filename: string, file: ParsedFile, resolutions: Record<string, Resolution>, source: string | null,
 ) {
-  const preview = await previewImport(db, examId, file);
+  await currentUserId(ctx);
+  const preview = await previewImport(ctx, examId, file);
   const missing = preview.unknown.filter((u) => !resolutions[u.key]);
   if (missing.length) {
     throw badRequest('Existem itens não encontrados sem decisão. Associe, crie ou ignore cada um.', missing.map((m) => m.key));
   }
   const dupKeys = new Set(preview.duplicates.map((d) => `${d.year}#${d.question_number}#${d.line}`));
   const rows = file.rows.filter((r) => !r.errors.length && !dupKeys.has(`${r.year}#${r.question_number}#${r.line}`));
-  const { resolved } = await resolveRows(db, rows, resolutions, true);
-
-  // Edições: cria as que faltam como rascunho
-  const editionIds = new Map<number, string>();
-  for (const y of [...new Set(rows.map((r) => r.year!))]) {
-    let ed = await one<{ id: string }>(db, `select id from public.exam_editions where exam_id = $1 and year = $2`, [examId, y]);
-    if (!ed) {
-      ed = await one<{ id: string }>(db,
-        `insert into public.exam_editions(exam_id, year, status, source_name, registered_by) values ($1, $2, 'draft', $3, $4) returning id`,
-        [examId, y, source ?? file.meta.source ?? `Importação ${filename}`, userId]);
-    }
-    editionIds.set(y, ed!.id);
-  }
-
-  const payload = resolved.map(({ row }) => ({
-    exam_edition_id: editionIds.get(row.year!),
-    question_number: row.question_number,
-    statement: row.statement, summary: row.summary,
-    alternative_a: row.alternative_a, alternative_b: row.alternative_b, alternative_c: row.alternative_c,
-    alternative_d: row.alternative_d, alternative_e: row.alternative_e,
-    correct_answer: row.correct_answer, annulled: row.annulled, explanation: row.explanation,
-    difficulty: row.difficulty, question_type: row.question_type, guideline: row.guideline,
-    source: row.source ?? source ?? (file.meta.source as string | null) ?? filename, notes: row.notes,
-  }));
-  const inserted = await many<{ id: string; exam_edition_id: string; question_number: number }>(db,
-    `insert into public.questions(exam_edition_id, question_number, statement, summary, alternative_a, alternative_b, alternative_c,
-        alternative_d, alternative_e, correct_answer, annulled, explanation, difficulty, question_type, guideline, source, notes)
-     select x.exam_edition_id, x.question_number, x.statement, x.summary, x.alternative_a, x.alternative_b, x.alternative_c,
-            x.alternative_d, x.alternative_e, x.correct_answer, x.annulled, x.explanation, x.difficulty, x.question_type,
-            x.guideline, x.source, x.notes
-       from jsonb_to_recordset($1::jsonb) as x(exam_edition_id uuid, question_number int, statement text, summary text,
-            alternative_a text, alternative_b text, alternative_c text, alternative_d text, alternative_e text,
-            correct_answer char(1), annulled boolean, explanation text, difficulty public.difficulty, question_type text,
-            guideline text, source text, notes text)
-     returning id, exam_edition_id, question_number`,
-    [JSON.stringify(payload)]);
-  const idBy = new Map(inserted.map((q) => [`${q.exam_edition_id}#${q.question_number}`, q.id]));
-  const links = resolved
-    .filter((r) => r.subjectId)
-    .map((r) => ({ question_id: idBy.get(`${editionIds.get(r.row.year!)}#${r.row.question_number}`), subject_id: r.subjectId }));
-  if (links.length) {
-    await db.query(
-      `insert into public.question_subjects(question_id, subject_id, relevance_weight, is_primary)
-       select x.question_id, x.subject_id, 1, true from jsonb_to_recordset($1::jsonb) as x(question_id uuid, subject_id uuid)`,
-      [JSON.stringify(links)]);
-  }
-  await db.query(
-    `insert into public.import_batches(exam_id, filename, file_format, source, total_rows, inserted_rows, skipped_rows, created_by)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [examId, filename, file.format, source ?? (file.meta.source as string | null) ?? null, file.rows.length, inserted.length,
-      file.rows.length - inserted.length, userId]);
-  return {
-    inserted: inserted.length,
-    classified: links.length,
-    unclassified: inserted.length - links.length,
-    skipped: file.rows.length - inserted.length,
-    editionsCreated: preview.years.filter((y) => !y.edition).map((y) => y.year),
-  };
+  const { resolved } = await resolveRows(ctx, rows, resolutions, true);
+  const src = source ?? (file.meta.source as string | null) ?? null;
+  return rpc(ctx, 'import_questions', {
+    p_exam: examId,
+    p_rows: resolved.map(({ row, subjectId }) => ({
+      year: row.year, question_number: row.question_number, statement: row.statement, summary: row.summary,
+      alternative_a: row.alternative_a, alternative_b: row.alternative_b, alternative_c: row.alternative_c,
+      alternative_d: row.alternative_d, alternative_e: row.alternative_e, correct_answer: row.correct_answer,
+      annulled: row.annulled, explanation: row.explanation, difficulty: row.difficulty, question_type: row.question_type,
+      guideline: row.guideline, source: row.source, notes: row.notes, subject_id: subjectId,
+    })),
+    p_filename: filename,
+    p_format: file.format,
+    p_source: src,
+    p_total_rows: file.rows.length,
+  });
 }

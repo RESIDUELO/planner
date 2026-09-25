@@ -1,141 +1,83 @@
 -- =====================================================================
--- Segurança: papéis, contexto da requisição, RLS, auditoria.
+-- Segurança no Supabase: perfis, papéis, RLS, auditoria.
 --
--- A API executa TODA transação com `SET LOCAL ROLE rp_app` e informa apenas o
--- hash do token de sessão (`app.session`). O usuário atual e seu papel são
--- resolvidos DENTRO do banco a partir desse hash. Assim, mesmo uma requisição
--- manual (ou um bug numa rota) não consegue:
---   * alterar tabelas globais sem ser administrador;
---   * ler ou alterar dados de outro usuário;
---   * promover o próprio perfil a administrador;
---   * apagar registros históricos (DELETE não é concedido nas tabelas globais).
+-- O navegador fala direto com o banco (PostgREST) usando o token do Supabase
+-- Auth. Por isso TODA regra de acesso vive aqui, no PostgreSQL:
+--   * tabelas globais: leitura filtrada (usuários só veem o que está
+--     publicado), escrita apenas por administradores, sem DELETE;
+--   * dados individuais: cada usuário só enxerga e altera os próprios;
+--   * ninguém promove o próprio perfil a administrador;
+--   * toda alteração administrativa é auditada por gatilho.
+-- Visitantes usam o login anônimo do Supabase (papel 'visitor').
 -- =====================================================================
 
-do $$ begin
-  if not exists (select 1 from pg_roles where rolname = 'rp_app') then
-    create role rp_app nologin;
-  end if;
-end $$;
-
-grant usage on schema public, app to rp_app;
-revoke all on schema auth from public;
-revoke all on all tables in schema auth from public;
+grant usage on schema app to authenticated, anon;
 
 -- ---------------------------------------------------------------------
 -- Contexto
 -- ---------------------------------------------------------------------
 create or replace function app.current_user_id() returns uuid
-language sql stable security definer set search_path = auth, public, pg_temp as $$
-  select s.user_id
-    from auth.sessions s
-    join public.user_profiles p on p.user_id = s.user_id and p.active
-   where s.token_hash = nullif(current_setting('app.session', true), '')
-     and s.expires_at > now()
+language sql stable security definer set search_path = public, pg_temp as $$
+  select p.user_id from public.user_profiles p where p.user_id = auth.uid() and p.active
 $$;
 
 create or replace function app.current_role_name() returns public.user_role
-language sql stable security definer set search_path = auth, public, pg_temp as $$
-  select p.role from public.user_profiles p where p.user_id = app.current_user_id()
+language sql stable security definer set search_path = public, pg_temp as $$
+  select p.role from public.user_profiles p where p.user_id = auth.uid() and p.active
 $$;
 
 create or replace function app.is_admin() returns boolean
-language sql stable security definer set search_path = auth, public, pg_temp as $$
+language sql stable security definer set search_path = public, pg_temp as $$
   select coalesce(app.current_role_name() = 'admin', false)
 $$;
 
-grant execute on function app.current_user_id(), app.current_role_name(), app.is_admin() to rp_app;
+/** Execução direta (SQL Editor / service role), fora de uma requisição de usuário. */
+create or replace function app.is_privileged_session() returns boolean
+language sql stable as $$
+  select coalesce(current_setting('request.jwt.claims', true), '') in ('', '{}')
+      or coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '') = 'service_role'
+$$;
+
+grant execute on function app.current_user_id(), app.current_role_name(), app.is_admin(), app.is_privileged_session()
+  to authenticated, anon;
 
 -- ---------------------------------------------------------------------
--- Autenticação (hash bcrypt via pgcrypto; o hash nunca sai do banco)
+-- Perfis criados/atualizados a partir do Supabase Auth
 -- ---------------------------------------------------------------------
-create or replace function auth.register(p_email text, p_password text, p_name text)
-returns uuid language plpgsql security definer set search_path = auth, public, pg_temp as $$
-declare v_id uuid;
+create or replace function app.on_auth_user_created() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
-  if length(coalesce(p_password, '')) < 8 then raise exception 'senha_curta' using errcode = '22023'; end if;
-  if exists (select 1 from auth.users where email = p_email::citext) then
-    raise exception 'email_em_uso' using errcode = '23505';
+  insert into public.user_profiles(user_id, name, role)
+  values (
+    new.id,
+    coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), case when coalesce(new.is_anonymous, false) then 'Visitante' else split_part(coalesce(new.email, ''), '@', 1) end),
+    case when coalesce(new.is_anonymous, false) then 'visitor'::public.user_role else 'user'::public.user_role end
+  )
+  on conflict (user_id) do nothing;
+  return new;
+end $$;
+
+-- Visitante que cria conta (anônimo → permanente) vira usuário, mantendo todo o progresso.
+create or replace function app.on_auth_user_updated() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if coalesce(old.is_anonymous, false) and not coalesce(new.is_anonymous, false) then
+    perform set_config('app.bypass_profile_guard', 'on', true);
+    update public.user_profiles
+       set role = 'user',
+           name = coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), name)
+     where user_id = new.id and role = 'visitor';
+    perform set_config('app.bypass_profile_guard', 'off', true);
   end if;
-  insert into auth.users(email, password_hash) values (p_email, crypt(p_password, gen_salt('bf', 10)))
-  returning id into v_id;
-  insert into public.user_profiles(user_id, name, role) values (v_id, p_name, 'user');
-  return v_id;
+  return new;
 end $$;
 
-create or replace function auth.create_guest() returns uuid
-language plpgsql security definer set search_path = auth, public, pg_temp as $$
-declare v_id uuid;
-begin
-  insert into auth.users(is_guest) values (true) returning id into v_id;
-  insert into public.user_profiles(user_id, name, role) values (v_id, 'Visitante', 'visitor');
-  return v_id;
-end $$;
-
--- Converte o visitante atual em conta comum, preservando todo o progresso.
-create or replace function auth.upgrade_guest(p_email text, p_password text, p_name text)
-returns uuid language plpgsql security definer set search_path = auth, public, pg_temp as $$
-declare v_id uuid := app.current_user_id();
-begin
-  if v_id is null or not exists (select 1 from auth.users where id = v_id and is_guest) then
-    raise exception 'nao_e_visitante' using errcode = '42501';
-  end if;
-  if length(coalesce(p_password, '')) < 8 then raise exception 'senha_curta' using errcode = '22023'; end if;
-  if exists (select 1 from auth.users where email = p_email::citext) then
-    raise exception 'email_em_uso' using errcode = '23505';
-  end if;
-  update auth.users set email = p_email, password_hash = crypt(p_password, gen_salt('bf', 10)), is_guest = false
-   where id = v_id;
-  perform set_config('app.bypass_profile_guard', 'on', true);
-  update public.user_profiles set name = p_name, role = 'user' where user_id = v_id;
-  perform set_config('app.bypass_profile_guard', 'off', true);
-  return v_id;
-end $$;
-
-create or replace function auth.verify_login(p_email text, p_password text) returns uuid
-language sql security definer set search_path = auth, public, pg_temp as $$
-  update auth.users u set last_login_at = now()
-   where u.email = p_email::citext and not u.is_guest
-     and u.password_hash = crypt(p_password, u.password_hash)
-     and exists (select 1 from public.user_profiles p where p.user_id = u.id and p.active)
-  returning u.id
-$$;
-
-create or replace function auth.create_session(p_user uuid, p_token_hash text, p_days int, p_user_agent text)
-returns void language sql security definer set search_path = auth, public, pg_temp as $$
-  insert into auth.sessions(user_id, token_hash, expires_at, user_agent)
-  values (p_user, p_token_hash, now() + make_interval(days => p_days), left(p_user_agent, 300))
-$$;
-
-create or replace function auth.end_session(p_token_hash text) returns void
-language sql security definer set search_path = auth, public, pg_temp as $$
-  delete from auth.sessions where token_hash = p_token_hash
-$$;
-
-create or replace function auth.session_info(p_token_hash text)
-returns table(user_id uuid, email text, name text, role public.user_role, is_guest boolean)
-language sql security definer set search_path = auth, public, pg_temp as $$
-  update auth.sessions s set last_seen_at = now()
-   where s.token_hash = p_token_hash and s.expires_at > now()
-  returning s.user_id,
-            (select u.email::text from auth.users u where u.id = s.user_id),
-            (select p.name from public.user_profiles p where p.user_id = s.user_id),
-            (select p.role from public.user_profiles p where p.user_id = s.user_id and p.active),
-            (select u.is_guest from auth.users u where u.id = s.user_id)
-$$;
-
--- E-mail dos usuários (somente administradores)
-create or replace function auth.admin_user_emails()
-returns table(user_id uuid, email text, is_guest boolean, last_login_at timestamptz)
-language plpgsql stable security definer set search_path = auth, public, pg_temp as $$
-begin
-  if not app.is_admin() then raise exception 'acesso_negado' using errcode = '42501'; end if;
-  return query select u.id, u.email::text, u.is_guest, u.last_login_at from auth.users u;
-end $$;
-
-grant usage on schema auth to rp_app;
-grant execute on function auth.register(text, text, text), auth.create_guest(), auth.upgrade_guest(text, text, text),
-  auth.verify_login(text, text), auth.create_session(uuid, text, int, text), auth.end_session(text),
-  auth.session_info(text), auth.admin_user_emails() to rp_app;
+drop trigger if exists rp_on_auth_user_created on auth.users;
+create trigger rp_on_auth_user_created after insert on auth.users
+  for each row execute function app.on_auth_user_created();
+drop trigger if exists rp_on_auth_user_updated on auth.users;
+create trigger rp_on_auth_user_updated after update on auth.users
+  for each row execute function app.on_auth_user_updated();
 
 -- ---------------------------------------------------------------------
 -- updated_at
@@ -157,17 +99,22 @@ end $$;
 create or replace function app.guard_user_profile() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 begin
-  if coalesce(current_setting('app.bypass_profile_guard', true), 'off') = 'on' then return new; end if;
+  if coalesce(current_setting('app.bypass_profile_guard', true), 'off') = 'on' or app.is_privileged_session() then
+    return new;
+  end if;
+  if new.user_id is distinct from old.user_id then
+    raise exception 'user_id é imutável' using errcode = '42501';
+  end if;
   if (new.role is distinct from old.role or new.active is distinct from old.active) then
     if not app.is_admin() then
       raise exception 'somente administradores alteram papel ou status' using errcode = '42501';
     end if;
-    if new.user_id = app.current_user_id() then
+    if new.user_id = auth.uid() then
       raise exception 'administrador não pode alterar o próprio papel ou status' using errcode = '42501';
     end if;
-  end if;
-  if new.user_id is distinct from old.user_id then
-    raise exception 'user_id é imutável' using errcode = '42501';
+    if old.role = 'visitor' and new.role is distinct from old.role then
+      raise exception 'visitantes precisam criar conta antes de mudar de papel' using errcode = '42501';
+    end if;
   end if;
   return new;
 end $$;
@@ -200,7 +147,7 @@ create or replace function app.audit_row() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_old jsonb; v_new jsonb; v_row jsonb; k text;
-  v_actor uuid := app.current_user_id();
+  v_actor uuid := auth.uid();
 begin
   if tg_op = 'UPDATE' then
     v_old := '{}'::jsonb; v_new := '{}'::jsonb;
@@ -281,29 +228,32 @@ create trigger user_question_attempts_perf after insert or update or delete on p
   for each row execute function app.on_practice_change();
 
 -- ---------------------------------------------------------------------
--- Grants
+-- Grants (o Supabase concede tudo por padrão; aqui restringimos)
 -- ---------------------------------------------------------------------
+revoke all on all tables in schema public from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+
 -- Globais: leitura para todos (filtrada por RLS), escrita só admin (RLS). Sem DELETE.
 grant select, insert, update on public.institutions, public.examining_boards, public.exams, public.exam_editions,
   public.medical_areas, public.subjects, public.questions, public.study_methods, public.algorithm_versions,
-  public.import_batches to rp_app;
-grant select, insert, update, delete on public.question_subjects, public.subject_aliases to rp_app;
-grant select on public.admin_audit_logs to rp_app;
-grant select, update on public.user_profiles to rp_app;
+  public.import_batches to authenticated;
+grant select, insert, update, delete on public.question_subjects, public.subject_aliases to authenticated;
+grant select on public.admin_audit_logs to authenticated;
+grant select, update (name) on public.user_profiles to authenticated;
+grant update (role, active) on public.user_profiles to authenticated;
 
 -- Individuais
 grant select, insert, update, delete on public.user_exams, public.user_exam_editions, public.registrations,
   public.study_profiles, public.user_study_methods, public.study_plans, public.study_plan_exams,
-  public.study_plan_subjects, public.study_schedule, public.spaced_repetition_cards, public.subject_method_progress to rp_app;
-grant select, insert on public.review_logs, public.question_practice_logs, public.user_question_attempts to rp_app;
-grant update (actual_next_review) on public.review_logs to rp_app;
-grant delete on public.question_practice_logs to rp_app;
-grant select on public.user_subject_performance to rp_app;
+  public.study_plan_subjects, public.study_schedule, public.spaced_repetition_cards, public.subject_method_progress
+  to authenticated;
+grant select, insert on public.review_logs, public.question_practice_logs, public.user_question_attempts to authenticated;
+grant update (actual_next_review) on public.review_logs to authenticated;
+grant delete on public.question_practice_logs to authenticated;
+grant select on public.user_subject_performance to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Row Level Security
--- (sem FORCE: o dono das tabelas — papel de migração — e as funções
---  SECURITY DEFINER acima não passam pelas policies; rp_app sempre passa)
 -- ---------------------------------------------------------------------
 do $$ declare t text; begin
   foreach t in array array['user_profiles','institutions','examining_boards','exams','exam_editions','medical_areas',
@@ -316,65 +266,61 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
--- Escrita administrativa: uma policy por comando para todas as tabelas globais
 do $$ declare t text; begin
   foreach t in array array['institutions','examining_boards','exams','exam_editions','medical_areas','subjects',
     'subject_aliases','questions','question_subjects','study_methods','algorithm_versions','import_batches']
   loop
-    execute format('create policy admin_insert on public.%I for insert to rp_app with check ((select app.is_admin()))', t);
-    execute format('create policy admin_update on public.%I for update to rp_app using ((select app.is_admin())) with check ((select app.is_admin()))', t);
-    execute format('create policy admin_delete on public.%I for delete to rp_app using ((select app.is_admin()))', t);
+    execute format('create policy admin_insert on public.%I for insert to authenticated with check ((select app.is_admin()))', t);
+    execute format('create policy admin_update on public.%I for update to authenticated using ((select app.is_admin())) with check ((select app.is_admin()))', t);
+    execute format('create policy admin_delete on public.%I for delete to authenticated using ((select app.is_admin()))', t);
   end loop;
 end $$;
 
--- Leitura: admin vê tudo; demais somente o que está publicado/ativo
-create policy read_editions on public.exam_editions for select to rp_app
+create policy read_editions on public.exam_editions for select to authenticated
   using ((select app.is_admin()) or status = 'published');
 
-create policy read_exams on public.exams for select to rp_app
+create policy read_exams on public.exams for select to authenticated
   using ((select app.is_admin()) or (active and exists (
     select 1 from public.exam_editions ed where ed.exam_id = exams.id and ed.status = 'published')));
 
-create policy read_institutions on public.institutions for select to rp_app
+create policy read_institutions on public.institutions for select to authenticated
   using ((select app.is_admin()) or (active and exists (
     select 1 from public.exams e join public.exam_editions ed on ed.exam_id = e.id
      where e.institution_id = institutions.id and e.active and ed.status = 'published')));
 
-create policy read_boards on public.examining_boards for select to rp_app
+create policy read_boards on public.examining_boards for select to authenticated
   using ((select app.is_admin()) or (active and exists (
     select 1 from public.exams e join public.exam_editions ed on ed.exam_id = e.id
      where e.board_id = examining_boards.id and e.active and ed.status = 'published')));
 
-create policy read_questions on public.questions for select to rp_app
+create policy read_questions on public.questions for select to authenticated
   using ((select app.is_admin()) or (active and exists (
     select 1 from public.exam_editions ed where ed.id = questions.exam_edition_id and ed.status = 'published')));
 
-create policy read_question_subjects on public.question_subjects for select to rp_app
+create policy read_question_subjects on public.question_subjects for select to authenticated
   using ((select app.is_admin()) or exists (
     select 1 from public.questions q join public.exam_editions ed on ed.id = q.exam_edition_id
      where q.id = question_subjects.question_id and q.active and ed.status = 'published'));
 
-create policy read_areas on public.medical_areas for select to rp_app using ((select app.is_admin()) or active);
-create policy read_subjects on public.subjects for select to rp_app using ((select app.is_admin()) or active);
-create policy read_aliases on public.subject_aliases for select to rp_app using ((select app.is_admin()));
-create policy read_methods on public.study_methods for select to rp_app using (true);
-create policy read_algorithms on public.algorithm_versions for select to rp_app using (true);
-create policy read_import_batches on public.import_batches for select to rp_app using ((select app.is_admin()));
-create policy read_audit on public.admin_audit_logs for select to rp_app using ((select app.is_admin()));
+create policy read_areas on public.medical_areas for select to authenticated using ((select app.is_admin()) or active);
+create policy read_subjects on public.subjects for select to authenticated using ((select app.is_admin()) or active);
+create policy read_aliases on public.subject_aliases for select to authenticated using ((select app.is_admin()));
+create policy read_methods on public.study_methods for select to authenticated using (true);
+create policy read_algorithms on public.algorithm_versions for select to authenticated using (true);
+create policy read_import_batches on public.import_batches for select to authenticated using ((select app.is_admin()));
+create policy read_audit on public.admin_audit_logs for select to authenticated using ((select app.is_admin()));
 
--- Perfis
-create policy read_profiles on public.user_profiles for select to rp_app
-  using (user_id = (select app.current_user_id()) or (select app.is_admin()));
-create policy update_profiles on public.user_profiles for update to rp_app
-  using (user_id = (select app.current_user_id()) or (select app.is_admin()))
-  with check (user_id = (select app.current_user_id()) or (select app.is_admin()));
+create policy read_profiles on public.user_profiles for select to authenticated
+  using (user_id = (select auth.uid()) or (select app.is_admin()));
+create policy update_profiles on public.user_profiles for update to authenticated
+  using (user_id = (select auth.uid()) or (select app.is_admin()))
+  with check (user_id = (select auth.uid()) or (select app.is_admin()));
 
--- Dados individuais: dono apenas
 do $$ declare t text; begin
   foreach t in array array['user_exams','user_exam_editions','registrations','study_profiles','user_study_methods',
     'study_plans','study_plan_exams','study_plan_subjects','study_schedule','user_question_attempts',
     'question_practice_logs','user_subject_performance','spaced_repetition_cards','review_logs','subject_method_progress']
   loop
-    execute format('create policy owner_all on public.%I for all to rp_app using (user_id = (select app.current_user_id())) with check (user_id = (select app.current_user_id()))', t);
+    execute format('create policy owner_all on public.%I for all to authenticated using (user_id = (select app.current_user_id())) with check (user_id = (select app.current_user_id()))', t);
   end loop;
 end $$;

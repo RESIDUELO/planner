@@ -6,3 +6,5 @@ test-results/
 playwright-report/
 .pgdata/
 __pycache__/
+.local-supabase/
+web/public/config.local.json

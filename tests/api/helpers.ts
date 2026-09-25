@@ -1,76 +1,45 @@
+/**
+ * Harness dos testes de integração: sobe um "Supabase local" (PostgreSQL +
+ * Supabase Auth + PostgREST) e usa a MESMA camada de dados que roda no
+ * navegador (web/src/backend) para exercitar o sistema de ponta a ponta.
+ */
 import pg from 'pg';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../../server/app';
-import { initPool, closePool } from '../../server/db';
-import { migrate } from '../../db/migrate';
+import { createClient } from '@supabase/supabase-js';
+import { createCtx, ApiError } from '../../web/src/backend/core';
+import { handle } from '../../web/src/backend/routes';
+import { todayISO } from '../../shared/dates';
+// @ts-expect-error módulo JS sem tipos
+import { startLocalSupabase } from '../../scripts/local-supabase.mjs';
 
-export const OWNER_URL = process.env.TEST_DATABASE_URL ?? 'postgres://rp_owner:rp_owner@localhost:5432/residencia_planner_test';
+export interface LocalSupabase { url: string; anonKey: string; serviceKey: string; dbUrl: string; stop: () => Promise<void> }
 
-export async function resetDatabase() {
-  const u = new URL(OWNER_URL);
-  const dbName = u.pathname.slice(1);
-  u.pathname = '/postgres';
-  const c = new pg.Client({ connectionString: u.toString() });
+export async function startStack(): Promise<LocalSupabase> {
+  return startLocalSupabase({ db: 'rp_test', port: Number(process.env.TEST_SB_PORT ?? 54400) });
+}
+
+let sbEnv: LocalSupabase;
+export const setStack = (s: LocalSupabase) => { sbEnv = s; };
+
+export async function dbQuery(sql: string, params: unknown[] = []) {
+  const c = new pg.Client({ connectionString: sbEnv.dbUrl });
   await c.connect();
-  await c.query(`drop database if exists ${dbName} with (force)`);
-  await c.query(`create database ${dbName}`);
-  await c.end();
-  await migrate(OWNER_URL, () => {});
-}
-
-export async function startApp(): Promise<FastifyInstance> {
-  process.env.ALLOW_TIME_TRAVEL = 'true';
-  initPool(OWNER_URL);
-  return buildApp();
-}
-
-export async function stopApp(app: FastifyInstance) {
-  await app.close();
-  await closePool();
-}
-
-export async function ownerQuery(sql: string, params: unknown[] = []) {
-  const c = new pg.Client({ connectionString: OWNER_URL });
-  await c.connect();
-  try {
-    return await c.query(sql, params);
-  } finally {
-    await c.end();
-  }
-}
-
-export async function createAdmin(email: string, password: string) {
-  const r = await ownerQuery(`select auth.register($1, $2, 'Admin Teste') as id`, [email, password]);
-  const c = new pg.Client({ connectionString: OWNER_URL });
-  await c.connect();
-  await c.query('begin');
-  await c.query(`select set_config('app.bypass_profile_guard', 'on', true)`);
-  await c.query(`update public.user_profiles set role = 'admin' where user_id = $1`, [r.rows[0].id]);
-  await c.query('commit');
-  await c.end();
-  return r.rows[0].id as string;
+  try { return await c.query(sql, params); } finally { await c.end(); }
 }
 
 export class Client {
-  cookie = '';
   today: string | null = null;
-  constructor(private app: FastifyInstance) {}
+  sb = createClient(sbEnv.url, sbEnv.anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  ctx = createCtx(this.sb, () => this.today ?? todayISO());
 
   async req<T = any>(method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH', url: string, body?: unknown): Promise<{ status: number; body: T }> {
-    const headers: Record<string, string> = { 'x-requested-with': 'residencia-planner' };
-    if (this.cookie) headers.cookie = this.cookie;
-    if (this.today) headers['x-debug-today'] = this.today;
-    const res = await this.app.inject({ method, url, headers, payload: body as any });
-    const set = res.headers['set-cookie'];
-    if (set) {
-      const first = (Array.isArray(set) ? set : [set])[0];
-      this.cookie = first.split(';')[0];
+    try {
+      return { status: 200, body: await handle(this.ctx, method, url, body) };
+    } catch (e) {
+      if (e instanceof ApiError) return { status: e.status, body: { error: e.message, details: e.details } as any };
+      throw e;
     }
-    let parsed: any = res.body;
-    try { parsed = JSON.parse(res.body); } catch { /* texto */ }
-    return { status: res.statusCode, body: parsed };
   }
 
   async ok<T = any>(method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH', url: string, body?: unknown): Promise<T> {
@@ -78,6 +47,30 @@ export class Client {
     if (r.status >= 400) throw new Error(`${method} ${url} → ${r.status}: ${JSON.stringify(r.body)}`);
     return r.body;
   }
+
+  async accessToken() {
+    return (await this.sb.auth.getSession()).data.session!.access_token;
+  }
+}
+
+export async function createAdmin(email: string, password: string) {
+  const c = new Client();
+  await c.ok('POST', '/api/auth/register', { name: 'Admin Teste', email, password });
+  await dbQuery(`select public.make_admin($1)`, [email]);
+  return c;
+}
+
+/** Chamada crua à API REST do Supabase com o token de um usuário (simula requisição forjada). */
+export async function rest(token: string, method: string, path: string, body?: unknown) {
+  const r = await fetch(`${sbEnv.url}/rest/v1${path}`, {
+    method,
+    headers: { apikey: sbEnv.anonKey, authorization: `Bearer ${token}`, 'content-type': 'application/json', prefer: 'return=representation' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await r.text();
+  let json: any = null;
+  try { json = JSON.parse(text); } catch { json = text; }
+  return { status: r.status, body: json };
 }
 
 export function importFile(name: string) {
@@ -85,7 +78,6 @@ export function importFile(name: string) {
   return { filename: name, content: readFileSync(path).toString('base64') };
 }
 
-/** Decide "criar" para todos os itens desconhecidos (simula a confirmação do admin). */
 export function createAll(preview: { unknown: { key: string }[] }) {
   return Object.fromEntries(preview.unknown.map((u) => [u.key, { action: 'create' as const }]));
 }

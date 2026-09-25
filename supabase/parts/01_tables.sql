@@ -2,44 +2,16 @@
 -- Residência Planner — esquema principal
 --
 -- Separação:
---   * schema auth   → usuários, credenciais, sessões (acesso só pelo backend)
---   * schema app    → funções auxiliares (contexto da requisição, papéis)
+--   * schema auth   → Supabase Auth (login, visitante anônimo, sessões)
+--   * schema app    → funções auxiliares (papéis, auditoria, gatilhos)
 --   * schema public → dados globais (curados pelo ADMIN) e dados individuais
 --
 -- Dados globais só podem ser alterados por administradores. Isso é garantido
--- pelo próprio PostgreSQL via Row Level Security (ver 002_security.sql), não
--- apenas pelo frontend ou pelas rotas da API.
+-- pelo próprio PostgreSQL via Row Level Security (ver 02_security.sql), não
+-- apenas pelo frontend.
 -- =====================================================================
 
-create extension if not exists pgcrypto;
-create extension if not exists citext;
-
-create schema if not exists auth;
 create schema if not exists app;
-
--- ---------------------------------------------------------------------
--- AUTENTICAÇÃO
--- ---------------------------------------------------------------------
-create table auth.users (
-  id            uuid primary key default gen_random_uuid(),
-  email         citext unique,
-  password_hash text,
-  is_guest      boolean not null default false,
-  created_at    timestamptz not null default now(),
-  last_login_at timestamptz,
-  constraint users_credentials_chk check (is_guest or (email is not null and password_hash is not null))
-);
-
-create table auth.sessions (
-  id           uuid primary key default gen_random_uuid(),
-  user_id      uuid not null references auth.users(id) on delete cascade,
-  token_hash   text not null unique,
-  created_at   timestamptz not null default now(),
-  expires_at   timestamptz not null,
-  last_seen_at timestamptz not null default now(),
-  user_agent   text
-);
-create index sessions_user_idx on auth.sessions(user_id);
 
 create type public.user_role as enum ('admin', 'user', 'visitor');
 
@@ -158,9 +130,11 @@ create index subjects_area_idx on public.subjects(medical_area_id);
 create table public.subject_aliases (
   id         uuid primary key default gen_random_uuid(),
   subject_id uuid not null references public.subjects(id),
-  alias      citext not null unique,
+  alias      text not null,
   created_at timestamptz not null default now()
 );
+
+create unique index subject_aliases_alias_key on public.subject_aliases (lower(alias));
 
 create type public.difficulty as enum ('easy', 'medium', 'hard');
 

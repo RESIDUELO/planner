@@ -1,25 +1,15 @@
-export class ApiError extends Error {
-  constructor(public status: number, message: string, public details?: unknown) {
-    super(message);
-  }
-}
+/**
+ * As telas continuam chamando api.get('/api/...'). Esses caminhos são
+ * atendidos no próprio navegador (src/backend/routes.ts), que fala direto com
+ * o Supabase — não há servidor próprio.
+ */
+import { ApiError } from '../backend/core';
+import { handle } from '../backend/routes';
+import { getCtx } from './supabase';
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method,
-    credentials: 'same-origin',
-    headers: {
-      'x-requested-with': 'residencia-planner',
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let data: any = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!res.ok) throw new ApiError(res.status, data?.error ?? `Erro ${res.status}`, data?.details);
-  return data as T;
-}
+export { ApiError };
+
+const request = <T>(method: string, url: string, body?: unknown) => handle(getCtx(), method, url, body) as Promise<T>;
 
 export const api = {
   get: <T = any>(url: string) => request<T>('GET', url),

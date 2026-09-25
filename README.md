@@ -8,55 +8,77 @@ Plataforma que transforma o **histórico das provas cadastradas pelo administrad
 
 ## Regra fundamental: base fechada
 
-O sistema **só conhece o que o administrador cadastra**. Não há scraping, busca na internet, APIs externas nem atualização automática de datas, valores ou questões. Se só três provas forem cadastradas, só essas três existem. Nenhuma migração cria instituições, provas, edições, questões ou assuntos: as únicas tabelas pré-populadas são `study_methods` e `algorithm_versions`, que são configuração do sistema.
+O sistema **só conhece o que o administrador cadastra**. Não há scraping, busca na internet, APIs externas nem atualização automática de datas, valores ou questões. Se só três provas forem cadastradas, só essas três existem. O `schema.sql` não cria instituições, provas, edições, questões nem assuntos: as únicas tabelas pré-populadas são `study_methods` e `algorithm_versions`, que são configuração do sistema.
 
-## Stack
+## Arquitetura
+
+Site estático no **GitHub Pages** + **Supabase** (PostgreSQL, Auth e API REST). Não há servidor próprio.
 
 | Camada | Tecnologia |
 |---|---|
-| Banco | PostgreSQL 16 com Row Level Security, `pgcrypto` e triggers de auditoria |
-| API | Node 20+, Fastify 5, `pg`, zod |
-| Web | React 19, React Router, TanStack Query, Tailwind CSS 4, Vite |
-| Domínio | TypeScript puro em `shared/`, sem dependências e testado isoladamente |
-| Testes | Vitest (unidade e API contra Postgres real) e Playwright (E2E) |
+| Banco e segurança | Supabase (PostgreSQL) com Row Level Security, funções e triggers de auditoria |
+| Login | Supabase Auth (e-mail e senha; visitante = login anônimo do Supabase) |
+| Site | React 19, React Router, TanStack Query, Tailwind CSS 4, Vite (publicado no GitHub Pages) |
+| Algoritmos | TypeScript puro em `shared/`, sem dependências, rodando no navegador |
+| Testes | Vitest (unidade e integração contra um Supabase local) e Playwright (E2E) |
 
 ```
-db/migrations/     esquema, segurança (RLS, papéis, auditoria), dados de referência do sistema
-shared/            algoritmos: estatística histórica, prioridade, memória (FSRS-like), agenda, domínio
-server/            API (rotas de auth, aluno e admin; serviços de planner, agenda e importação)
-web/src/           interface (páginas do aluno e /admin)
-data/import/       arquivos prontos para o admin importar (gerados a partir dos relatórios PDF)
-scripts/           conversor PDF → importação, criação de admin, reset de banco
-tests/             unit/, api/, e2e/
+supabase/schema.sql   arquivo único para o SQL Editor (gerado a partir de supabase/parts/)
+supabase/parts/       tabelas, segurança (RLS, papéis, auditoria), API do banco, dados de referência
+shared/               algoritmos: estatística histórica, prioridade, memória (FSRS-like), agenda, domínio
+web/src/backend/      camada de dados no navegador (fala com o Supabase; mesmas "rotas" /api/... das telas)
+web/src/              interface (páginas do aluno e /admin)
+web/public/config.json  URL e anon key do Supabase (públicas por design)
+data/import/          arquivos prontos para o admin importar (gerados a partir dos relatórios PDF)
+scripts/              Supabase local para testes, conversor PDF → importação
 ```
 
-## Como rodar
+## Colocar online (Supabase + GitHub Pages)
+
+1. **Supabase**: crie um projeto em https://supabase.com. Recomendo um projeto novo, separado do jogo.
+2. **Banco**: em **SQL Editor → New query**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**. Rode só uma vez.
+3. **Login**: em **Authentication → Sign In / Providers**, ative **Allow anonymous sign-ins** (necessário para o botão "Continuar como visitante").
+   - Se quiser cadastro sem confirmação por e-mail, desative **Confirm email** em **Email**.
+   - Em **Authentication → URL Configuration**, coloque a URL do site em **Site URL** (ex.: `https://residuelo.github.io/planner/`).
+4. **Chaves**: em **Project Settings → API**, copie a **Project URL** e a chave **anon public**. Depois escolha uma forma de entregá-las ao site:
+   - edite [`web/public/config.json`](web/public/config.json) no GitHub com esses dois valores; **ou**
+   - crie as *variables* `SUPABASE_URL` e `SUPABASE_ANON_KEY` em **Settings → Secrets and variables → Actions → Variables**.
+
+   Nunca use a chave `service_role` no site.
+5. **GitHub Pages**: em **Settings → Pages → Build and deployment → Source**, escolha **GitHub Actions**. Cada push na `main` publica o site (workflow [`deploy.yml`](.github/workflows/deploy.yml)) em `https://<usuário>.github.io/<repositório>/`.
+6. **Administrador**: crie sua conta pelo próprio site. Depois, no SQL Editor do Supabase, rode:
+   ```sql
+   select public.make_admin('seu-email@exemplo.com');
+   ```
+   Saia e entre de novo: o menu **Administração** aparece.
+7. **Dados**: em **Administração → Nova prova**, cadastre instituição, prova e edição. Depois use **Importação** com os arquivos de `data/import/`.
+
+## Desenvolvimento local
 
 ```bash
-docker compose up -d                 # ou use um PostgreSQL 16 existente
-cp .env.example .env
 npm install
-npm run db:migrate
-npm run admin:create -- --email voce@exemplo.com --name "Seu Nome" --password "senha-forte"
-npm run dev                          # API :3001 + web :5173
+npm run supabase:local        # Supabase local (PostgreSQL + Auth + API REST), sem Docker; porta 54321
+# crie web/public/config.local.json com a URL e a anon key que o comando acima imprime
+npm run dev                   # site em http://localhost:5173
 ```
 
-Produção: `npm run build && npm start` (a API serve o `dist/` e usa `COOKIE_SECURE=true` atrás de HTTPS).
+`scripts/local-supabase.mjs` usa um PostgreSQL existente (`PG_ADMIN_URL`, padrão `postgres://rp_owner:rp_owner@localhost:5432/postgres`) e baixa os binários oficiais do Supabase Auth e do PostgREST na primeira execução.
 
 ## Segurança (seção 47)
 
-A segurança não depende do frontend nem apenas das rotas:
+Como o navegador fala direto com o banco, **todas** as regras de acesso vivem no PostgreSQL:
 
-- A API roda **toda** transação com `SET LOCAL ROLE rp_app`, um papel sem privilégios de dono e sujeito às policies de RLS.
-- A API envia ao banco **apenas o hash do token de sessão**. O usuário e o papel (`admin`, `user`, `visitor`) são resolvidos **dentro do banco** (`app.current_user_id()`, `app.is_admin()`), então um bug de rota não consegue se passar por outro usuário.
-- **Tabelas globais** (instituições, bancas, provas, edições, questões, assuntos…): leitura filtrada (usuários só veem edições `published`), escrita só por admin via policy e **sem `DELETE`** concedido. O histórico é preservado com `active = false` ou `status = archived`.
-- **Dados individuais**: policy `user_id = app.current_user_id()` em todas as tabelas.
-- Ninguém altera o próprio papel: um trigger bloqueia mudança de `role`/`active` por não-admin e a auto-promoção.
-- Senhas usam bcrypt via `pgcrypto`; o hash nunca sai do banco (`auth.verify_login`).
-- `admin_audit_logs` é append-only, preenchido por trigger com quem, quando, entidade, ação, valor anterior e valor novo.
-- Proteção CSRF por cabeçalho obrigatório em escritas, cookies `httpOnly` + `SameSite=Lax` e limitador de tentativas de login.
+- **Tabelas globais** (instituições, bancas, provas, edições, questões, assuntos…):
+  - leitura filtrada: usuários só veem edições `published`;
+  - escrita só para administradores, via policy;
+  - **nenhum `DELETE`** concedido: o histórico é preservado com `active = false` ou `status = archived`.
+- **Dados individuais**: policy `user_id = auth.uid()` em todas as tabelas.
+- **Papel no banco**: o papel (`admin`, `user`, `visitor`) fica em `user_profiles`, e um trigger impede que alguém altere o próprio papel ou status. `make_admin` só funciona no SQL Editor.
+- **Funções de administração**: verificam `app.is_admin()`, e o RLS barra de novo na escrita.
+- **Auditoria**: `admin_audit_logs` é append-only, preenchido por trigger com quem, quando, entidade, ação, valor anterior e valor novo.
+- **Sem login, nada é lido**: o papel `anon` não tem acesso às tabelas.
 
-`tests/api/flow.test.ts` testa isso tudo diretamente no banco: INSERT, UPDATE e DELETE forjados por um aluno são recusados.
+`tests/api/flow.test.ts` faz requisições **forjadas direto na API REST do Supabase** com o token de um aluno (INSERT, UPDATE e DELETE em tabelas globais, auto-promoção, funções de admin) e confirma que o banco recusa todas.
 
 ## Algoritmos (versionados em `algorithm_versions`; parâmetros em `shared/config.ts`)
 
@@ -101,8 +123,9 @@ As três instituições nomeiam os assuntos de formas diferentes ("Saúde do Tra
 ## Testes
 
 ```bash
-npm test                                          # unidade + API (requer PostgreSQL; TEST_DATABASE_URL opcional)
-PW_CHROMIUM_PATH=/caminho/chrome npm run test:e2e # E2E no navegador (sobe servidor e banco próprios)
+npm run test:unit                                  # algoritmos
+npm run test:api                                   # integração contra um Supabase local (PostgreSQL + Auth + PostgREST)
+PW_CHROMIUM_PATH=/caminho/chrome npm run test:e2e  # navegador, com o site compilado em /planner/ como no GitHub Pages
 ```
 
 | Seção 58 | Onde |
@@ -115,7 +138,7 @@ PW_CHROMIUM_PATH=/caminho/chrome npm run test:e2e # E2E no navegador (sobe servi
 | 15–16 calendário, revisões atrasadas | API (data simulada) + E2E |
 | 17–19 persistência | API (nova sessão) + E2E (novo contexto de navegador) |
 | 21–25 admin, rascunho invisível, publicação, questões → estatísticas | API + E2E |
-| RLS direto no banco | `api/flow.test.ts › Segurança` |
+| RLS contra requisições forjadas | `api/flow.test.ts › Segurança` |
 
 ## Preparado para evoluir
 

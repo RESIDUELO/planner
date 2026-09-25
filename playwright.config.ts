@@ -1,7 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const PORT = 3100;
-const DB = 'postgres://rp_owner:rp_owner@localhost:5432/residencia_planner_e2e';
+const PORT = 54500;
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -10,15 +9,15 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: `http://localhost:${PORT}/planner/`,
     launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: `bash scripts/e2e-server.sh`,
-    url: `http://localhost:${PORT}/api/health`,
+    command: 'node scripts/e2e-stack.mjs',
+    url: `http://localhost:${PORT}/planner/config.json`,
     reuseExistingServer: false,
-    timeout: 120_000,
-    env: { E2E_DB_URL: DB, PORT: String(PORT) },
+    timeout: 180_000,
+    env: { E2E_PORT: String(PORT) },
   },
 });
