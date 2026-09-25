@@ -1,132 +1,144 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { AlarmClock, BookOpenCheck, CalendarCheck, CheckCircle2, ClipboardList, Target, TrendingUp } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { dateBR, int, num1, pct } from '../lib/format';
-import { Alert, Badge, Button, Card, Empty, Hint, PageHeader, Progress, Spinner, Stat } from '../components/ui';
+import { daysText, greeting, int, num1, pct, shortDate } from '../lib/format';
+import { Button, Hint, Progress, Spinner } from '../components/ui';
+import { SubjectModal } from '../components/SubjectModal';
 
+/** Página pessoal: o que eu preciso fazer agora? */
 export function DashboardPage() {
   const { user } = useAuth();
-  const q = useQuery({ queryKey: ['dashboard'], queryFn: () => api.get('/api/dashboard') });
-  if (q.isLoading) return <Spinner />;
-  const d = q.data;
-  const first = user?.name?.split(' ')[0];
+  const nav = useNavigate();
+  const d = useQuery({ queryKey: ['dashboard'], queryFn: () => api.get('/api/dashboard') });
+  const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today'), enabled: !!d.data?.hasPlan });
+  const [open, setOpen] = useState<string | null>(null);
+  if (d.isLoading) return <Spinner />;
+  const data = d.data;
+  const first = user?.isGuest ? '' : user?.name?.split(' ')[0];
+  const hello = `${greeting()}${first ? `, ${first}` : ''}.`;
 
-  if (!d?.hasPlan) {
+  const guestLine = user?.isGuest && (
+    <p className="mt-24 text-[14px] text-ink-3">
+      Você está no modo visitante. <Link to="/configuracoes" className="text-accent hover:underline">Crie uma conta</Link> para acessar de outros dispositivos.
+    </p>
+  );
+
+  if (!data?.hasPlan) {
     const steps = [
-      { done: d?.selectedExams > 0, label: 'Escolha suas provas', to: '/provas', text: 'Somente provas cadastradas pela administração aparecem.' },
-      { done: d?.profileConfigured, label: 'Informe como e quanto você estuda', to: '/planner', text: 'Métodos, horas por dia e dias da semana.' },
-      { done: false, label: 'Gere seu planner', to: '/planner', text: 'Assuntos ordenados pelo que mais caiu nas provas escolhidas.' },
+      { done: data?.selectedExams > 0, text: 'Escolha a prova que você vai fazer', to: '/provas' },
+      { done: data?.profileConfigured, text: 'Conte quanto tempo você tem e como estuda', to: '/planner' },
+      { done: false, text: 'Receba seu planner, ordenado pelo que mais cai', to: '/planner' },
     ];
+    const next = steps.find((s) => !s.done) ?? steps[2];
     return (
-      <>
-        <PageHeader title={`Olá${first && first !== 'Visitante' ? `, ${first}` : ''}!`} subtitle="Vamos montar sua estratégia de preparação." />
-        {d?.nextExam && (
-          <div className="mb-6 rounded-xl bg-brand-700 p-6 text-white">
-            <div className="text-sm text-brand-100">Próxima prova</div>
-            <div className="mt-1 text-xl font-semibold">{d.nextExam.label}</div>
-            <div className="mt-1 text-sm text-brand-100">{dateBR(d.nextExam.date)} · {d.nextExam.daysLeft} dias</div>
-          </div>
-        )}
-        <div className="grid gap-4 md:grid-cols-3">
+      <div className="mx-auto max-w-2xl">
+        <h1 className="text-[40px] leading-tight font-semibold tracking-[-0.03em] animate-in sm:text-[56px]">{hello}</h1>
+        <p className="mt-4 text-[21px] text-ink-2 animate-in sm:text-[24px]">Vamos preparar sua estratégia de estudo.</p>
+        <ol className="mt-14 space-y-5 animate-in">
           {steps.map((s, i) => (
-            <Link key={s.label} to={s.to} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-300">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                {s.done ? <CheckCircle2 className="h-4 w-4 text-ok-500" /> : <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-brand-700">{i + 1}</span>}
-                Passo {i + 1}
-              </div>
-              <div className="mt-2 font-semibold text-slate-900">{s.label}</div>
-              <p className="mt-1 text-sm text-slate-500">{s.text}</p>
-            </Link>
+            <li key={s.text} className="flex items-baseline gap-4">
+              <span className={`tabular text-[15px] ${s.done ? 'text-positive' : 'text-ink-3'}`}>{s.done ? '✓' : i + 1}</span>
+              <Link to={s.to} className={`text-[19px] transition hover:opacity-70 ${s.done ? 'text-ink-3 line-through decoration-1' : 'text-ink'}`}>{s.text}</Link>
+            </li>
           ))}
-        </div>
-      </>
+        </ol>
+        <Button size="lg" className="mt-12" onClick={() => nav(next.to)}>{next === steps[0] ? 'Escolher prova' : 'Montar planner'}</Button>
+        {guestLine}
+      </div>
     );
   }
 
-  const primary = d.dominated.find((x: any) => x.isPrimary) ?? d.dominated[0];
+  const today = t.data;
+  const focus = today?.newSubjects?.find((s: any) => !s.overflow) ?? today?.newSubjects?.[0];
+  const primary = data.dominated.find((x: any) => x.isPrimary) ?? data.dominated[0];
+  const others = data.dominated.filter((x: any) => x !== primary);
+  const reviewsDue = today?.reviews?.length ?? data.reviews.today + data.reviews.overdue;
+
   return (
-    <>
-      <PageHeader
-        title={`Olá${first && first !== 'Visitante' ? `, ${first}` : ''}!`}
-        subtitle={<>{d.plan.name} · {d.plan.mode === 'multi' ? 'modo multiprova' : 'prova principal'}</>}
-        action={<Link to="/planner"><Button><BookOpenCheck className="h-4 w-4" /> O que estudar hoje</Button></Link>}
-      />
+    <div className="mx-auto max-w-2xl">
+      <h1 className="text-[40px] leading-tight font-semibold tracking-[-0.03em] animate-in sm:text-[56px]">{hello}</h1>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="relative overflow-hidden rounded-xl bg-brand-700 p-6 text-white shadow-sm lg:col-span-1">
-          <div className="pointer-events-none absolute -right-10 -bottom-16 h-48 w-48 rounded-full bg-brand-500/40 blur-2xl" />
-          <div className="text-sm text-brand-100">Próxima prova</div>
-          <div className="mt-1 text-lg font-semibold">{d.nextExam?.label ?? '—'}</div>
-          <div className="mt-6 flex items-baseline gap-2">
-            <span className="tabular text-5xl font-semibold">{d.nextExam?.daysLeft ?? '—'}</span>
-            <span className="text-brand-100">dias para a prova</span>
-          </div>
-          <div className="mt-1 text-sm text-brand-100">{dateBR(d.nextExam?.date, { dateStyle: 'long' })}</div>
-          <div className="mt-6">
-            <div className="flex justify-between text-sm"><span className="text-brand-100">Progresso geral</span><span className="tabular font-semibold">{pct(d.progress, 0)}</span></div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-emerald-300" style={{ width: `${d.progress * 100}%` }} /></div>
-          </div>
+      <section className="mt-12 animate-in">
+        <p className="text-[17px] text-ink-2">Você está se preparando para</p>
+        <p className="mt-1 text-[28px] font-semibold tracking-[-0.02em]">{primary?.label ?? data.nextExam?.label}</p>
+        {primary?.examDate ? (
+          <p className="mt-1 text-[17px] text-ink-2">
+            {shortDate(primary.examDate)} · <span className="text-ink">{daysText(primary.daysLeft)}</span>{primary.daysLeft > 1 && ' restantes'}
+          </p>
+        ) : <Link to="/provas" className="mt-1 inline-block text-[17px] text-accent hover:underline">Informe a data da prova</Link>}
+        {others.length > 0 && (
+          <p className="mt-2 text-[14px] text-ink-3">e também {others.map((o: any) => `${o.label}${o.examDate ? ` (${shortDate(o.examDate, false)})` : ''}`).join(', ')}</p>
+        )}
+      </section>
+
+      <div className="my-14 h-px bg-line" />
+
+      <section className="animate-in">
+        <p className="text-[17px] text-ink-2">Seu foco hoje</p>
+        {!today ? <div className="h-32" /> : focus ? (
+          <>
+            <p className="mt-3 text-[13px] tracking-wide text-ink-3">{focus.area}</p>
+            <p className="mt-1 text-[32px] leading-tight font-semibold tracking-[-0.025em] sm:text-[40px]">{focus.name}</p>
+            <p className="mt-3 text-[17px] text-ink-2">{focus.methods.map((m: any) => m.name).join(' · ')}</p>
+            <div className="mt-8 flex flex-wrap items-center gap-6">
+              <Button size="lg" onClick={() => setOpen(focus.subjectId)}>Começar</Button>
+              <Link to="/planner" className="text-[15px] text-accent hover:underline">Ver o dia completo</Link>
+            </div>
+          </>
+        ) : reviewsDue > 0 ? (
+          <>
+            <p className="mt-3 text-[32px] font-semibold tracking-[-0.025em]">Revisões</p>
+            <p className="mt-2 text-[17px] text-ink-2">{reviewsDue} {reviewsDue === 1 ? 'tópico para revisar' : 'tópicos para revisar'}</p>
+            <Button size="lg" className="mt-8" onClick={() => nav('/revisoes')}>Revisar</Button>
+          </>
+        ) : data.nextSubjects?.[0] ? (
+          <>
+            <p className="mt-3 text-[24px] text-ink">Você concluiu o dia.</p>
+            <p className="mt-2 text-[17px] text-ink-2">Se quiser adiantar, o próximo é <span className="text-ink">{data.nextSubjects[0].name}</span>.</p>
+            <Button variant="secondary" className="mt-6" onClick={() => setOpen(data.nextSubjects[0].subjectId)}>Adiantar</Button>
+          </>
+        ) : (
+          <p className="mt-3 text-[24px] text-ink">Nada pendente para hoje.</p>
+        )}
+      </section>
+
+      <div className="my-14 h-px bg-line" />
+
+      <section className="animate-in">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[17px] text-ink-2">Seu progresso</p>
+          <p className="tabular text-[28px] font-semibold tracking-[-0.02em]">{pct(data.progress, 0)}</p>
         </div>
+        <Progress className="mt-4" value={data.progress} />
+        <p className="mt-3 text-[15px] text-ink-2">{data.subjects.studied} de {data.subjects.total} temas estudados</p>
 
-        <Card className="lg:col-span-2" title={<span className="flex items-center gap-1.5">Questões potencialmente dominadas <Hint text="Estimativa matemática, não promessa de acerto: para cada assunto, questões esperadas na prova (frequência histórica × nº de questões) × seu domínio estimado (acerto registrado, ajustado pelo tamanho da amostra e pela memória atual)." /></span>}
-          subtitle="Estimativa baseada nos dados históricos cadastrados e no seu desempenho registrado">
-          <div className="grid gap-6 sm:grid-cols-2">
-            {d.dominated.map((x: any) => (
-              <div key={x.editionId}>
-                <div className="flex items-center gap-2 text-sm font-medium text-slate-700">{x.label}{x.isPrimary && <Badge tone="info">principal</Badge>}</div>
-                <div className="mt-1 flex items-baseline gap-1">
-                  <span className="tabular text-3xl font-semibold text-slate-900">{num1(x.dominated)}</span>
-                  <span className="tabular text-slate-500">/ {x.totalQuestions ?? '?'}</span>
-                </div>
-                <Progress className="mt-2" tone="ok" value={x.totalQuestions ? x.dominated / x.totalQuestions : 0} label={`Questões dominadas em ${x.label}`} />
-                <div className="mt-1 text-xs text-slate-500">
-                  {x.daysLeft != null ? `${x.daysLeft} dias` : 'sem data'} · análise de {x.editionsAnalyzed} {x.editionsAnalyzed === 1 ? 'edição' : 'edições'}
-                </div>
-              </div>
-            ))}
-          </div>
-          {primary && <p className="mt-4 text-xs text-slate-500">{d.masteryNote}</p>}
-        </Card>
-      </div>
+        <dl className="mt-10 flex flex-wrap gap-x-10 gap-y-4 text-[15px]">
+          <Link to="/revisoes" className="transition hover:opacity-70">
+            <dt className="text-ink-2">Revisões</dt>
+            <dd className="tabular text-[22px] font-medium">{reviewsDue}{data.reviews.overdue > 0 && <span className="ml-2 text-[14px] font-normal text-negative">{data.reviews.overdue} atrasada{data.reviews.overdue > 1 ? 's' : ''}</span>}</dd>
+          </Link>
+          <Link to="/desempenho" className="transition hover:opacity-70">
+            <dt className="text-ink-2">Questões</dt>
+            <dd className="tabular text-[22px] font-medium">{int(data.questions.answered)}</dd>
+          </Link>
+          <Link to="/desempenho" className="transition hover:opacity-70">
+            <dt className="text-ink-2">Acertos</dt>
+            <dd className="tabular text-[22px] font-medium">{pct(data.questions.accuracy, 0)}</dd>
+          </Link>
+        </dl>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Assuntos estudados" value={<>{d.subjects.studied}<span className="text-base text-slate-400"> / {d.subjects.total}</span></>} hint={`${d.subjects.inProgress} em andamento · ${d.subjects.pending} pendentes`} icon={<BookOpenCheck className="h-4 w-4" />} />
-        <Stat label="Revisões hoje" value={d.reviews.today} hint={`${d.reviews.doneToday} feitas hoje`} icon={<CalendarCheck className="h-4 w-4" />} />
-        <Stat label="Revisões atrasadas" value={d.reviews.overdue} tone={d.reviews.overdue ? 'late' : undefined} hint={d.reviews.overdue ? 'Priorize-as hoje' : 'Tudo em dia'} icon={<AlarmClock className="h-4 w-4" />} />
-        <Stat label="Questões realizadas" value={int(d.questions.answered)} hint={d.questions.accuracy != null ? `${pct(d.questions.accuracy, 0)} de acerto` : 'Nenhuma registrada'} icon={<Target className="h-4 w-4" />} />
-      </div>
+        {primary?.totalQuestions && (
+          <p className="mt-10 flex items-center gap-1.5 text-[14px] text-ink-3">
+            {num1(primary.dominated)} de {primary.totalQuestions} questões potencialmente dominadas
+            <Hint text={`Estimativa, não promessa de acerto: questões esperadas de cada assunto (pela frequência histórica) × seu domínio estimado. ${data.masteryNote}`} />
+          </p>
+        )}
+      </section>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card title={<span className="flex items-center gap-1.5">Cobertura histórica <Hint text="Soma da fração histórica das questões (nas provas selecionadas) dos assuntos que você já estudou." /></span>}>
-          <div className="tabular text-3xl font-semibold text-slate-900">{pct(d.coverage.studied)}</div>
-          <p className="mt-1 text-sm text-slate-500">das questões históricas estão em assuntos que você já estudou.</p>
-          <Progress className="mt-4" value={d.coverage.studied} tone="ok" />
-          <p className="mt-3 text-xs text-slate-500">O planner cobre {pct(d.coverage.scheduled)} até a prova com o tempo disponível.</p>
-        </Card>
-        <Card className="lg:col-span-2" title="Próximos assuntos" action={<Link to="/planner" className="text-xs font-medium text-brand-600 hover:underline">Ver planner</Link>}>
-          {d.nextSubjects.length === 0 ? <Empty icon={<TrendingUp className="h-8 w-8" />} title="Todos os assuntos agendados foram estudados" /> : (
-            <ul className="divide-y divide-slate-100">
-              {d.nextSubjects.map((s: any) => (
-                <li key={s.subjectId} className="flex items-center gap-4 py-2.5">
-                  <span className="tabular w-8 text-sm font-semibold text-slate-400">#{s.rank}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-slate-900">{s.name}</div>
-                    <Progress className="mt-1.5 h-1.5" value={s.progress} />
-                  </div>
-                  <span className="tabular text-xs text-slate-500">{pct(s.percentage)}</span>
-                  <Badge tone={s.levelLabel === 'Muito alta' ? 'brand' : s.levelLabel === 'Alta' ? 'info' : 'neutral'}>{s.levelLabel}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-      {d.plan.warnings?.length > 0 && (
-        <div className="mt-4 space-y-2">{d.plan.warnings.map((w: string) => <Alert key={w} tone="warn">{w}</Alert>)}</div>
-      )}
-      <p className="mt-6 flex items-center gap-1.5 text-xs text-slate-400"><ClipboardList className="h-3.5 w-3.5" /> Planner gerado com {d.plan.algorithm}.</p>
-    </>
+      {guestLine}
+      {open && <SubjectModal subjectId={open} onClose={() => setOpen(null)} />}
+    </div>
   );
 }

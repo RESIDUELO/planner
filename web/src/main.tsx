@@ -6,7 +6,10 @@ import { AuthProvider } from './lib/auth';
 import { initSupabase } from './lib/supabase';
 import { App } from './App';
 import { SetupNeeded } from './pages/SetupNeeded';
+import { initTheme } from './lib/theme';
 import './index.css';
+
+initTheme();
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: (n, e: any) => n < 1 && !(e?.status >= 400 && e?.status < 500), refetchOnWindowFocus: false } },

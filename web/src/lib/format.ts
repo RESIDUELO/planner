@@ -58,7 +58,26 @@ export const WINDOW_LABEL: Record<string, { label: string; tone: Tone }> = {
 
 export type Tone = 'neutral' | 'info' | 'ok' | 'warn' | 'late' | 'brand';
 
-export const LEVEL_TONE: Record<string, Tone> = { muito_alta: 'brand', alta: 'info', media: 'neutral', baixa: 'neutral' };
 
 /** Timestamp → dia (YYYY-MM-DD) no fuso de Brasília. */
 export const isoBR = (ts: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(ts));
+
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+/** "12 nov 2026" (ou "12 nov" sem o ano). */
+export function shortDate(d: string | null | undefined, withYear = true) {
+  if (!d) return '—';
+  const [y, m, day] = d.slice(0, 10).split('-').map(Number);
+  return `${day} ${MONTHS[m - 1]}${withYear ? ` ${y}` : ''}`;
+}
+
+export function greeting(now = new Date()) {
+  const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }).format(now));
+  return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+}
+
+export const LEVEL_TEXT: Record<string, string> = {
+  muito_alta: 'Prioridade muito alta', alta: 'Prioridade alta', media: 'Prioridade média', baixa: 'Prioridade baixa',
+};
+
+export const daysText = (n: number | null | undefined) =>
+  n == null ? '' : n === 0 ? 'hoje' : n === 1 ? '1 dia' : `${n} dias`;
