@@ -1,10 +1,10 @@
-# Publica o Residência Planner no GitHub Pages a cada push na main.
+# Publica o Residência Planner no GitHub Pages a cada push na branch padrão.
 # Pré-requisito (uma vez): Settings → Pages → Source: "GitHub Actions".
 name: Publicar no GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/confident-bell-0pj7j0]
   workflow_dispatch:
 
 permissions:

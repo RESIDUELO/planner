@@ -45,7 +45,7 @@ scripts/              Supabase local para testes, conversor PDF → importação
    - crie as *variables* `SUPABASE_URL` e `SUPABASE_ANON_KEY` em **Settings → Secrets and variables → Actions → Variables**.
 
    Nunca use a chave `service_role` no site.
-5. **GitHub Pages**: em **Settings → Pages → Build and deployment → Source**, escolha **GitHub Actions**. Cada push na `main` publica o site (workflow [`deploy.yml`](.github/workflows/deploy.yml)) em `https://<usuário>.github.io/<repositório>/`.
+5. **GitHub Pages**: em **Settings → Pages → Build and deployment → Source**, escolha **GitHub Actions**. Cada push na branch padrão publica o site (workflow [`deploy.yml`](.github/workflows/deploy.yml); para publicar na hora, use **Actions → Publicar no GitHub Pages → Run workflow**) em `https://<usuário>.github.io/<repositório>/`.
 6. **Administrador**: crie sua conta pelo próprio site. Depois, no SQL Editor do Supabase, rode:
    ```sql
    select public.make_admin('seu-email@exemplo.com');
