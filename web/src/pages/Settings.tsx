@@ -57,7 +57,7 @@ export function SettingsPage() {
               <div><dt className="text-xs text-slate-500">Horas por dia</dt><dd className="font-medium">{s.profile.daily_hours} h</dd></div>
               <div><dt className="text-xs text-slate-500">Dias de estudo</dt><dd className="font-medium">{s.weekdays.map((d: number) => WD[d]).join(', ')}</dd></div>
               <div><dt className="text-xs text-slate-500">Questões por dia</dt><dd className="font-medium">{s.profile.questions_per_day}</dd></div>
-              <div><dt className="text-xs text-slate-500">Métodos</dt><dd className="font-medium">{s.methods.filter((m: any) => m.enabled).map((m: any) => `${m.name} (${m.estimated_minutes} min)`).join(', ')}</dd></div>
+              <div><dt className="text-xs text-slate-500">Métodos</dt><dd className="font-medium">{s.methods.filter((m: any) => m.enabled).map((m: any) => m.name).join(', ')}</dd></div>
             </dl>
           )}
         </Card>

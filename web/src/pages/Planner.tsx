@@ -68,7 +68,6 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const steps = ['Provas', 'Tempo', 'Como você estuda?', 'Revisar'];
   const enabledMethods = methods.filter((m) => m.enabled);
-  const perSubject = enabledMethods.reduce((t, m) => t + Number(m.minutes || 0), 0);
 
   const canNext = [
     sel.length > 0 && !!primary && !missingDate,
@@ -156,22 +155,17 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 
         {step === 2 && (
           <div>
-            <p className="mb-4 text-sm text-slate-600">Cada método selecionado vira um item do checklist de cada assunto. O tempo é ajustado ao tamanho do assunto (assuntos mais cobrados recebem mais tempo).</p>
+            <h2 className="text-base font-semibold text-slate-900">Como você estuda?</h2>
+            <p className="mb-4 mt-1 text-sm text-slate-600">Marque tudo o que você usa. Cada método marcado vira um item do checklist de cada assunto.</p>
             <div className="grid gap-3 sm:grid-cols-2">
               {methods.map((m, i) => (
-                <div key={m.id} className={`flex items-center gap-3 rounded-lg border p-3 ${m.enabled ? 'border-brand-300 bg-brand-50/50' : 'border-slate-200'}`}>
-                  <label className="flex flex-1 cursor-pointer items-center gap-3 text-sm font-medium">
-                    <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={m.enabled}
-                      onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />
-                    {m.name}
-                  </label>
-                  <input type="number" min={5} max={600} step={5} aria-label={`Minutos de ${m.name}`} disabled={!m.enabled} className="input w-20 py-1"
-                    value={m.minutes} onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, minutes: e.target.value } : x)))} />
-                  <span className="text-xs text-slate-500">min</span>
-                </div>
+                <label key={m.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm font-medium ${m.enabled ? 'border-brand-300 bg-brand-50/50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                  <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={m.enabled}
+                    onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />
+                  {m.name}
+                </label>
               ))}
             </div>
-            <p className="mt-3 text-xs text-slate-500">Tempo base por assunto: {minutes(perSubject)}.</p>
           </div>
         )}
 
