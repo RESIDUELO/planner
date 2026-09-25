@@ -24,6 +24,7 @@ create table public.user_profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.user_profiles enable row level security;
 
 -- ---------------------------------------------------------------------
 -- DADOS GLOBAIS (curados pelo administrador)
@@ -41,6 +42,7 @@ create table public.institutions (
   updated_at   timestamptz not null default now(),
   unique (abbreviation)
 );
+alter table public.institutions enable row level security;
 
 create table public.examining_boards (
   id           uuid primary key default gen_random_uuid(),
@@ -51,6 +53,7 @@ create table public.examining_boards (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+alter table public.examining_boards enable row level security;
 
 create table public.exams (
   id               uuid primary key default gen_random_uuid(),
@@ -66,6 +69,7 @@ create table public.exams (
   updated_at       timestamptz not null default now(),
   unique (institution_id, name)
 );
+alter table public.exams enable row level security;
 
 create type public.edition_status as enum ('draft', 'published', 'archived');
 
@@ -83,7 +87,6 @@ create table public.exam_editions (
   answer_key_url      text,
   result_url          text,
   status              public.edition_status not null default 'draft',
-  -- procedência dos dados (seção 45)
   source_name         text,
   source_url          text,
   source_checked_at   date,
@@ -95,6 +98,8 @@ create table public.exam_editions (
   unique (exam_id, year),
   constraint registration_period_chk check (registration_start is null or registration_end is null or registration_start <= registration_end)
 );
+alter table public.exam_editions enable row level security;
+-- procedência dos dados (seção 45)
 create index exam_editions_exam_idx on public.exam_editions(exam_id);
 
 -- Hierarquia de áreas: Clínica Médica → Cardiologia
@@ -108,6 +113,7 @@ create table public.medical_areas (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.medical_areas enable row level security;
 
 -- Assuntos: Arritmias (unidade do planner) → Fibrilação atrial (subassunto)
 create table public.subjects (
@@ -122,6 +128,7 @@ create table public.subjects (
   updated_at        timestamptz not null default now(),
   constraint subject_not_own_parent check (parent_subject_id is null or parent_subject_id <> id)
 );
+alter table public.subjects enable row level security;
 create index subjects_parent_idx on public.subjects(parent_subject_id);
 create index subjects_area_idx on public.subjects(medical_area_id);
 
@@ -133,6 +140,7 @@ create table public.subject_aliases (
   alias      text not null,
   created_at timestamptz not null default now()
 );
+alter table public.subject_aliases enable row level security;
 
 create unique index subject_aliases_alias_key on public.subject_aliases (lower(alias));
 
@@ -143,7 +151,7 @@ create table public.questions (
   exam_edition_id uuid not null references public.exam_editions(id),
   question_number int not null check (question_number > 0),
   statement       text,
-  summary         text,           -- o que a questão cobra (quando o enunciado não está disponível)
+  summary         text,
   alternative_a   text,
   alternative_b   text,
   alternative_c   text,
@@ -163,6 +171,8 @@ create table public.questions (
   unique (exam_edition_id, question_number),
   constraint answer_or_annulled check (annulled or correct_answer is not null)
 );
+alter table public.questions enable row level security;
+-- questions: o que a questão cobra (quando o enunciado não está disponível)
 
 create table public.question_subjects (
   id               uuid primary key default gen_random_uuid(),
@@ -173,6 +183,7 @@ create table public.question_subjects (
   created_at       timestamptz not null default now(),
   unique (question_id, subject_id)
 );
+alter table public.question_subjects enable row level security;
 create index question_subjects_subject_idx on public.question_subjects(subject_id);
 create unique index question_subjects_one_primary on public.question_subjects(question_id) where is_primary;
 
@@ -185,6 +196,7 @@ create table public.study_methods (
   sort_order        int not null default 0,
   active            boolean not null default true
 );
+alter table public.study_methods enable row level security;
 
 create table public.algorithm_versions (
   id          uuid primary key default gen_random_uuid(),
@@ -195,6 +207,7 @@ create table public.algorithm_versions (
   active      boolean not null default true,
   created_at  timestamptz not null default now()
 );
+alter table public.algorithm_versions enable row level security;
 
 create table public.admin_audit_logs (
   id           bigint generated always as identity primary key,
@@ -208,6 +221,7 @@ create table public.admin_audit_logs (
   new_values   jsonb,
   changed_at   timestamptz not null default now()
 );
+alter table public.admin_audit_logs enable row level security;
 create index admin_audit_logs_entity_idx on public.admin_audit_logs(entity, entity_id);
 create index admin_audit_logs_changed_idx on public.admin_audit_logs(changed_at desc);
 
@@ -223,6 +237,7 @@ create table public.import_batches (
   created_by      uuid references auth.users(id),
   created_at      timestamptz not null default now()
 );
+alter table public.import_batches enable row level security;
 
 -- ---------------------------------------------------------------------
 -- DADOS INDIVIDUAIS (cada usuário só enxerga os próprios)
@@ -235,6 +250,7 @@ create table public.user_exams (
   selected  boolean not null default true,
   unique (user_id, exam_id)
 );
+alter table public.user_exams enable row level security;
 
 create table public.user_exam_editions (
   id              uuid primary key default gen_random_uuid(),
@@ -245,6 +261,7 @@ create table public.user_exam_editions (
   created_at      timestamptz not null default now(),
   unique (user_id, exam_edition_id)
 );
+alter table public.user_exam_editions enable row level security;
 create unique index user_exam_editions_one_primary on public.user_exam_editions(user_id) where is_primary and selected;
 
 create type public.registration_status as enum
@@ -261,6 +278,7 @@ create table public.registrations (
   updated_at          timestamptz not null default now(),
   unique (user_id, exam_edition_id)
 );
+alter table public.registrations enable row level security;
 
 create table public.study_profiles (
   id                   uuid primary key default gen_random_uuid(),
@@ -275,6 +293,7 @@ create table public.study_profiles (
   preferred_end_time   time,
   updated_at           timestamptz not null default now()
 );
+alter table public.study_profiles enable row level security;
 
 create table public.user_study_methods (
   user_id           uuid not null references auth.users(id) on delete cascade,
@@ -283,6 +302,7 @@ create table public.user_study_methods (
   estimated_minutes int not null check (estimated_minutes between 5 and 600),
   primary key (user_id, study_method_id)
 );
+alter table public.user_study_methods enable row level security;
 
 create type public.plan_status as enum ('active', 'archived');
 
@@ -303,6 +323,7 @@ create table public.study_plans (
   updated_at              timestamptz not null default now(),
   constraint plan_dates_chk check (start_date <= end_date)
 );
+alter table public.study_plans enable row level security;
 create unique index study_plans_one_active on public.study_plans(user_id) where status = 'active';
 
 create table public.study_plan_exams (
@@ -315,27 +336,35 @@ create table public.study_plan_exams (
   editions_analyzed int not null default 0,
   primary key (study_plan_id, exam_edition_id)
 );
+alter table public.study_plan_exams enable row level security;
 
 create table public.study_plan_subjects (
   study_plan_id         uuid not null references public.study_plans(id) on delete cascade,
   subject_id            uuid not null references public.subjects(id),
   user_id               uuid not null references auth.users(id) on delete cascade,
-  historical_frequency  numeric(10,3) not null,  -- nº absoluto de questões (ponderado)
-  historical_percentage numeric(8,5) not null,   -- fração da prova (0–1)
-  annual_average        numeric(10,3) not null,  -- questões por edição
+  historical_frequency  numeric(10,3) not null,
+  historical_percentage numeric(8,5) not null,
+  annual_average        numeric(10,3) not null,
   years_present         int not null,
   years_analyzed        int not null,
-  recent_frequency      numeric(8,5) not null,   -- fração nas edições recentes
+  recent_frequency      numeric(8,5) not null,
   priority_score        numeric(8,5) not null,
   priority_rank         int not null,
   priority_level        text not null,
-  estimated_questions   numeric(10,3) not null,  -- questões esperadas na próxima prova
+  estimated_questions   numeric(10,3) not null,
   size_factor           numeric(6,3) not null default 1,
-  exam_date             date,                    -- prova mais próxima em que o assunto cai (limita revisões)
+  exam_date             date,
   scheduled             boolean not null default true,
   per_exam              jsonb not null default '[]'::jsonb,
   primary key (study_plan_id, subject_id)
 );
+alter table public.study_plan_subjects enable row level security;
+-- study_plan_subjects: nº absoluto de questões (ponderado)
+-- study_plan_subjects: fração da prova (0–1)
+-- study_plan_subjects: questões por edição
+-- study_plan_subjects: fração nas edições recentes
+-- study_plan_subjects: questões esperadas na próxima prova
+-- study_plan_subjects: prova mais próxima em que o assunto cai (limita revisões)
 
 create table public.study_schedule (
   id                uuid primary key default gen_random_uuid(),
@@ -352,6 +381,7 @@ create table public.study_schedule (
   completed_at      timestamptz,
   created_at        timestamptz not null default now()
 );
+alter table public.study_schedule enable row level security;
 create index study_schedule_user_date_idx on public.study_schedule(user_id, scheduled_date);
 create unique index study_schedule_one_per_method on public.study_schedule(study_plan_id, subject_id, study_method_id)
   where activity_type <> 'review';
@@ -364,6 +394,7 @@ create table public.subject_method_progress (
   completed_at    timestamptz not null default now(),
   primary key (user_id, subject_id, study_method_id)
 );
+alter table public.subject_method_progress enable row level security;
 
 create table public.user_question_attempts (
   id                    uuid primary key default gen_random_uuid(),
@@ -376,6 +407,7 @@ create table public.user_question_attempts (
   confidence            int check (confidence between 1 and 5),
   attempted_at          timestamptz not null default now()
 );
+alter table public.user_question_attempts enable row level security;
 create index user_question_attempts_user_subject_idx on public.user_question_attempts(user_id, subject_id);
 
 -- Registro agregado ("fiz 20 questões, acertei 17") — histórico preservado
@@ -390,6 +422,7 @@ create table public.question_practice_logs (
   practiced_at          timestamptz not null default now(),
   constraint correct_le_total check (correct_count <= questions_count)
 );
+alter table public.question_practice_logs enable row level security;
 create index question_practice_logs_user_subject_idx on public.question_practice_logs(user_id, subject_id);
 
 create table public.user_subject_performance (
@@ -404,6 +437,7 @@ create table public.user_subject_performance (
   last_question_at      timestamptz,
   primary key (user_id, subject_id)
 );
+alter table public.user_subject_performance enable row level security;
 
 create type public.review_rating as enum ('again', 'hard', 'good', 'easy');
 
@@ -426,6 +460,7 @@ create table public.spaced_repetition_cards (
   updated_at        timestamptz not null default now(),
   unique (user_id, subject_id)
 );
+alter table public.spaced_repetition_cards enable row level security;
 create index spaced_repetition_cards_due_idx on public.spaced_repetition_cards(user_id, next_review_at);
 
 create table public.review_logs (
@@ -442,10 +477,12 @@ create table public.review_logs (
   previous_interval         numeric(10,3),
   new_interval              numeric(10,3) not null,
   scheduled_next_review     date,
-  actual_next_review        date,           -- preenchido quando a revisão seguinte acontece
+  actual_next_review        date,
   retrievability_at_review  numeric(6,5),
   days_until_exam           int,
   time_spent_seconds        int check (time_spent_seconds is null or time_spent_seconds >= 0),
   algorithm_version         text not null
 );
+alter table public.review_logs enable row level security;
+-- review_logs: preenchido quando a revisão seguinte acontece
 create index review_logs_user_idx on public.review_logs(user_id, reviewed_at desc);
