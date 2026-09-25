@@ -156,9 +156,11 @@ export function compareHistorical(
   a: { percentage: number; presenceRate: number; recentPercentage: number; subjectId: string },
   b: { percentage: number; presenceRate: number; recentPercentage: number; subjectId: string },
 ): number {
+  // Regularidade primeiro (caiu em todas as provas?), depois quantidade e recência.
+  const presence = Math.round((b.presenceRate - a.presenceRate) * 1e6);
   return (
+    presence ||
     b.percentage - a.percentage ||
-    b.presenceRate - a.presenceRate ||
     b.recentPercentage - a.recentPercentage ||
     a.subjectId.localeCompare(b.subjectId)
   );

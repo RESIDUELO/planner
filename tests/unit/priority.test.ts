@@ -13,7 +13,7 @@ function exam(id: string, date: string | null, primary: boolean, counts: Record<
   };
 }
 
-describe('priority_v1', () => {
+describe('priority_v2', () => {
   it('em prova única, o assunto mais frequente é o #1', () => {
     const r = rankSubjects([exam('famerp', '2026-11-12', true, { vacinas: 5, arritmias: 9, diabetes: 3 })], '2026-09-25');
     expect(r.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'vacinas', 'diabetes']);

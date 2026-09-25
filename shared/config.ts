@@ -7,7 +7,7 @@
  * versão os gerou.
  */
 
-export const PRIORITY_VERSION = 'priority_v1';
+export const PRIORITY_VERSION = 'priority_v2';
 export const MEMORY_VERSION = 'fsrs_v1';
 export const SCHEDULER_VERSION = 'scheduler_v1';
 
@@ -21,8 +21,8 @@ export const PRIORITY = {
   },
   /** Composição do componente histórico. */
   historical: {
-    frequency: 0.7,
-    consistency: 0.2,
+    consistency: 0.6,
+    frequency: 0.3,
     recency: 0.1,
   },
   /** Quantas edições mais recentes contam como "frequência recente". */

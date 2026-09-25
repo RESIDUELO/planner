@@ -11,8 +11,8 @@ insert into public.study_methods (code, name, activity_type, default_minutes, so
   ('active_recall', 'Revisão ativa', 'active_recall', 20, 6);
 
 insert into public.algorithm_versions (name, version, description, parameters) values
-  ('Prioridade', 'priority_v1',
-   'Ranking pela frequência histórica ponderada das provas selecionadas (desempate por presença e recência) e score dinâmico: 40% histórico, 25% proximidade da prova, 20% esquecimento, 15% desempenho.',
+  ('Prioridade', 'priority_v2',
+   'Ranking pela regularidade (em quantas provas o assunto caiu; os que caíram todos os anos vêm primeiro), depois pela quantidade de questões e pela recência, ponderado pelas provas selecionadas; score dinâmico: 40% histórico, 25% proximidade da prova, 20% esquecimento, 15% desempenho.',
    '{"weights":{"historical":0.40,"proximity":0.25,"forgetting":0.20,"performance":0.15}}'),
   ('Repetição espaçada', 'fsrs_v1',
    'Modelo próprio inspirado no FSRS: estabilidade, dificuldade e retrievability com curva de esquecimento em lei de potência; retenção-alvo e intervalo máximo ajustados pelo tempo até a prova; nunca agenda após a prova.',

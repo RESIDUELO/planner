@@ -31,8 +31,13 @@ describe('computeExamStats', () => {
     expect(a.recentPercentage).toBeCloseTo(9 / 100);
   });
 
-  it('ordena pelo que mais apareceu', () => {
+  it('ordena pela regularidade e depois pela quantidade', () => {
     expect(st.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'vacinas', 'diabetes']);
+    // 1 questão em cada prova (4/4) vem antes de 7 questões em 3 de 4 provas
+    const extra = [...links];
+    for (const ed of ['e22', 'e23', 'e24', 'e25']) extra.push({ questionId: `c-${ed}`, editionId: ed, subjectId: 'cirrose', weight: 1 });
+    const s2 = computeExamStats(eds, extra);
+    expect(s2.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'cirrose', 'vacinas', 'diabetes']);
   });
 
   it('não conta edições sem questões classificadas', () => {

@@ -1,9 +1,10 @@
 /**
- * priority_v1 — ranking e prioridade dos assuntos.
+ * priority_v2 — ranking e prioridade dos assuntos.
  *
- * 1) Ranking histórico (ordem do planner): frequência histórica ponderada das
- *    provas selecionadas, com desempate por presença nas edições e recência.
- *    Em prova única, o assunto que mais apareceu é obrigatoriamente o #1.
+ * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE (em quantas
+ *    das provas analisadas o assunto caiu — os que caíram todos os anos vêm
+ *    antes), depois a QUANTIDADE de questões (fração da prova) e, por fim, a
+ *    recência. Com várias provas, usa a média ponderada pelo peso de cada prova.
  *
  * 2) Score dinâmico (0–100), usado para "O que estudar hoje" e para a
  *    explicação de cada assunto:
