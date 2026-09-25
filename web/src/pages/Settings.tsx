@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { getTheme, setTheme, type ThemePref } from '../lib/theme';
-import { Button, Disclosure, Note, Segmented, Title } from '../components/ui';
+import { Button, Disclosure, Note, Segmented, Sheet, Title } from '../components/ui';
 import { REVIEW_OPTIONS } from './Planner';
 
 const WD = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
@@ -44,6 +44,23 @@ export function SettingsPage() {
       for (const k of ['study-settings', 'today', 'week', 'calendar', 'planner']) qc.invalidateQueries({ queryKey: [k] });
       setMsg({ tone: 'positive', text: `Até ${n} ${n === 1 ? 'revisão' : 'revisões'} por dia.` });
     } catch (err) { setMsg({ tone: 'negative', text: errorMessage(err) }); }
+  };
+
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const resetProfile = async () => {
+    setResetting(true);
+    setResetError(null);
+    try {
+      await api.post('/api/me/reset');
+      try { localStorage.removeItem('rp-pomodoro'); } catch { /* sem armazenamento */ }
+      qc.clear();
+      window.location.replace(`${import.meta.env.BASE_URL}planner`);
+    } catch (err) {
+      setResetError(errorMessage(err));
+      setResetting(false);
+    }
   };
 
   const saveName = async (e: FormEvent) => {
@@ -114,7 +131,7 @@ export function SettingsPage() {
         <section className="border-t border-line">
           <Disclosure summary="Como os cálculos funcionam" className="border-b border-line">
             <div className="space-y-4 text-[15px] leading-relaxed text-ink-2">
-              <p><span className="text-ink">Ordem dos assuntos.</span> Pela fração das questões que cada assunto representou nas edições cadastradas das provas escolhidas. Com várias provas, a principal e a mais próxima pesam mais.</p>
+              <p><span className="text-ink">Ordem dos assuntos.</span> Primeiro a regularidade: os assuntos que caíram em todas as provas desde que apareceram (sempre olhando pelo menos as 3 últimas); depois a quantidade de questões. Com várias provas, a principal e a mais próxima pesam mais.</p>
               <p><span className="text-ink">Prioridade de hoje.</span> {algo.data && Object.entries(algo.data.priority.weights).map(([k, v]) => `${({ historical: 'histórico', proximity: 'proximidade da prova', forgetting: 'esquecimento', performance: 'desempenho' } as any)[k]} ${Math.round((v as number) * 100)}%`).join(', ')}.</p>
               <p><span className="text-ink">Revisões.</span> Modelo próprio inspirado no FSRS. Ficam mais frequentes conforme a prova se aproxima e nunca caem no dia da prova ou depois.</p>
               <p><span className="text-ink">Questões potencialmente dominadas.</span> Questões esperadas de cada assunto × seu domínio estimado. É uma estimativa, não uma promessa.</p>
@@ -123,9 +140,38 @@ export function SettingsPage() {
           </Disclosure>
         </section>
 
+        <section className="animate-in">
+          <h2 className="mb-2 text-[13px] text-ink-2">Recomeçar</h2>
+          <div className="border-y border-line py-4">
+            <p className="text-[15px] text-ink-2">Apaga provas escolhidas, planner, checklist, questões, revisões e observações, como se a conta fosse nova. Seu nome e e-mail continuam.</p>
+            <Button variant="destructive" className="mt-3" onClick={() => setResetOpen(true)}>Zerar meu perfil</Button>
+          </div>
+        </section>
+
         <div className="pt-4 text-center">
           <Button variant="destructive" onClick={async () => { await logout(); nav('/login'); }}>Sair</Button>
         </div>
+        {resetOpen && (
+          <Sheet open onClose={() => !resetting && setResetOpen(false)} title="Zerar meu perfil?">
+            <p className="text-[16px] text-ink-2">Isso apaga <span className="text-ink">tudo</span> o que você fez aqui e não pode ser desfeito:</p>
+            <ul className="mt-4 list-disc space-y-1 pl-5 text-[15px] text-ink-2">
+              <li>provas escolhidas, datas, inscrição e valor</li>
+              <li>planner, assuntos concluídos e atividades escolhidas</li>
+              <li>questões registradas e desempenho</li>
+              <li>revisões e observações da semana</li>
+              <li>como você estuda e demais configurações de estudo</li>
+            </ul>
+            <p className="mt-4 text-[15px] text-ink-2">Sua conta (nome e e-mail) continua.</p>
+            {resetError && <Note tone="negative" className="mt-4">{resetError}</Note>}
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <button disabled={resetting} onClick={resetProfile}
+                className="rounded-full bg-negative px-5 py-2 text-[15px] text-white transition hover:opacity-90 disabled:opacity-50">
+                {resetting ? 'Apagando…' : 'Zerar tudo'}
+              </button>
+              <Button variant="plain" disabled={resetting} onClick={() => setResetOpen(false)}>Cancelar</Button>
+            </div>
+          </Sheet>
+        )}
       </div>
     </div>
   );

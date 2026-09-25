@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { dateTimeBR, int, num1, pct, shortDate, todayBR } from '../lib/format';
@@ -12,6 +12,11 @@ const RATING: Record<string, string> = { again: 'Errei', hard: 'Difícil', good:
 export function PerformancePage() {
   const q = useQuery({ queryKey: ['performance'], queryFn: () => api.get('/api/performance') });
   const [open, setOpen] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const del = useMutation({
+    mutationFn: (id: string) => api.del(`/api/planner/practice/${id}`),
+    onSuccess: () => { for (const k of ['performance', 'planner', 'subject', 'today', 'week']) qc.invalidateQueries({ queryKey: [k] }); },
+  });
   if (q.isLoading) return <Spinner />;
   const d = q.data;
   if (!d.hasPlan) return (
@@ -127,7 +132,13 @@ export function PerformancePage() {
             {reviews > 0 && <p className="mb-4 text-[14px] text-ink-2">Revisões: {d.ratings.map((r: any) => `${RATING[r.rating]} ${r.n}`).join(' · ')}</p>}
             <ul className="space-y-1.5 text-[14px]">
               {d.logs.map((l: any) => (
-                <li key={l.id} className="flex justify-between gap-4"><span className="truncate">{l.name}</span><span className="tabular shrink-0 text-ink-2">{l.correct_count}/{l.questions_count} · {dateTimeBR(l.practiced_at)}</span></li>
+                <li key={l.id} className="flex items-center justify-between gap-4">
+                  <span className="truncate">{l.name}</span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="tabular text-ink-2">{l.correct_count}/{l.questions_count} · {dateTimeBR(l.practiced_at)}</span>
+                    <Button variant="destructive" size="sm" disabled={del.isPending} onClick={() => del.mutate(l.id)} aria-label={`Excluir registro — ${l.name}`}>Excluir</Button>
+                  </span>
+                </li>
               ))}
             </ul>
           </Disclosure>

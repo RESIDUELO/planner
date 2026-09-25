@@ -422,3 +422,43 @@ describe('FAMEMA (relatório sem anexo questão a questão)', () => {
     expect(hpv.rows[0].n).toBe(2);
   });
 });
+
+describe('Desfazer questões e zerar o perfil', () => {
+  it('registro de questões errado pode ser desfeito', async () => {
+    const g = new Client();
+    g.today = '2026-09-25';
+    await g.ok('POST', '/api/auth/guest');
+    const s = await g.ok('GET', '/api/me/study-settings');
+    await g.ok('PUT', '/api/me/study-settings', {
+      profile: { ...s.profile, preferred_start_time: null, preferred_end_time: null },
+      methods: s.methods.map((m: any) => ({ id: m.id, enabled: ['video', 'flashcards'].includes(m.code), minutes: m.estimated_minutes })),
+    });
+    await g.ok('POST', '/api/planner/generate', { editionIds: [ids.famerp], primaryEditionId: ids.famerp, startDate: '2026-09-25' });
+    const subj = (await g.ok('GET', '/api/planner')).subjects[0].subjectId;
+    const r = await g.ok('POST', `/api/planner/subjects/${subj}/practice`, { questions: 100, correct: 50 });
+    expect(r.id).toBeTruthy();
+    expect((await g.ok('GET', '/api/performance')).subjects.find((x: any) => x.subjectId === subj).answered).toBe(100);
+    await g.ok('DELETE', `/api/planner/practice/${r.id}`);
+    expect((await g.ok('GET', '/api/performance')).subjects.find((x: any) => x.subjectId === subj).answered).toBe(0);
+    ids.resetClientSubject = subj;
+    (globalThis as any).__resetClient = g;
+  });
+
+  it('zerar o perfil volta a conta ao estado de nova, sem tocar em outros usuários', async () => {
+    const g = (globalThis as any).__resetClient as Client;
+    await g.ok('POST', `/api/planner/subjects/${ids.resetClientSubject}/complete`, { done: true });
+    await g.ok('POST', `/api/planner/subjects/${ids.resetClientSubject}/practice`, { questions: 10, correct: 8 });
+    await g.ok('PUT', '/api/notes/2026-09-21', { content: 'nota' });
+    const studentBefore = (await student.ok('GET', '/api/planner')).subjects.filter((s: any) => s.status === 'studied').length;
+    await g.ok('POST', '/api/me/reset');
+    expect((await g.ok('GET', '/api/planner')).plan).toBeNull();
+    expect((await g.ok('GET', '/api/exams')).filter((e: any) => e.selected)).toEqual([]);
+    expect((await g.ok('GET', '/api/me/study-settings')).profile.configured).toBe(false);
+    expect((await g.ok('GET', '/api/performance')).logs).toEqual([]);
+    expect((await g.ok('GET', '/api/notes/2026-09-21')).content).toBe('');
+    // Continua logado e pode recomeçar
+    expect((await g.ok('GET', '/api/auth/me')).user).toBeTruthy();
+    // Outra aluna não foi afetada
+    expect((await student.ok('GET', '/api/planner')).subjects.filter((s: any) => s.status === 'studied').length).toBe(studentBefore);
+  });
+});

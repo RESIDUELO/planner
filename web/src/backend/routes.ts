@@ -383,3 +383,10 @@ route('PUT', '/api/notes/:week', async ({ ctx, params, body }) => {
   await q(ctx.sb.from('weekly_notes').upsert({ user_id: uid, week_start: week, content, updated_at: new Date().toISOString() }, { onConflict: 'user_id,week_start' }));
   return { ok: true };
 });
+
+// Zerar o perfil: volta a ser como uma conta nova (mantém nome e e-mail)
+route('POST', '/api/me/reset', async ({ ctx }) => {
+  await currentUserId(ctx);
+  await rpc(ctx, 'reset_my_data', {});
+  return { ok: true };
+});

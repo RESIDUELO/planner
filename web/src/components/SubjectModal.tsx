@@ -24,7 +24,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
   const invalidate = useInvalidateStudy();
   const pomodoro = usePomodoro();
   const nav = useNavigate();
-  const [msg, setMsg] = useState<{ tone: 'positive' | 'negative' | 'neutral'; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ tone: 'positive' | 'negative' | 'neutral'; text: string; undoId?: string } | null>(null);
   const [practice, setPractice] = useState({ questions: '', correct: '' });
   const [early, setEarly] = useState(false);
   const onError = (e: unknown) => setMsg({ tone: 'negative', text: errorMessage(e) });
@@ -44,16 +44,20 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
   });
   const log = useMutation({
     mutationFn: () => api.post(`/api/planner/subjects/${subjectId}/practice`, { questions: Number(practice.questions), correct: Number(practice.correct), minutes: null }),
+    onMutate: () => setMsg(null),
     onSuccess: (r: any) => {
       invalidate();
       setPractice({ questions: '', correct: '' });
-      setMsg({ tone: r.reviewAnticipated ? 'neutral' : 'positive', text: r.reviewAnticipated
-        ? 'Registrado. Como o acerto ficou abaixo de 60%, a revisão foi antecipada.'
+      setMsg({ undoId: r.id, tone: r.reviewAnticipated ? 'neutral' : 'positive', text: r.reviewAnticipated
+        ? `Registrado: ${r.performance?.questions_answered ?? ''} questões no total. Como o acerto ficou abaixo de 60%, a revisão foi antecipada.`
         : r.studied ? 'Registrado. Assunto concluído — revisão agendada.' : 'Questões registradas.' });
     },
     onError,
   });
-  const undo = useMutation({ mutationFn: (id: string) => api.del(`/api/planner/practice/${id}`), onSuccess: invalidate });
+  const undo = useMutation({
+    mutationFn: (id: string) => api.del(`/api/planner/practice/${id}`),
+    onSuccess: () => { invalidate(); setMsg({ tone: 'neutral', text: 'Registro de questões excluído.' }); }, onError,
+  });
 
   const d = q.data;
   const s = d?.subject;
@@ -116,7 +120,12 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
             </div>
           )}
 
-          {msg && <Note tone={msg.tone} className="mt-6">{msg.text}</Note>}
+          {msg && (
+            <div className="mt-6 flex flex-wrap items-baseline gap-x-4">
+              <Note tone={msg.tone}>{msg.text}</Note>
+              {msg.undoId && <Button variant="plain" size="sm" loading={undo.isPending} onClick={() => undo.mutate(msg.undoId!)}>Desfazer</Button>}
+            </div>
+          )}
 
           <Advanced className="mt-12 border-t border-line pt-5">
             <div className="space-y-10">
@@ -148,6 +157,16 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
                   <input className="field w-24" aria-label="Acertos" type="number" min={0} required placeholder="Acertos" value={practice.correct} onChange={(e) => setPractice({ ...practice, correct: e.target.value })} />
                   <Button type="submit" variant="secondary" loading={log.isPending}>Registrar</Button>
                 </form>
+                {d.practice.length > 0 && (
+                  <ul className="mt-4 border-t border-line text-[14px]" aria-label="Registros de questões">
+                    {d.practice.map((p: any) => (
+                      <li key={p.id} className="flex items-center justify-between gap-4 border-b border-line py-2">
+                        <span><span className="tabular text-ink">{p.correct_count}/{p.questions_count}</span> <span className="text-ink-3">· {dateTimeBR(p.practiced_at)}</span></span>
+                        <Button variant="destructive" size="sm" disabled={undo.isPending} onClick={() => undo.mutate(p.id)} aria-label={`Excluir registro de ${p.questions_count} questões`}>Excluir</Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
 
               <div className="border-t border-line">
@@ -198,19 +217,9 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
                   </dl>
                 </Disclosure>
 
-                {(d.subtopics.length > 0 || d.reviews.length > 0 || d.practice.length > 0) && (
+                {(d.subtopics.length > 0 || d.reviews.length > 0) && (
                   <Disclosure summary="Histórico e subassuntos" className="border-b border-line">
                     {d.subtopics.length > 0 && <p className="text-[14px] leading-relaxed text-ink-2">{d.subtopics.slice(0, 40).join(' · ')}</p>}
-                    {d.practice.length > 0 && (
-                      <ul className="mt-4 space-y-1 text-[14px] text-ink-2">
-                        {d.practice.map((p: any) => (
-                          <li key={p.id} className="flex items-center justify-between">
-                            <span>{dateTimeBR(p.practiced_at)} · {p.correct_count}/{p.questions_count}</span>
-                            <Button variant="destructive" size="sm" onClick={() => undo.mutate(p.id)}>Excluir</Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
                     {d.reviews.length > 0 && (
                       <ul className="mt-4 space-y-1 text-[14px] text-ink-2">
                         {d.reviews.map((r: any, i: number) => (

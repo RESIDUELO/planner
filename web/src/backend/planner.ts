@@ -487,10 +487,10 @@ export async function logPractice(ctx: Ctx, subjectId: string, body: { questions
   if (body.correct > body.questions) throw badRequest('Acertos não podem ser maiores que o total de questões.');
   const ps = await planSubjectRow(ctx, userId, subjectId);
   if (!ps) throw badRequest('Assunto não pertence ao planner ativo.');
-  await q(ctx.sb.from('question_practice_logs').insert({
+  const inserted: any = await q(ctx.sb.from('question_practice_logs').insert({
     subject_id: subjectId, questions_count: body.questions, correct_count: body.correct,
     time_spent_minutes: body.minutes ?? null, source: body.source ?? null,
-  }));
+  }).select('id').single());
   // Marca o método "Questões" no checklist, se o usuário o utiliza
   // Se "Questões" é uma das atividades escolhidas para o assunto, ela fica marcada.
   const methods = await loadMethods(ctx, userId);
@@ -507,7 +507,7 @@ export async function logPractice(ctx: Ctx, subjectId: string, body: { questions
     reviewAnticipated = (updated as any[]).length > 0;
   }
   const performance = await q(ctx.sb.from('user_subject_performance').select('*').eq('user_id', userId).eq('subject_id', subjectId).maybeSingle());
-  return { performance: performance ? { ...(performance as any), accuracy: Number((performance as any).accuracy) } : null, studied, reviewAnticipated };
+  return { id: inserted.id as string, performance: performance ? { ...(performance as any), accuracy: Number((performance as any).accuracy) } : null, studied, reviewAnticipated };
 }
 
 /** Momento do registro: agora (ou meio-dia do "hoje" simulado, nos testes). */

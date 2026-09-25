@@ -139,6 +139,15 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await dialog.getByRole('spinbutton', { name: 'Acertos' }).fill('17');
   await dialog.getByRole('button', { name: 'Registrar' }).click();
   await expect(dialog.getByText('Questões registradas.')).toBeVisible();
+  // Registro errado pode ser desfeito na hora (ou excluído na lista)
+  await expect(dialog.getByRole('button', { name: 'Desfazer' })).toBeVisible();
+  await dialog.getByRole('spinbutton', { name: 'Questões feitas' }).fill('100');
+  await dialog.getByRole('spinbutton', { name: 'Acertos' }).fill('10');
+  await dialog.getByRole('button', { name: 'Registrar' }).click();
+  await expect(dialog.getByRole('list', { name: 'Registros de questões' }).getByRole('listitem')).toHaveCount(2);
+  await dialog.getByRole('button', { name: 'Desfazer' }).click();
+  await expect(dialog.getByRole('list', { name: 'Registros de questões' }).getByRole('listitem')).toHaveCount(1);
+  await expect(dialog.getByText('Registro de questões excluído.')).toBeVisible();
   await expect(dialog.getByText('85%')).toBeVisible();
   await dialog.getByRole('button', { name: 'Domínio e memória' }).click();
   await expect(dialog.getByText('82%')).toBeVisible();
@@ -186,4 +195,12 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(circle).toHaveAttribute('aria-checked', 'false');
   await circle.click();
   await expect(circle).toHaveAttribute('aria-checked', 'true');
+
+  // Zerar o perfil: volta ao início, como uma conta nova
+  await page.goto('configuracoes');
+  await page.getByRole('button', { name: 'Zerar meu perfil' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Zerar tudo' }).click();
+  await expect(page).toHaveURL(HOME);
+  await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
+  await expect(page.getByLabel(/Selecionar FAMERP/)).not.toBeChecked();
 });
