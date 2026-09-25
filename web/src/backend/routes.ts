@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, studyWeekdays } from './planner';
+import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
@@ -294,6 +294,7 @@ route('GET', '/api/planner/subjects/:id', async ({ ctx, params }) => {
   const reviews = await q(ctx.sb.from('review_logs').select('reviewed_at, rating, previous_interval, new_interval, scheduled_next_review, retrievability_at_review, days_until_exam')
     .eq('user_id', uid).eq('subject_id', id).order('reviewed_at', { ascending: false }));
   const children = await rpc<string[]>(ctx, 'subject_children', { p_id: id });
+  const allMethods = (await loadMethods(ctx, uid)).map((m) => ({ id: m.id, code: m.code, name: m.name, enabled: m.enabled, minutes: m.estimated_minutes }));
   const primary = s.exams.find((e: any) => e.is_primary) as any;
   const n = subj.yearsAnalyzed;
   const pct = (subj.percentage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
@@ -302,13 +303,23 @@ route('GET', '/api/planner/subjects/:id', async ({ ctx, params }) => {
     : `${subj.name} está em #${subj.rank} porque representou, em média ponderada, ${pct}% das questões das provas selecionadas (peso maior para a prova principal e para as provas mais próximas).`;
   return {
     subject: subj, explanation, examWeights: s.plan.summary.weights, exams: s.plan.summary.exams, subtopics: children,
-    practice, reviews, weights: PRIORITY.weights, mastery: { priorWeight: MASTERY.priorWeight, priorMean: MASTERY.priorMean },
+    practice, reviews, allMethods, weights: PRIORITY.weights, mastery: { priorWeight: MASTERY.priorWeight, priorMean: MASTERY.priorMean },
   };
 });
 
 route('POST', '/api/planner/subjects/:id/methods/:methodId', async ({ ctx, params, body }) => {
   const { done } = z.object({ done: z.boolean() }).parse(body);
   return setMethodDone(ctx, uuid.parse(params.id), uuid.parse(params.methodId), done);
+});
+
+route('POST', '/api/planner/subjects/:id/complete', async ({ ctx, params, body }) => {
+  const { done } = z.object({ done: z.boolean() }).parse(body);
+  return setSubjectDone(ctx, uuid.parse(params.id), done);
+});
+
+route('PUT', '/api/planner/subjects/:id/activities', async ({ ctx, params, body }) => {
+  const { methodIds } = z.object({ methodIds: z.array(uuid).max(20).nullable() }).parse(body);
+  return setSubjectActivities(ctx, uuid.parse(params.id), methodIds);
 });
 
 route('POST', '/api/planner/subjects/:id/practice', async ({ ctx, params, body }) => {

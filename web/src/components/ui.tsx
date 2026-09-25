@@ -4,7 +4,8 @@
  */
 import { clsx } from 'clsx';
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Info, MoreHorizontal, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Info, MoreHorizontal, X } from 'lucide-react';
+import { tintFor } from '../lib/areas';
 
 // ---------------------------------------------------------------- Botões
 type ButtonVariant = 'primary' | 'secondary' | 'plain' | 'destructive';
@@ -24,9 +25,9 @@ export function Button({
         pill && size === 'md' && 'px-5 py-2 text-[15px]',
         pill && size === 'lg' && 'px-7 py-3 text-[17px]',
         !pill && (size === 'sm' ? 'text-[14px]' : 'text-[15px]'),
-        variant === 'primary' && 'bg-accent text-white hover:bg-accent-hover active:scale-[0.98]',
-        variant === 'secondary' && 'bg-fill text-ink hover:bg-fill-strong active:scale-[0.98]',
-        variant === 'plain' && 'text-accent hover:underline underline-offset-4',
+        variant === 'primary' && 'bg-ink text-canvas hover:bg-accent-hover active:scale-[0.98]',
+        variant === 'secondary' && 'border border-line text-ink hover:border-ink active:scale-[0.98]',
+        variant === 'plain' && 'text-ink underline decoration-line underline-offset-4 hover:decoration-ink',
         variant === 'destructive' && 'text-negative hover:underline underline-offset-4',
         className,
       )}
@@ -51,8 +52,8 @@ export function Title({ children, eyebrow, trailing, subtitle }: { children: Rea
   return (
     <header className="mb-10 flex items-end justify-between gap-4 animate-in sm:mb-14">
       <div className="min-w-0">
-        {eyebrow && <div className="mb-1 text-[15px] text-ink-2">{eyebrow}</div>}
-        <h1 className="text-[34px] leading-[1.1] font-semibold tracking-[-0.03em] sm:text-[48px]">{children}</h1>
+        {eyebrow && <div className="mb-2 text-[12px] tracking-[0.14em] text-ink-2 uppercase">{eyebrow}</div>}
+        <h1 className="font-display text-[44px] leading-[1.02] tracking-[-0.01em] sm:text-[60px]">{children}</h1>
         {subtitle && <p className="mt-2 text-[17px] text-ink-2">{subtitle}</p>}
       </div>
       {trailing && <div className="shrink-0 pb-1">{trailing}</div>}
@@ -110,8 +111,8 @@ export function Progress({ value, className, label, tone = 'accent' }: { value: 
   const [w, setW] = useState(0);
   useEffect(() => { const t = requestAnimationFrame(() => setW(v)); return () => cancelAnimationFrame(t); }, [v]);
   return (
-    <div className={clsx('h-1 w-full overflow-hidden rounded-full bg-fill-strong', className)} role="progressbar" aria-valuenow={Math.round(v * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
-      <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-apple', tone === 'accent' && 'bg-accent', tone === 'positive' && 'bg-positive', tone === 'ink' && 'bg-ink')} style={{ width: `${w * 100}%` }} />
+    <div className={clsx('h-[3px] w-full overflow-hidden rounded-full bg-fill', className)} role="progressbar" aria-valuenow={Math.round(v * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+      <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-apple', tone === 'accent' && 'bg-ink', tone === 'positive' && 'bg-[#5fcf92]', tone === 'ink' && 'bg-ink')} style={{ width: `${w * 100}%` }} />
     </div>
   );
 }
@@ -119,7 +120,7 @@ export function Progress({ value, className, label, tone = 'accent' }: { value: 
 export function Stat({ value, label, className }: { value: ReactNode; label: ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <div className="tabular text-[28px] leading-tight font-semibold tracking-[-0.02em]">{value}</div>
+      <div className="tabular font-display text-[36px] leading-tight">{value}</div>
       <div className="text-[14px] text-ink-2">{label}</div>
     </div>
   );
@@ -142,7 +143,7 @@ export function Spinner() {
 export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
     <div className="py-20 text-center animate-in">
-      <h3 className="text-[22px] font-semibold tracking-tight">{title}</h3>
+      <h3 className="font-display text-[30px]">{title}</h3>
       {children && <div className="mx-auto mt-2 max-w-sm text-[15px] text-ink-2">{children}</div>}
       {action && <div className="mt-6">{action}</div>}
     </div>
@@ -162,13 +163,13 @@ export function Sheet({ open, onClose, title, children, wide, footer }: { open: 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim animate-fade sm:items-center sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" className={clsx('relative flex max-h-[92vh] w-full flex-col rounded-t-[22px] bg-surface shadow-[0_10px_40px_rgba(0,0,0,0.12)] animate-sheet sm:rounded-[22px]', wide ? 'sm:max-w-2xl' : 'sm:max-w-lg')}>
+      <div role="dialog" aria-modal="true" className={clsx('relative flex max-h-[92vh] w-full flex-col rounded-t-[22px] border border-line bg-canvas animate-sheet sm:rounded-[20px]', wide ? 'sm:max-w-2xl' : 'sm:max-w-lg')}>
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-fill-strong sm:hidden" />
-        <button onClick={onClose} aria-label="Fechar" className="absolute top-4 right-4 z-10 rounded-full bg-fill p-1.5 text-ink-2 transition hover:bg-fill-strong">
+        <button onClick={onClose} aria-label="Fechar" className="absolute top-4 right-4 z-10 rounded-full p-1.5 text-ink-2 transition hover:bg-fill hover:text-ink">
           <X className="h-4 w-4" />
         </button>
         <div className="overflow-y-auto px-6 pt-8 pb-8 sm:px-10 sm:pt-10">
-          {title && <h2 className="mb-6 pr-8 text-[28px] leading-tight font-semibold tracking-[-0.025em]">{title}</h2>}
+          {title && <h2 className="mb-6 pr-8 font-display text-[34px] leading-tight">{title}</h2>}
           {children}
         </div>
         {footer && <div className="flex justify-end gap-3 border-t border-line px-6 py-4 sm:px-10">{footer}</div>}
@@ -191,10 +192,10 @@ export function Menu({ items, label = 'Mais opções', trigger }: { items: { lab
     <div className="relative" ref={ref}>
       <button aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}
         className="flex items-center rounded-full text-ink-2 transition hover:text-ink">
-        {trigger ?? <span className="rounded-full bg-fill p-2 hover:bg-fill-strong"><MoreHorizontal className="h-4 w-4" /></span>}
+        {trigger ?? <span className="rounded-full p-2 hover:bg-fill"><MoreHorizontal className="h-4 w-4" /></span>}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-40 mt-2 min-w-56 overflow-hidden rounded-[14px] border border-line bg-surface py-1 shadow-[0_8px_30px_rgba(0,0,0,0.08)] animate-fade">
+        <div role="menu" className="absolute right-0 z-40 mt-2 min-w-56 overflow-hidden rounded-[14px] border border-line bg-canvas py-1 animate-fade">
           {items.filter((i) => !i.hidden).map((i) => (
             <button key={i.label} role="menuitem" onClick={() => { setOpen(false); i.onClick(); }}
               className={clsx('block w-full px-4 py-2.5 text-left text-[15px] transition hover:bg-fill', i.destructive ? 'text-negative' : 'text-ink')}>
@@ -223,11 +224,11 @@ export function Disclosure({ summary, children, defaultOpen = false, className }
 
 export function Segmented<T extends string>({ value, onChange, options, className }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; className?: string }) {
   return (
-    <div role="tablist" className={clsx('inline-flex rounded-[10px] bg-fill p-0.5', className)}>
+    <div role="tablist" className={clsx('inline-flex gap-5', className)}>
       {options.map((o) => (
         <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
-          className={clsx('rounded-[8px] px-4 py-1.5 text-[14px] transition-all duration-200 ease-apple',
-            value === o.value ? 'bg-canvas font-medium text-ink shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:bg-fill-strong' : 'text-ink-2 hover:text-ink')}>
+          className={clsx('border-b py-1 text-[15px] transition-colors duration-200 ease-apple',
+            value === o.value ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink')}>
           {o.label}
         </button>
       ))}
@@ -238,8 +239,8 @@ export function Segmented<T extends string>({ value, onChange, options, classNam
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
-      className={clsx('relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 ease-apple', checked ? 'bg-positive' : 'bg-fill-strong')}>
-      <span className={clsx('absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-[0_2px_4px_rgba(0,0,0,0.15)] transition-transform duration-200 ease-apple', checked && 'translate-x-5')} />
+      className={clsx('relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 ease-apple', checked ? 'bg-ink' : 'bg-fill-strong')}>
+      <span className={clsx('absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-canvas transition-transform duration-200 ease-apple', checked && 'translate-x-5')} />
     </button>
   );
 }
@@ -272,10 +273,55 @@ export function Bars({ data, height = 80, max }: { data: { label: string; value:
     <div className="flex items-end gap-[3px]" style={{ height }}>
       {data.map((d) => (
         <div key={d.label} title={d.title ?? `${d.label}: ${d.value}`} className="group flex h-full flex-1 items-end">
-          <div className={clsx('w-full rounded-t-[3px] transition-colors duration-150', d.value ? 'bg-accent/70 group-hover:bg-accent' : 'bg-fill-strong')}
+          <div className={clsx('w-full rounded-t-[3px] transition-colors duration-150', d.value ? 'bg-lilac group-hover:bg-ink' : 'bg-fill')}
             style={{ height: d.value ? Math.max(3, (d.value / m) * height) : 2 }} />
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Planner de papel
+/** Círculo de marcar, como num planner impresso. */
+export function CheckCircle({ on, size = 'md', className }: { on: boolean; size?: 'sm' | 'md'; className?: string }) {
+  return (
+    <span className={clsx('flex shrink-0 items-center justify-center rounded-full border transition-all duration-200 ease-apple',
+      size === 'sm' ? 'h-5 w-5' : 'h-6 w-6', on ? 'border-ink bg-ink text-canvas' : 'border-ink-3 text-transparent', className)}>
+      <Check className={size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'} strokeWidth={2.5} />
+    </span>
+  );
+}
+
+/** Botão de marcar/desmarcar com o círculo. */
+export function CheckButton({ on, onChange, label, disabled, size }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; size?: 'sm' | 'md' }) {
+  return (
+    <button type="button" role="checkbox" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}
+      className="-m-2 rounded-full p-2 transition-opacity hover:opacity-70 disabled:opacity-40">
+      <CheckCircle on={on} size={size} />
+    </button>
+  );
+}
+
+/** Marca-texto pastel pela grande área. */
+export function Tint({ area, children, className }: { area?: string | null; children: ReactNode; className?: string }) {
+  return <span className={clsx('tint', `tint-${tintFor(area)}`, className)}>{children}</span>;
+}
+
+/** Rótulo pequeno em versalete. */
+export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={clsx('text-[11px] font-medium tracking-[0.16em] text-ink-2 uppercase', className)}>{children}</div>;
+}
+
+/** "Opções avançadas": escondidas por padrão, nunca obrigatórias. */
+export function Advanced({ children, className, label = 'Opções avançadas' }: { children: ReactNode; className?: string; label?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={className}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
+        className="inline-flex items-center gap-1.5 text-[13px] text-ink-2 transition hover:text-ink">
+        {label}<ChevronDown className={clsx('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')} />
+      </button>
+      {open && <div className="mt-6 animate-in">{children}</div>}
     </div>
   );
 }

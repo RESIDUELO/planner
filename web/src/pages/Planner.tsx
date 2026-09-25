@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { Check, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Search, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
-import { dateBR, daysBetween, minutes, pct, relativeDays, shortDate, todayBR } from '../lib/format';
-import { Button, Disclosure, Empty, Field, Hint, Menu, Note, Progress, Segmented, Sheet, Spinner, Title, Toggle } from '../components/ui';
-import { SubjectModal } from '../components/SubjectModal';
+import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/format';
+import { areaShort, tintFor } from '../lib/areas';
+import { usePomodoro } from '../lib/pomodoro';
+import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
+import { SubjectModal, useInvalidateStudy } from '../components/SubjectModal';
+import { addDays, weekday } from '../../../shared/dates';
 
 export function PlannerPage() {
   const q = useQuery({ queryKey: ['planner'], queryFn: () => api.get('/api/planner') });
@@ -17,7 +20,7 @@ export function PlannerPage() {
 }
 
 // ============================================================================
-// Montar o planner — uma pergunta por vez
+// Montar o planner — o mínimo: provas e como você estuda
 // ============================================================================
 
 function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
@@ -42,7 +45,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   useEffect(() => {
     if (settings.data && !profile) {
       setProfile({ ...settings.data.profile, start_date: settings.data.profile.configured ? settings.data.profile.start_date : todayBR() });
-      setMethods(settings.data.methods.map((m: any) => ({ ...m, enabled: m.configured ? m.enabled : ['video', 'flashcards', 'questions'].includes(m.code), minutes: m.estimated_minutes })));
+      setMethods(settings.data.methods.map((m: any) => ({ ...m, enabled: m.configured ? m.enabled : ['video', 'flashcards'].includes(m.code), minutes: m.estimated_minutes })));
     }
   }, [settings.data]);
 
@@ -67,9 +70,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const dateOf = (e: any) => dates[e.edition_id] ?? e.exam_date ?? '';
   const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const enabledMethods = methods.filter((m) => m.enabled);
-  const TOTAL = 4;
-  const canNext = [sel.length > 0 && !!primary && !missingDate, Number(profile.daily_hours) > 0, enabledMethods.length > 0, true][step];
-  const questions = ['Quais provas você vai fazer?', 'Quanto tempo você tem?', 'Como você estuda?', 'Tudo pronto.'];
+  const canNext = sel.length > 0 && !!primary && !missingDate;
 
   const toggleExam = (id: string) => {
     const on = sel.includes(id);
@@ -81,29 +82,28 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 
   return (
     <div className="mx-auto max-w-xl">
-      <div className="mb-3 flex items-center justify-between text-[14px] text-ink-3 animate-fade">
-        <span className="tabular">{step + 1} de {TOTAL}</span>
+      <div className="mb-10 flex items-center justify-between animate-fade">
+        <Eyebrow>Passo {step + 1} de 2</Eyebrow>
         {canCancel && <Button variant="plain" size="sm" onClick={onDone}>Cancelar</Button>}
       </div>
-      <Progress value={(step + 1) / TOTAL} className="mb-12" />
-      <h1 key={step} className="text-[34px] leading-tight font-semibold tracking-[-0.03em] animate-in sm:text-[40px]">{questions[step]}</h1>
+      <h1 key={step} className="font-display text-[44px] leading-[1.05] animate-in sm:text-[56px]">{step === 0 ? 'Qual prova você vai fazer?' : 'Como você estuda?'}</h1>
 
       <div key={`s${step}`} className="mt-10 animate-in">
         {step === 0 && (available.length === 0 ? (
           <p className="text-[17px] text-ink-2">Ainda não há provas disponíveis.</p>
         ) : (
           <>
-            <div className="divide-y divide-line border-y border-line">
+            <div className="border-t border-line">
               {available.map((e) => {
                 const on = sel.includes(e.edition_id);
                 return (
-                  <div key={e.edition_id} className="py-4">
+                  <div key={e.edition_id} className="border-b border-line py-5">
                     <label className="flex cursor-pointer items-center gap-4">
                       <input type="checkbox" className="sr-only" checked={on} aria-label={`Selecionar ${e.institution}`} onChange={() => toggleExam(e.edition_id)} />
                       <CheckCircle on={on} />
                       <span className="flex-1">
-                        <span className="block text-[19px] font-medium">{e.institution}</span>
-                        <span className="block text-[14px] text-ink-2">{e.exam_name} · {e.history.message}</span>
+                        <span className="block font-display text-[26px] leading-tight">{e.institution}</span>
+                        <span className="block text-[13px] text-ink-2">{e.exam_name} · {e.history.message}</span>
                       </span>
                     </label>
                     {on && (
@@ -114,7 +114,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
                         </Field>
                         {chosen.length > 1 && (
                           <label className="flex items-center gap-2 pb-2.5 text-[15px] text-ink-2">
-                            <input type="radio" name="primary" className="accent-[var(--accent)]" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
+                            <input type="radio" name="primary" className="accent-[var(--ink)]" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
                           </label>
                         )}
                       </div>
@@ -123,119 +123,114 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
                 );
               })}
             </div>
-            <p className="mt-4 text-[14px] text-ink-3">Com mais de uma prova, a principal e a mais próxima pesam mais no plano.</p>
+            {chosen.length > 1 && <p className="mt-4 text-[13px] text-ink-3">Com mais de uma prova, a principal e a mais próxima pesam mais no plano.</p>}
           </>
         ))}
 
         {step === 1 && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Horas disponíveis por dia">
-                <input type="number" min={0.5} max={16} step={0.5} className="field" value={profile.daily_hours} onChange={(e) => setProfile({ ...profile, daily_hours: e.target.value })} />
-              </Field>
-              <Field label="Questões por dia">
-                <input type="number" min={0} max={500} className="field" value={profile.questions_per_day} onChange={(e) => setProfile({ ...profile, questions_per_day: e.target.value })} />
-              </Field>
-              <Field label="Dias de estudo por semana">
-                <input type="number" min={1} max={7} className="field" value={profile.study_days_per_week} onChange={(e) => setProfile({ ...profile, study_days_per_week: e.target.value })} />
-              </Field>
-              <Field label="Começar em">
-                <input type="date" className="field" value={profile.start_date} onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
-              </Field>
-            </div>
-            <div className="divide-y divide-line border-y border-line">
-              <div className="flex items-center justify-between py-3"><span className="text-[17px]">Estudo aos sábados</span><Toggle label="Estudo aos sábados" checked={profile.study_saturday} onChange={(v) => setProfile({ ...profile, study_saturday: v })} /></div>
-              <div className="flex items-center justify-between py-3"><span className="text-[17px]">Estudo aos domingos</span><Toggle label="Estudo aos domingos" checked={profile.study_sunday} onChange={(v) => setProfile({ ...profile, study_sunday: v })} /></div>
-            </div>
-            <p className="text-[14px] text-ink-3">O planner nunca agenda mais do que as horas que você informar.</p>
-          </div>
-        )}
-
-        {step === 2 && (
           <>
-            <div className="divide-y divide-line border-y border-line">
+            <p className="-mt-4 mb-6 text-[15px] text-ink-2">Marque o que você costuma fazer. Um assunto fica concluído quando você fizer tudo o que marcou.</p>
+            <div className="flex flex-wrap gap-2.5">
               {methods.map((m, i) => (
-                <label key={m.id} className="flex cursor-pointer items-center gap-4 py-4">
+                <label key={m.id} className={clsx('cursor-pointer rounded-full border px-4 py-2 text-[16px] transition select-none',
+                  m.enabled ? 'border-ink bg-ink text-canvas' : 'border-line text-ink hover:border-ink')}>
                   <input type="checkbox" className="sr-only" checked={m.enabled} aria-label={m.name}
                     onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />
-                  <CheckCircle on={m.enabled} />
-                  <span className="text-[19px]">{m.name}</span>
+                  {m.name}
                 </label>
               ))}
             </div>
-            <p className="mt-4 text-[14px] text-ink-3">Cada método marcado vira um item do checklist de cada assunto.</p>
-          </>
-        )}
-
-        {step === 3 && (
-          <dl className="space-y-6 text-[17px]">
-            <div><dt className="text-[14px] text-ink-2">Provas</dt><dd className="mt-1">{chosen.map((e) => <div key={e.edition_id}>{e.institution} · {shortDate(dateOf(e))}{chosen.length > 1 && e.edition_id === primary ? ' (principal)' : ''}</div>)}</dd></div>
-            <div><dt className="text-[14px] text-ink-2">Tempo</dt><dd className="mt-1">{profile.daily_hours} h por dia, {profile.study_days_per_week} dias por semana, {profile.questions_per_day} questões por dia</dd></div>
-            <div><dt className="text-[14px] text-ink-2">Métodos</dt><dd className="mt-1">{enabledMethods.map((m) => m.name).join(', ')}</dd></div>
             {chosen.some((e) => e.history.sufficiency === 'insufficient' || e.history.sufficiency === 'none') && (
-              <Note>Algumas provas têm poucos dados históricos: {chosen.filter((e) => !['good', 'limited'].includes(e.history.sufficiency)).map((e) => `${e.institution} (${e.history.message})`).join('; ')}</Note>
+              <Note className="mt-8">Algumas provas têm poucos dados históricos: {chosen.filter((e) => !['good', 'limited'].includes(e.history.sufficiency)).map((e) => `${e.institution} (${e.history.message})`).join('; ')}</Note>
             )}
-            {error && <Note tone="negative">{error}</Note>}
-          </dl>
+
+            <Advanced className="mt-12 border-t border-line pt-5">
+              <div className="space-y-8">
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Horas por dia">
+                    <input type="number" min={0.5} max={16} step={0.5} className="field" value={profile.daily_hours} onChange={(e) => setProfile({ ...profile, daily_hours: e.target.value })} />
+                  </Field>
+                  <Field label="Questões por dia">
+                    <input type="number" min={0} max={500} className="field" value={profile.questions_per_day} onChange={(e) => setProfile({ ...profile, questions_per_day: e.target.value })} />
+                  </Field>
+                  <Field label="Dias de estudo por semana">
+                    <input type="number" min={1} max={7} className="field" value={profile.study_days_per_week} onChange={(e) => setProfile({ ...profile, study_days_per_week: e.target.value })} />
+                  </Field>
+                  <Field label="Começar em">
+                    <input type="date" className="field" value={profile.start_date} onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
+                  </Field>
+                </div>
+                <div className="border-y border-line">
+                  <div className="flex items-center justify-between py-3"><span className="text-[15px]">Estudo aos sábados</span><Toggle label="Estudo aos sábados" checked={profile.study_saturday} onChange={(v) => setProfile({ ...profile, study_saturday: v })} /></div>
+                  <div className="flex items-center justify-between border-t border-line py-3"><span className="text-[15px]">Estudo aos domingos</span><Toggle label="Estudo aos domingos" checked={profile.study_sunday} onChange={(v) => setProfile({ ...profile, study_sunday: v })} /></div>
+                </div>
+                {enabledMethods.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-[13px] text-ink-2">Tempo estimado por atividade (usado só para distribuir os assuntos nos dias)</p>
+                    <div className="space-y-2">
+                      {enabledMethods.map((m) => (
+                        <label key={m.id} className="flex items-center justify-between gap-4 text-[15px]">
+                          {m.name}
+                          <span className="flex items-center gap-2 text-ink-2">
+                            <input type="number" min={5} max={600} className="field w-20 text-right" aria-label={`Minutos — ${m.name}`} value={m.minutes}
+                              onChange={(e) => setMethods(methods.map((x) => (x.id === m.id ? { ...x, minutes: e.target.value } : x)))} /> min
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Advanced>
+            {error && <Note tone="negative" className="mt-6">{error}</Note>}
+          </>
         )}
       </div>
 
       <div className="mt-14 flex items-center justify-between">
-        {step > 0 ? <Button variant="plain" onClick={() => setStep(step - 1)}>Voltar</Button> : <span />}
-        {step < TOTAL - 1
-          ? <Button size="lg" disabled={!canNext} onClick={() => setStep(step + 1)}>Continuar</Button>
-          : <Button size="lg" loading={generate.isPending} onClick={() => { setError(null); generate.mutate(); }}>Gerar planner</Button>}
+        {step > 0 ? <Button variant="plain" onClick={() => setStep(0)}>Voltar</Button> : <span />}
+        {step === 0
+          ? <Button size="lg" disabled={!canNext} onClick={() => setStep(1)}>Continuar</Button>
+          : <Button size="lg" disabled={!enabledMethods.length || !(Number(profile.daily_hours) > 0)} loading={generate.isPending} onClick={() => { setError(null); generate.mutate(); }}>Criar meu planner</Button>}
       </div>
     </div>
   );
 }
 
-function CheckCircle({ on }: { on: boolean }) {
-  return (
-    <span className={clsx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-all duration-200 ease-apple',
-      on ? 'border-accent bg-accent text-white' : 'border-ink-3/50')}>
-      {on && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
-    </span>
-  );
-}
+// ============================================================================
+// Planner — semana editorial, sem horários
+// ============================================================================
 
-// ============================================================================
-// Planner
-// ============================================================================
+const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const mondayOf = (d: string) => addDays(d, -((weekday(d) + 6) % 7));
 
 function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => void }) {
-  const [tab, setTab] = useState<'today' | 'subjects' | 'multi'>('today');
+  const [tab, setTab] = useState<'week' | 'subjects' | 'multi'>('week');
   const [open, setOpen] = useState<string | null>(null);
   const [about, setAbout] = useState(false);
   const qc = useQueryClient();
   const replan = useMutation({ mutationFn: () => api.post('/api/planner/replan'), onSuccess: () => qc.invalidateQueries() });
-  const today = todayBR();
+  const exam = data.exams.find((e: any) => e.is_primary) ?? data.exams[0];
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Title eyebrow={tab === 'today' ? dateBR(today, { weekday: 'long', day: 'numeric', month: 'long' }) : data.plan.name.replace(/^Planner /, '')}
+      <Title eyebrow={exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}` : data.plan.name.replace(/^Planner /, '')}
         trailing={<Menu items={[
           { label: 'Recalcular a partir de hoje', onClick: () => replan.mutate() },
           { label: 'Reconfigurar planner', onClick: onReconfigure },
           { label: 'Sobre este plano', onClick: () => setAbout(true) },
         ]} />}>
-        {tab === 'today' ? 'Hoje' : tab === 'subjects' ? 'Assuntos' : 'Combinado'}
+        Planner
       </Title>
 
-      <Segmented className="-mt-6 mb-12" value={tab} onChange={setTab} options={[
-        { value: 'today', label: 'Hoje' },
+      <Segmented className="-mt-4 mb-12" value={tab} onChange={setTab} options={[
+        { value: 'week', label: 'Semana' },
         { value: 'subjects', label: 'Assuntos' },
         ...(data.exams.length > 1 ? [{ value: 'multi' as const, label: 'Combinado' }] : []),
       ]} />
 
-      {data.overdueActivities > 0 && tab === 'today' && (
-        <p className="-mt-6 mb-10 text-[15px] text-ink-2">
-          {data.overdueActivities} atividade{data.overdueActivities > 1 ? 's' : ''} atrasada{data.overdueActivities > 1 ? 's' : ''}.{' '}
-          <Button variant="plain" onClick={() => replan.mutate()} loading={replan.isPending}>Reorganizar até a prova</Button>
-        </p>
-      )}
-
-      {tab === 'today' && <TodayView onOpen={setOpen} next={data.subjects.find((x: any) => x.status !== 'studied' && x.scheduled)} />}
+      {tab === 'week' && <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} />}
       {tab === 'subjects' && <SubjectList data={data} onOpen={setOpen} />}
       {tab === 'multi' && <MultiTable data={data} onOpen={setOpen} />}
 
@@ -245,90 +240,150 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   );
 }
 
-function TodayView({ onOpen, next }: { onOpen: (id: string) => void; next?: any }) {
-  const q = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });
-  if (q.isLoading) return <Spinner />;
-  const t = q.data;
-  if (!t) return null;
-  const study = t.newSubjects as any[];
-  const main = study.filter((s) => !s.overflow);
-  const extra = study.filter((s) => s.overflow);
-
-  return (
-    <div className="space-y-16">
-      {!t.isStudyDay && <p className="text-[17px] text-ink-2">Hoje não é um dia de estudo no seu planejamento.</p>}
-      {study.length === 0 && t.reviews.length === 0 ? (
-        <Empty title="Tudo em dia." action={next && <Button variant="secondary" onClick={() => onOpen(next.subjectId)}>Adiantar {next.name}</Button>}>
-          {next ? 'Você concluiu o que estava planejado para hoje.' : 'Aproveite para fazer questões dos assuntos já estudados.'}
-        </Empty>
-      ) : (
-        <>
-          {main.length > 0 && (
-            <div className="divide-y divide-line border-y border-line">
-              {main.map((s) => <StudyRow key={s.subjectId} s={s} onOpen={onOpen} />)}
-            </div>
-          )}
-          {extra.length > 0 && (
-            <Disclosure summary={<span className="text-ink-2">Se sobrar tempo · {extra.length} {extra.length === 1 ? 'assunto' : 'assuntos'}</span>}>
-              <div className="divide-y divide-line border-y border-line">
-                {extra.map((s) => <StudyRow key={s.subjectId} s={s} onOpen={onOpen} />)}
-              </div>
-            </Disclosure>
-          )}
-        </>
-      )}
-
-      {t.reviews.length > 0 && (
-        <section>
-          <div className="flex items-end justify-between gap-4 border-b border-line pb-5">
-            <div>
-              <div className="text-[21px] font-semibold tracking-[-0.02em]">Revisões</div>
-              <div className="mt-0.5 text-[15px] text-ink-2">
-                {t.reviews.length} {t.reviews.length === 1 ? 'tópico' : 'tópicos'}
-                {t.overdueReviews > 0 && <span className="text-negative"> · {t.overdueReviews} atrasada{t.overdueReviews > 1 ? 's' : ''}</span>}
-              </div>
-            </div>
-            <Link to="/revisoes" className="text-[15px] text-accent hover:underline">Ver revisões →</Link>
-          </div>
-        </section>
-      )}
-
-      {t.questions.perDay > 0 && (
-        <section>
-          <div className="text-[21px] font-semibold tracking-[-0.02em]">Questões do dia</div>
-          <div className="mt-0.5 text-[15px] text-ink-2">{t.questions.perDay} questões · {minutes(t.questions.minutes)}</div>
-          {t.questions.suggestions.length > 0 ? (
-            <p className="mt-4 text-[15px] text-ink-2">
-              Sugestão:{' '}
-              {t.questions.suggestions.map((s: any, i: number) => (
-                <span key={s.subjectId}>{i > 0 && ', '}<button className="text-accent hover:underline" onClick={() => onOpen(s.subjectId)}>{s.name}</button> ({s.questions})</span>
-              ))}
-            </p>
-          ) : <p className="mt-4 text-[15px] text-ink-3">Estude o primeiro assunto para receber sugestões.</p>}
-        </section>
-      )}
-      <p className="text-[14px] text-ink-3">{minutes(t.plannedMinutes)} planejados de {minutes(t.capacityMinutes)} disponíveis.</p>
-    </div>
-  );
+/** Marca/desmarca as atividades daquele dia (ou o assunto inteiro). */
+export function useCheck() {
+  const invalidate = useInvalidateStudy();
+  return useMutation({
+    mutationFn: async ({ subjectId, methodIds, done }: { subjectId: string; methodIds?: string[]; done: boolean }) => {
+      if (!methodIds?.length) return api.post(`/api/planner/subjects/${subjectId}/complete`, { done });
+      for (const m of methodIds) await api.post(`/api/planner/subjects/${subjectId}/methods/${m}`, { done });
+    },
+    onSettled: invalidate,
+  });
 }
 
-function StudyRow({ s, onOpen }: { s: any; onOpen: (id: string) => void }) {
+function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean }) {
+  const today = todayBR();
+  const [from, setFrom] = useState(mondayOf(today));
+  const to = addDays(from, 6);
+  const week = useQuery({ queryKey: ['week', from], queryFn: () => api.get(`/api/reviews/calendar?from=${from}&to=${to}`) });
+  const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });
+  const check = useCheck();
+  const isThisWeek = from === mondayOf(today);
+  const late = isThisWeek ? (t.data?.newSubjects ?? []).filter((s: any) => s.overdue) : [];
+  const [a, b] = [from, to].map((d) => d.split('-').map(Number));
+  const range = a[1] === b[1] ? `${a[2]} – ${b[2]} ${MONTHS[b[1] - 1]}` : `${a[2]} ${MONTHS[a[1] - 1]} – ${b[2]} ${MONTHS[b[1] - 1]}`;
+
   return (
-    <div className="flex items-center gap-4 py-6">
-      <button onClick={() => onOpen(s.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
-        <div className="text-[13px] text-ink-3">{s.area}</div>
-        <div className="mt-0.5 text-[21px] font-semibold tracking-[-0.02em]">{s.name}</div>
-        <div className="mt-1 text-[15px] text-ink-2">
-          {minutes(s.minutes)} · {s.methods.map((m: any) => m.name).join(', ')}
-          {s.overdue && <span className="text-negative"> · atrasado</span>}
+    <div>
+      <div className="mb-10 flex items-center justify-between">
+        <p className="font-display text-[26px]">{range}</p>
+        <div className="flex items-center gap-1 text-ink-2">
+          {!isThisWeek && <button onClick={() => setFrom(mondayOf(today))} className="mr-2 text-[13px] underline underline-offset-4 hover:text-ink">Esta semana</button>}
+          <button onClick={() => setFrom(addDays(from, -7))} aria-label="Semana anterior" className="rounded-full p-1.5 hover:bg-fill hover:text-ink"><ChevronLeft className="h-5 w-5" strokeWidth={1.5} /></button>
+          <button onClick={() => setFrom(addDays(from, 7))} aria-label="Próxima semana" className="rounded-full p-1.5 hover:bg-fill hover:text-ink"><ChevronRight className="h-5 w-5" strokeWidth={1.5} /></button>
         </div>
-      </button>
-      <Button variant="secondary" onClick={() => onOpen(s.subjectId)}>Começar</Button>
+      </div>
+
+      {late.length > 0 && (
+        <section className="mb-14 animate-in" aria-label="Atrasados">
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-[26px] italic">Atrasados</span>
+            <span className="h-px flex-1 bg-line" />
+            <Button variant="plain" size="sm" loading={replanning} onClick={onReplan}>Reorganizar</Button>
+          </div>
+          <ul className="mt-2">
+            {late.map((s: any) => (
+              <TaskRow key={s.subjectId} item={{ subjectId: s.subjectId, name: s.name, area: s.area, done: false }} onOpen={onOpen}
+                onCheck={(done) => check.mutate({ subjectId: s.subjectId, methodIds: s.methods.map((m: any) => m.methodId), done })} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {week.isLoading ? <Spinner /> : (
+        <div>
+          {(week.data?.days ?? []).map((d: any) => (
+            <DayBlock key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
+              onCheck={(item, done) => check.mutate({ subjectId: item.subjectId, methodIds: item.methodIds, done })} />
+          ))}
+        </div>
+      )}
+      <p className="mt-16 text-[13px] text-ink-3">Toque no círculo para concluir · toque no nome para ver o assunto.</p>
     </div>
   );
 }
 
-const STATUS_LABEL: Record<string, string> = { pending: 'Não iniciado', in_progress: 'Em andamento', studied: 'Estudado' };
+function DayBlock({ day, today, onOpen, onCheck, questions }: { day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; questions?: any }) {
+  const isToday = day.date === today;
+  const past = day.date < today;
+  // A "revisão" registrada ao concluir o assunto no mesmo dia não aparece duplicada
+  const studiedHere = new Set((day.newSubjects as any[]).map((n) => n.subjectId));
+  const reviews = (day.reviews as any[]).filter((r, i, arr) => arr.findIndex((x) => x.subjectId === r.subjectId) === i && !(r.status === 'done' && studiedHere.has(r.subjectId)));
+  const empty = !day.newSubjects.length && !reviews.length && !day.exams.length;
+  if (past && empty) return (
+    <section data-testid={`day-${day.date}`} className="mb-5 flex items-baseline gap-3 text-ink-3 animate-in">
+      <span className="w-9 text-[11px] font-medium tracking-[0.16em] uppercase">{WD[weekday(day.date)]}</span>
+      <span className="tabular font-display text-[22px] leading-none">{Number(day.date.slice(8))}</span>
+      <span className="h-px flex-1 bg-line" />
+    </section>
+  );
+  return (
+    <section data-testid={`day-${day.date}`} aria-label={isToday ? 'Hoje' : undefined} className="mb-12 animate-in">
+      <div className="flex items-baseline gap-3">
+        <span className={clsx('w-9 text-[11px] font-medium tracking-[0.16em] uppercase', isToday ? 'text-today' : 'text-ink-2')}>{WD[weekday(day.date)]}</span>
+        <span className={clsx('tabular font-display text-[40px] leading-none', isToday ? 'text-today' : past ? 'text-ink-3' : 'text-ink')}>{Number(day.date.slice(8))}</span>
+        <span className={clsx('h-px flex-1 translate-y-[-0.35em]', isToday ? 'bg-today' : 'bg-ink/80')} />
+        {isToday && <span className="text-[11px] tracking-[0.16em] text-today uppercase">hoje</span>}
+      </div>
+      <ul className="mt-2 pl-12">
+        {day.exams.map((e: string) => (
+          <li key={e} className="py-3"><span className="tint tint-rose text-[15px] font-medium">Prova · {e}</span></li>
+        ))}
+        {day.newSubjects.map((n: any) => (
+          <TaskRow key={n.subjectId} item={{ ...n, done: n.done ?? n.studied }} detail={n.methodIds.length < n.totalActivities ? n.methods.join(' · ') : undefined}
+            pomodoro={isToday} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} />
+        ))}
+        {reviews.map((r: any) => (
+          <li key={`r${r.subjectId}`} className="flex items-center gap-4 border-b border-line/70 py-3 last:border-0">
+            <button onClick={() => onOpen(r.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
+              <span className={clsx('text-[16px]', r.status === 'done' ? 'text-ink-3 line-through decoration-1' : r.status === 'projected' ? 'text-ink-2' : 'text-ink')}>↻ {r.name}</span>
+              <span className={clsx('ml-2 text-[12px]', r.status === 'overdue' ? 'text-today' : 'text-ink-3')}>
+                {r.status === 'overdue' ? `revisão atrasada` : r.status === 'done' ? 'revisado' : r.status === 'projected' ? 'revisão prevista' : 'revisão'}
+              </span>
+            </button>
+            {(r.status === 'scheduled' || r.status === 'overdue') && day.date <= today && (
+              <button onClick={() => onOpen(r.subjectId)} className="text-[13px] text-ink-2 underline underline-offset-4 hover:text-ink">Revisar</button>
+            )}
+          </li>
+        ))}
+        {empty && <li className="py-3 text-[14px] text-ink-3">Livre</li>}
+      </ul>
+      {questions?.perDay > 0 && questions.suggestions.length > 0 && (
+        <p className="mt-3 pl-12 text-[13px] text-ink-2">
+          Questões sugeridas:{' '}
+          {questions.suggestions.map((s: any, i: number) => (
+            <span key={s.subjectId}>{i > 0 && ', '}<button className="underline decoration-line underline-offset-4 hover:decoration-ink" onClick={() => onOpen(s.subjectId)}>{s.name}</button> ({s.questions})</span>
+          ))}
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function TaskRow({ item, onOpen, onCheck, detail, pomodoro }: { item: { subjectId: string; name: string; area?: string; specialty?: string | null; done: boolean }; onOpen: (id: string) => void; onCheck: (done: boolean) => void; detail?: string; pomodoro?: boolean }) {
+  const p = usePomodoro();
+  const nav = useNavigate();
+  return (
+    <li className="group flex items-center gap-4 border-b border-line/70 py-3 last:border-0" data-testid="task">
+      <button onClick={() => onOpen(item.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
+        <Tint area={item.area} className={clsx('text-[10.5px] font-medium tracking-[0.14em] uppercase', item.done && 'opacity-50')}>{item.specialty || areaShort(item.area)}</Tint>
+        <span className={clsx('mt-1 block text-[17px] leading-snug', item.done && 'text-ink-3 line-through decoration-1')}>{item.name}</span>
+        {detail && !item.done && <span className="block text-[12px] text-ink-3">{detail}</span>}
+      </button>
+      {!item.done && (
+        <button onClick={() => { p.start({ subject: { id: item.subjectId, name: item.name, area: item.area } }); nav('/foco'); }}
+          aria-label={`Iniciar Pomodoro — ${item.name}`} title="Iniciar Pomodoro"
+          className={clsx('flex items-center gap-1.5 rounded-full text-[12px] text-ink-3 transition hover:text-ink', !pomodoro && 'opacity-0 group-hover:opacity-100 focus:opacity-100')}>
+          <Timer className="h-4 w-4" strokeWidth={1.5} />{pomodoro && <span className="hidden sm:inline">Iniciar Pomodoro</span>}
+        </button>
+      )}
+      <CheckButton on={item.done} onChange={onCheck} label={`Concluir ${item.name}`} />
+    </li>
+  );
+}
+
+const STATUS_LABEL: Record<string, string> = { pending: 'Não iniciado', in_progress: 'Em andamento', studied: 'Concluído' };
 
 function SubjectList({ data, onOpen }: { data: any; onOpen: (id: string) => void }) {
   const [search, setSearch] = useState('');
@@ -350,19 +405,19 @@ function SubjectList({ data, onOpen }: { data: any; onOpen: (id: string) => void
 
   return (
     <>
-      <p className="-mt-4 mb-8 text-[15px] text-ink-2">{studied} de {data.subjects.length} estudados · ordenados pelo que mais cai</p>
+      <p className="mb-8 text-[15px] text-ink-2">{studied} de {data.subjects.length} concluídos · ordenados pelo que mais cai</p>
       <div className="mb-6 flex items-center gap-3">
         <label className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-3" />
           <input className="field pl-9" placeholder="Buscar" aria-label="Buscar assunto" value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
-        <Menu label="Filtrar" trigger={<span className={clsx('text-[15px]', filtered ? 'text-accent' : 'text-ink-2 hover:text-ink')}>Filtrar</span>} items={[
+        <Menu label="Filtrar" trigger={<span className={clsx('text-[15px]', filtered ? 'text-ink underline underline-offset-4' : 'text-ink-2 hover:text-ink')}>Filtrar</span>} items={[
           { label: `${sort === 'rank' ? '✓ ' : ''}Ordem do plano`, onClick: () => setSort('rank') },
           { label: `${sort === 'dynamic' ? '✓ ' : ''}Prioridade de hoje`, onClick: () => setSort('dynamic') },
           { label: `${status === 'all' ? '✓ ' : ''}Todos`, onClick: () => setStatus('all') },
           { label: `${status === 'pending' ? '✓ ' : ''}Não iniciados`, onClick: () => setStatus('pending') },
           { label: `${status === 'in_progress' ? '✓ ' : ''}Em andamento`, onClick: () => setStatus('in_progress') },
-          { label: `${status === 'studied' ? '✓ ' : ''}Estudados`, onClick: () => setStatus('studied') },
+          { label: `${status === 'studied' ? '✓ ' : ''}Concluídos`, onClick: () => setStatus('studied') },
           { label: `${status === 'unscheduled' ? '✓ ' : ''}Fora do tempo disponível`, onClick: () => setStatus('unscheduled') },
           ...areas.map((a) => ({ label: `${area === a ? '✓ ' : ''}${a}`, onClick: () => setArea(area === a ? 'all' : a) })),
         ]} />
@@ -373,9 +428,9 @@ function SubjectList({ data, onOpen }: { data: any; onOpen: (id: string) => void
             <button onClick={() => onOpen(s.subjectId)} data-testid="subject-card" className="flex w-full items-center gap-4 py-4 text-left transition-opacity hover:opacity-70">
               <span className="tabular w-7 shrink-0 text-[14px] text-ink-3">{s.rank}</span>
               <span className="min-w-0 flex-1">
-                <span className={clsx('block truncate text-[17px]', !s.scheduled && 'text-ink-2')}>{s.name}</span>
+                <span className={clsx('block truncate text-[17px]', !s.scheduled && 'text-ink-2', s.status === 'studied' && 'text-ink-3 line-through decoration-1')}>{s.name}</span>
                 <span className="block truncate text-[13px] text-ink-2">
-                  {pct(s.percentage)} da prova · {s.card?.nextReview
+                  <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle dot-${tintFor(s.area)}`} />{areaShort(s.area)} · {pct(s.percentage)} da prova · {s.card?.nextReview
                     ? (s.card.nextReview < today ? <span className="text-negative">revisão atrasada</span> : `revisão ${relativeDays(daysBetween(s.card.nextReview, today))}`)
                     : !s.scheduled ? 'fora do tempo disponível' : STATUS_LABEL[s.status].toLowerCase()}
                 </span>
@@ -396,7 +451,7 @@ function ProgressDot({ value }: { value: number }) {
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0 -rotate-90" aria-label={`${Math.round(value * 100)}%`}>
       <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" className="stroke-fill-strong" />
-      {value > 0 && <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" strokeLinecap="round" className={value >= 1 ? 'stroke-positive' : 'stroke-accent'}
+      {value > 0 && <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" strokeLinecap="round" className="stroke-ink"
         strokeDasharray={`${c * value} ${c}`} style={{ transition: 'stroke-dasharray 600ms var(--ease-apple)' }} />}
     </svg>
   );
@@ -408,7 +463,7 @@ function MultiTable({ data, onOpen }: { data: any; onOpen: (id: string) => void 
   const LV: Record<string, string> = { muito_alta: 'Muito alta', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
   return (
     <>
-      <p className="-mt-4 mb-8 flex items-center gap-1.5 text-[15px] text-ink-2">
+      <p className="mb-8 flex items-center gap-1.5 text-[15px] text-ink-2">
         Peso de cada prova: {weights.map((w) => `${w.label.split(' — ')[0]} ${pct(w.weight, 0)}`).join(' · ')}
         <Hint text="Peso = (2 se principal, 1 se não) × (0,5 + proximidade), normalizado. Proximidade = 1 / (1 + dias até a prova / 60)." />
       </p>

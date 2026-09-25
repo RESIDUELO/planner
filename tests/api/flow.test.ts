@@ -179,6 +179,30 @@ describe('Aluno (testes 1–19)', () => {
     expect(s.progress).toBeCloseTo(2 / 3);
   });
 
+  it('assunto é concluído com as atividades escolhidas, sem exigir questões', async () => {
+    const p = await student.ok('GET', '/api/planner');
+    const subj = p.subjects[2];
+    const video = methods.find((m) => m.code === 'video');
+    const flash = methods.find((m) => m.code === 'flashcards');
+    // Só Aula + Flashcards para este assunto
+    await student.ok('PUT', `/api/planner/subjects/${subj.subjectId}/activities`, { methodIds: [video.id, flash.id] });
+    let s = (await student.ok('GET', '/api/planner')).subjects.find((x: any) => x.subjectId === subj.subjectId);
+    expect(s.checklist.map((c: any) => c.code)).toEqual(['video', 'flashcards']);
+    expect(s.customActivities).toBe(true);
+    await student.ok('POST', `/api/planner/subjects/${subj.subjectId}/methods/${video.id}`, { done: true });
+    const r = await student.ok('POST', `/api/planner/subjects/${subj.subjectId}/methods/${flash.id}`, { done: true });
+    expect(r.studied).toBe(true);
+    expect(r.cardCreated).toBe(true);
+    s = (await student.ok('GET', '/api/planner')).subjects.find((x: any) => x.subjectId === subj.subjectId);
+    expect(s.status).toBe('studied');
+    expect(s.performance.answered).toBe(0);
+    // Concluir de uma vez (marca todas as atividades escolhidas) e desfazer
+    const other = (await student.ok('GET', '/api/planner')).subjects[3];
+    expect((await student.ok('POST', `/api/planner/subjects/${other.subjectId}/complete`, { done: true })).studied).toBe(true);
+    expect((await student.ok('POST', `/api/planner/subjects/${other.subjectId}/complete`, { done: false })).studied).toBe(false);
+    ids.customSubject = subj.subjectId;
+  });
+
   it('registra 20 questões com 17 acertos e atualiza o domínio (testes 9–12)', async () => {
     const before = (await student.ok('GET', '/api/dashboard')).dominated[0].dominated;
     const r = await student.ok('POST', `/api/planner/subjects/${ids.subject1}/practice`, { questions: 20, correct: 17 });
@@ -192,6 +216,7 @@ describe('Aluno (testes 1–19)', () => {
     const dash = await student.ok('GET', '/api/dashboard');
     expect(dash.dominated[0].dominated).toBeGreaterThan(before);
     expect(dash.nextExam).toMatchObject({ date: '2026-11-12', daysLeft: 48 });
+    expect(dash.subjects.studied).toBe(2);
     ids.firstReview = s.card.nextReview;
   });
 
@@ -219,7 +244,7 @@ describe('Aluno (testes 1–19)', () => {
     student.today = '2026-10-25';
     const t = await student.ok('GET', '/api/planner/today');
     expect(t.reviews.find((x: any) => x.subjectId === ids.subject1).overdueDays).toBeGreaterThan(0);
-    expect((await student.ok('GET', '/api/dashboard')).reviews.overdue).toBe(1);
+    expect((await student.ok('GET', '/api/dashboard')).reviews.overdue).toBeGreaterThanOrEqual(1);
     expect((await student.ok('GET', '/api/planner')).overdueActivities).toBeGreaterThan(0);
   });
 

@@ -40,9 +40,9 @@ export function ReviewsPage() {
       <Title eyebrow={dateBR(today, { weekday: 'long', day: 'numeric', month: 'long' })}>Revisões</Title>
 
       <section className="animate-in">
-        <p className="text-[17px] text-ink-2">
-          Hoje · {todays.length === 0 ? 'nenhuma revisão pendente' : `${todays.length} ${todays.length === 1 ? 'revisão' : 'revisões'}`}
-          {done.length > 0 && <span className="text-positive"> · {done.length} feita{done.length > 1 ? 's' : ''}</span>}
+        <p className="font-display text-[30px]">
+          Hoje <span className="font-sans text-[15px] text-ink-2">· {todays.length === 0 ? 'nenhuma revisão pendente' : `${todays.length} ${todays.length === 1 ? 'revisão' : 'revisões'}`}</span>
+          {done.length > 0 && <span className="text-ink"> · {done.length} feita{done.length > 1 ? 's' : ''}</span>}
         </p>
         {todays.length > 0 && (
           <div className="mt-4 divide-y divide-line border-y border-line">
@@ -50,10 +50,10 @@ export function ReviewsPage() {
               <div key={r.subjectId} className="py-5">
                 <div className="flex items-center gap-4">
                   <button onClick={() => setOpen(r.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
-                    <div className="truncate text-[19px] font-medium">{r.name}</div>
-                    {r.status === 'overdue' && <div className="text-[14px] text-negative">atrasada há {r.overdueDays} dia{r.overdueDays > 1 ? 's' : ''}</div>}
+                    <div className="truncate text-[18px]">↻ {r.name}</div>
+                    {r.status === 'overdue' && <div className="text-[13px] text-today">atrasada há {r.overdueDays} dia{r.overdueDays > 1 ? 's' : ''}</div>}
                   </button>
-                  {active !== r.subjectId && <Button variant="plain" onClick={() => { setActive(r.subjectId); setMsg(null); }}>Revisar agora →</Button>}
+                  {active !== r.subjectId && <Button variant="secondary" size="sm" onClick={() => { setActive(r.subjectId); setMsg(null); }}>Revisar</Button>}
                 </div>
                 {active === r.subjectId && (
                   <div className="mt-4 animate-in">
@@ -69,16 +69,16 @@ export function ReviewsPage() {
       </section>
 
       <section className="mt-16 animate-in">
-        <p className="text-[17px] text-ink-2">Próximos dias</p>
+        <p className="font-display text-[30px]">Próximos dias</p>
         {next.length === 0 ? <p className="mt-4 text-[15px] text-ink-3">Nenhuma revisão prevista nas próximas duas semanas.</p> : (
           <div className="mt-4 divide-y divide-line border-y border-line">
             {next.map((d) => {
               const rs = d.reviews.filter((r: any) => r.status !== 'done');
               return (
                 <div key={d.date} className="flex gap-6 py-4">
-                  <div className="w-16 shrink-0 text-[15px] text-ink-2">{shortDate(d.date, false)}</div>
+                  <div className="w-16 shrink-0 font-display text-[20px] leading-tight">{shortDate(d.date, false)}</div>
                   <div className="min-w-0 flex-1 text-[15px]">
-                    {d.exams.length > 0 && <div className="font-medium text-accent">Prova · {d.exams.join(', ')}</div>}
+                    {d.exams.length > 0 && <div><span className="tint tint-rose font-medium">Prova · {d.exams.join(', ')}</span></div>}
                     {rs.length > 0 && <div className="truncate">{rs.map((r: any) => r.name).join(', ')}</div>}
                     {rs.some((r: any) => r.status === 'projected') && <div className="text-[13px] text-ink-3">previsão</div>}
                   </div>
@@ -114,7 +114,7 @@ function MonthCalendar({ today, onOpen }: { today: string; onOpen: (id: string) 
   return (
     <div className="pt-2">
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-[19px] font-medium">{title.charAt(0).toUpperCase() + title.slice(1)}</span>
+        <span className="font-display text-[26px]">{title.charAt(0).toUpperCase() + title.slice(1)}</span>
         <div className="flex gap-1 text-ink-2">
           <button onClick={() => shift(-1)} aria-label="Mês anterior" className="rounded-full p-1.5 hover:bg-fill"><ChevronLeft className="h-5 w-5" /></button>
           <button onClick={() => shift(1)} aria-label="Próximo mês" className="rounded-full p-1.5 hover:bg-fill"><ChevronRight className="h-5 w-5" /></button>
@@ -133,10 +133,10 @@ function MonthCalendar({ today, onOpen }: { today: string; onOpen: (id: string) 
           return (
             <button key={date} onClick={() => setSelected(date)} data-testid={`day-${date}`} className="flex flex-col items-center gap-1 py-1.5">
               <span className={clsx('tabular flex h-9 w-9 items-center justify-center rounded-full text-[17px] transition-colors duration-150',
-                isSel ? 'bg-ink text-canvas' : date === today ? 'text-accent' : date < today ? 'text-ink-3' : 'text-ink', !isSel && 'hover:bg-fill')}>
+                isSel ? 'bg-ink text-canvas' : date === today ? 'text-today' : date < today ? 'text-ink-3' : 'text-ink', !isSel && 'hover:bg-fill')}>
                 {i + 1}
               </span>
-              <span className={clsx('h-1.5 w-1.5 rounded-full', exam ? 'bg-accent' : late ? 'bg-negative' : pending ? 'bg-ink-3' : d?.newSubjects.length ? 'bg-fill-strong' : 'bg-transparent')} />
+              <span className={clsx('h-1.5 w-1.5 rounded-full', exam ? 'dot-rose' : late ? 'bg-today' : pending ? 'dot-lilac' : d?.newSubjects.length ? 'bg-fill-strong' : 'bg-transparent')} />
             </button>
           );
         })}
@@ -144,14 +144,14 @@ function MonthCalendar({ today, onOpen }: { today: string; onOpen: (id: string) 
       {day && (
         <div className="mt-6 animate-fade text-[15px]">
           <p className="text-ink-2">{dateBR(selected, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-          {day.exams.length > 0 && <p className="mt-2 font-medium text-accent">Prova · {day.exams.join(', ')}</p>}
+          {day.exams.length > 0 && <p className="mt-2 font-medium"><span className="tint tint-rose">Prova · {day.exams.join(', ')}</span></p>}
           {day.reviews.length === 0 && day.newSubjects.length === 0 && day.exams.length === 0 && <p className="mt-2 text-ink-3">Nada agendado.</p>}
           {day.reviews.length > 0 && (
             <div className="mt-3">
               <p className="text-[13px] text-ink-3">Revisões</p>
               {day.reviews.map((x: any, i: number) => (
                 <button key={`${x.subjectId}${i}`} onClick={() => onOpen(x.subjectId)} className="block text-left hover:opacity-70">
-                  {x.name} <span className={clsx('text-[13px]', x.status === 'overdue' ? 'text-negative' : x.status === 'done' ? 'text-positive' : 'text-ink-3')}>
+                  {x.name} <span className={clsx('text-[13px]', x.status === 'overdue' ? 'text-today' : 'text-ink-3')}>
                     {x.status === 'overdue' ? 'atrasada' : x.status === 'done' ? 'feita' : x.status === 'projected' ? 'prevista' : ''}
                   </span>
                 </button>
@@ -163,7 +163,7 @@ function MonthCalendar({ today, onOpen }: { today: string; onOpen: (id: string) 
               <p className="text-[13px] text-ink-3">Novos assuntos</p>
               {day.newSubjects.map((n: any) => (
                 <button key={n.subjectId} onClick={() => onOpen(n.subjectId)} className="block text-left hover:opacity-70">
-                  {n.name} <span className="text-[13px] text-ink-3">{n.minutes} min{n.completed ? ' · concluído' : ''}</span>
+                  {n.name} {n.studied && <span className="text-[13px] text-ink-3">· concluído</span>}
                 </button>
               ))}
             </div>
@@ -171,9 +171,9 @@ function MonthCalendar({ today, onOpen }: { today: string; onOpen: (id: string) 
         </div>
       )}
       <p className="mt-6 flex flex-wrap gap-4 text-[12px] text-ink-3">
-        <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-ink-3" />revisão</span>
-        <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-negative" />atrasada</span>
-        <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-accent" />prova</span>
+        <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full dot-lilac" />revisão</span>
+        <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-today" />atrasada</span>
+        <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full dot-rose" />prova</span>
       </p>
     </div>
   );

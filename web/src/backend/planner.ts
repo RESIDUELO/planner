@@ -95,6 +95,23 @@ export async function loadMethods(ctx: Ctx, userId: string): Promise<UserMethod[
   });
 }
 
+/** Atividades escolhidas por assunto (sem escolha = métodos marcados em "Como você estuda?"). */
+export async function loadActivityChoices(ctx: Ctx, userId: string): Promise<Map<string, string[]>> {
+  const rows = await selectAll((a, b) => ctx.sb.from('subject_activity_choices').select('subject_id, study_method_id').eq('user_id', userId).range(a, b));
+  const out = new Map<string, string[]>();
+  for (const r of rows as any[]) {
+    if (!out.has(r.subject_id)) out.set(r.subject_id, []);
+    out.get(r.subject_id)!.push(r.study_method_id);
+  }
+  return out;
+}
+
+async function activitiesFor(ctx: Ctx, userId: string, subjectId: string): Promise<string[]> {
+  const custom = await q(ctx.sb.from('subject_activity_choices').select('study_method_id').eq('user_id', userId).eq('subject_id', subjectId));
+  if ((custom as any[]).length) return (custom as any[]).map((r) => r.study_method_id);
+  return (await loadMethods(ctx, userId)).filter((m) => m.enabled).map((m) => m.id);
+}
+
 // ---------------------------------------------------------------------------
 // Geração do planner
 // ---------------------------------------------------------------------------
@@ -125,8 +142,10 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
 
   const profile = await loadProfile(ctx, userId);
   if (!profile.configured) throw badRequest('Configure seu tempo de estudo antes de gerar o planner.');
-  const methods = (await loadMethods(ctx, userId)).filter((m) => m.enabled);
+  const allMethods = await loadMethods(ctx, userId);
+  const methods = allMethods.filter((m) => m.enabled);
   if (!methods.length) throw badRequest('Selecione pelo menos um método de estudo.');
+  const choices = await loadActivityChoices(ctx, userId);
 
   const startDate = maxDate(params.startDate, today)!;
   const futureDates = eds.map((e) => e.exam_date).filter((d): d is string => !!d && d > startDate);
@@ -175,7 +194,7 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
     dailyMinutes: Math.round(profile.daily_hours * 60),
     studyWeekdays: studyWeekdays(profile),
     questionsPerDay: profile.questions_per_day,
-    methods: methods.map((m) => ({ id: m.id, code: m.code, activityType: m.activity_type, minutes: m.estimated_minutes })),
+    methods: allMethods.map((m) => ({ id: m.id, code: m.code, activityType: m.activity_type, minutes: m.estimated_minutes })),
     subjects: subjects.map((s, i) => {
       const card = cardBySubject.get(s.subjectId);
       return {
@@ -185,6 +204,7 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
         sizeFactor: factors[i],
         examDate: examDateFor(s),
         completedMethodIds: progress.filter((p: any) => p.subject_id === s.subjectId).map((p: any) => p.study_method_id),
+        methodIds: choices.get(s.subjectId) ?? methods.map((m) => m.id),
         card: card ? { state: cardState(card), nextReview: card.next_review_at } : null,
       };
     }),
@@ -275,7 +295,7 @@ export interface PlanSubjectView {
   subjectId: string; name: string; area: string; specialty: string | null; rank: number; level: PriorityLevel; levelLabel: string;
   percentage: number; frequency: number; annualAverage: number; yearsPresent: number; yearsAnalyzed: number;
   recentPercentage: number; estimatedQuestions: number; sizeFactor: number; scheduled: boolean; examDate: ISODate | null;
-  perExam: any[]; status: SubjectStatus;
+  perExam: any[]; status: SubjectStatus; customActivities: boolean;
   checklist: { methodId: string; code: string; name: string; done: boolean; completedAt: string | null; scheduledDate: ISODate | null; minutes: number | null }[];
   progress: number;
   performance: { answered: number; correct: number; accuracy: number | null; lastQuestionAt: string | null };
@@ -311,6 +331,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
     .eq('study_plan_id', plan.id).neq('activity_type', 'review').range(a, b));
 
   const enabled = methods.filter((m) => m.enabled);
+  const choices = await loadActivityChoices(ctx, userId);
   const info = await loadSubjectsInfo(ctx, planSubjects.map((s: any) => s.subject_id));
   const perfBy = new Map(perf.map((p: any) => [p.subject_id, p]));
   const cardBy = new Map(cards.map((c) => [c.subject_id, c]));
@@ -331,7 +352,9 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
     const inf = info.get(s.subject_id);
     const prog = progBy.get(s.subject_id) ?? new Map();
     const scheduleRows = schedBy.get(s.subject_id) ?? [];
-    const checklist = enabled.map((m) => {
+    const chosen = choices.get(s.subject_id);
+    const subjectMethods = chosen ? methods.filter((m) => chosen.includes(m.id)) : enabled;
+    const checklist = subjectMethods.map((m) => {
       const row = scheduleRows.find((r) => r.study_method_id === m.id);
       return {
         methodId: m.id, code: m.code, name: m.name, done: prog.has(m.id), completedAt: prog.get(m.id) ?? null,
@@ -360,7 +383,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
       percentage: num(s.historical_percentage), frequency: num(s.historical_frequency), annualAverage: num(s.annual_average),
       yearsPresent: s.years_present, yearsAnalyzed: s.years_analyzed, recentPercentage: num(s.recent_frequency),
       estimatedQuestions: num(s.estimated_questions), sizeFactor: num(s.size_factor), scheduled: s.scheduled, examDate: s.exam_date,
-      perExam: s.per_exam, status, checklist,
+      perExam: s.per_exam, status, checklist, customActivities: !!chosen,
       progress: checklist.length ? doneCount / checklist.length : 0,
       performance: { answered, correct, accuracy: answered ? correct / answered : null, lastQuestionAt: p?.last_question_at ?? null },
       card: c ? {
@@ -392,13 +415,41 @@ export async function setMethodDone(ctx: Ctx, subjectId: string, methodId: strin
   const ps = await planSubjectRow(ctx, userId, subjectId);
   if (!ps) throw badRequest('Assunto não pertence ao planner ativo.');
   await rpc(ctx, 'set_method_done', { p_subject: subjectId, p_method: methodId, p_done: done });
-  const enabled = await q(ctx.sb.from('user_study_methods').select('study_method_id').eq('user_id', userId).eq('enabled', true));
+  return evaluateSubject(ctx, userId, subjectId, ps);
+}
+
+/**
+ * Concluído = todas as atividades escolhidas para o assunto estão feitas.
+ * Não existe atividade obrigatória (questões inclusive).
+ */
+async function evaluateSubject(ctx: Ctx, userId: string, subjectId: string, ps: { study_plan_id: string; exam_date: ISODate | null }) {
+  const selected = await activitiesFor(ctx, userId, subjectId);
   const doneRows = await q(ctx.sb.from('subject_method_progress').select('study_method_id').eq('user_id', userId).eq('subject_id', subjectId));
   const doneSet = new Set((doneRows as any[]).map((r) => r.study_method_id));
-  const studied = enabled.length > 0 && (enabled as any[]).every((m) => doneSet.has(m.study_method_id));
+  const studied = selected.length > 0 && selected.every((m) => doneSet.has(m));
   let cardCreated = false;
   if (studied) cardCreated = await ensureCard(ctx, userId, subjectId, ps.study_plan_id, ps.exam_date);
   return { studied, cardCreated };
+}
+
+/** Marca (ou desmarca) de uma vez todas as atividades escolhidas do assunto. */
+export async function setSubjectDone(ctx: Ctx, subjectId: string, done: boolean) {
+  const userId = await currentUserId(ctx);
+  const ps = await planSubjectRow(ctx, userId, subjectId);
+  if (!ps) throw badRequest('Assunto não pertence ao planner ativo.');
+  for (const m of await activitiesFor(ctx, userId, subjectId)) {
+    await rpc(ctx, 'set_method_done', { p_subject: subjectId, p_method: m, p_done: done });
+  }
+  return evaluateSubject(ctx, userId, subjectId, ps);
+}
+
+/** Escolhe as atividades de um assunto (null ou [] = voltar ao padrão). */
+export async function setSubjectActivities(ctx: Ctx, subjectId: string, methodIds: string[] | null) {
+  const userId = await currentUserId(ctx);
+  const ps = await planSubjectRow(ctx, userId, subjectId);
+  if (!ps) throw badRequest('Assunto não pertence ao planner ativo.');
+  await rpc(ctx, 'set_subject_activities', { p_subject: subjectId, p_methods: methodIds ?? [] });
+  return evaluateSubject(ctx, userId, subjectId, ps);
 }
 
 async function ensureCard(ctx: Ctx, userId: string, subjectId: string, planId: string, examDate: ISODate | null) {
@@ -432,8 +483,10 @@ export async function logPractice(ctx: Ctx, subjectId: string, body: { questions
     time_spent_minutes: body.minutes ?? null, source: body.source ?? null,
   }));
   // Marca o método "Questões" no checklist, se o usuário o utiliza
+  // Se "Questões" é uma das atividades escolhidas para o assunto, ela fica marcada.
   const methods = await loadMethods(ctx, userId);
-  const qm = methods.find((m) => m.enabled && m.code === 'questions');
+  const selected = await activitiesFor(ctx, userId, subjectId);
+  const qm = methods.find((m) => m.code === 'questions' && selected.includes(m.id));
   let studied = false;
   if (qm) studied = (await setMethodDone(ctx, subjectId, qm.id, true)).studied;
   // Desempenho baixo antecipa a revisão

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './lib/auth';
+import { PomodoroProvider } from './lib/pomodoro';
 import { initSupabase } from './lib/supabase';
 import { App } from './App';
 import { SetupNeeded } from './pages/SetupNeeded';
@@ -30,7 +31,9 @@ initSupabase().then((cfg) => {
         <QueryClientProvider client={qc}>
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <AuthProvider>
-              <App />
+              <PomodoroProvider>
+                <App />
+              </PomodoroProvider>
             </AuthProvider>
           </BrowserRouter>
         </QueryClientProvider>

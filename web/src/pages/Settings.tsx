@@ -52,7 +52,7 @@ export function SettingsPage() {
       <div className="space-y-12">
         {user?.isGuest ? (
           <section className="animate-in">
-            <h2 className="text-[21px] font-semibold tracking-[-0.02em]">Criar conta</h2>
+            <h2 className="font-display text-[30px]">Criar conta</h2>
             <p className="mt-1 text-[15px] text-ink-2">Guarde seu progresso e acesse de qualquer dispositivo.</p>
             <form onSubmit={upgrade} className="mt-5 space-y-3">
               <input className="field" aria-label="Nome" placeholder="Nome" required value={upg.name} onChange={(e) => setUpg({ ...upg, name: e.target.value })} />
@@ -81,12 +81,12 @@ export function SettingsPage() {
           </div>
         </Group>
 
-        <Group label="Estudo" footer={<Link to="/planner" className="text-accent hover:underline">Alterar no planner → Reconfigurar</Link>}>
+        <Group label="Estudo" footer={<Link to="/planner" className="text-ink underline underline-offset-4">Alterar no planner → Reconfigurar</Link>}>
           {!s?.profile.configured ? <Item label="Planner" value="não configurado" /> : <>
             <Item label="Horas por dia" value={`${s.profile.daily_hours} h`} />
             <Item label="Dias" value={s.weekdays.map((d: number) => WD[d]).join(', ')} />
             <Item label="Questões por dia" value={s.profile.questions_per_day} />
-            <Item label="Métodos" value={s.methods.filter((m: any) => m.enabled).map((m: any) => m.name).join(', ')} />
+            <Item label="Como estudo" value={s.methods.filter((m: any) => m.enabled).map((m: any) => m.name).join(', ')} />
           </>}
         </Group>
 

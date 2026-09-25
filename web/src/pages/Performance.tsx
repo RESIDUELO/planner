@@ -45,13 +45,13 @@ export function PerformancePage() {
 
       <section className="animate-in">
         {acc == null ? (
-          <p className="text-[24px] text-ink-2">Registre suas primeiras questões para ver seu desempenho.</p>
+          <p className="font-display text-[30px] text-ink-2">Registre suas primeiras questões para ver seu desempenho.</p>
         ) : (
           <>
-            <p className="tabular text-[72px] leading-none font-semibold tracking-[-0.04em] sm:text-[96px]">{pct(acc, 0)}</p>
-            <p className="mt-3 text-[21px] text-ink-2">de acertos em {int(answered)} questões</p>
+            <p className="tabular font-display text-[96px] leading-none sm:text-[128px]">{pct(acc, 0)}</p>
+            <p className="mt-3 text-[17px] text-ink-2">de acertos em {int(answered)} questões</p>
             {trend != null && Math.abs(trend) >= 0.005 && (
-              <p className={`mt-6 text-[17px] ${trend > 0 ? 'text-positive' : 'text-negative'}`}>
+              <p className={`mt-6 text-[17px] ${trend > 0 ? 'text-ink' : 'text-today'}`}>
                 {trend > 0 ? '+' : '−'}{Math.round(Math.abs(trend) * 100)}% <span className="text-ink-2">nas últimas 4 semanas</span>
               </p>
             )}
@@ -72,9 +72,9 @@ export function PerformancePage() {
 
       {weakest && (
         <section className="mt-16 animate-in">
-          <p className="text-[15px] text-ink-2">Onde focar</p>
+          <p className="text-[11px] font-medium tracking-[0.16em] text-ink-2 uppercase">Onde focar</p>
           <button onClick={() => setOpen(weakest.subjectId)} className="mt-1 text-left transition-opacity hover:opacity-70">
-            <span className="text-[24px] font-semibold tracking-[-0.02em]">{weakest.name}</span>
+            <span className="tint tint-rose font-display text-[30px]">{weakest.name}</span>
             <span className="ml-3 text-[17px] text-ink-2">{pct(weakest.accuracy, 0)} de acerto</span>
           </button>
         </section>
@@ -85,10 +85,10 @@ export function PerformancePage() {
       <section className="animate-in">
         <div className="flex items-baseline justify-between">
           <p className="text-[17px] text-ink-2">Seu progresso</p>
-          <p className="tabular text-[28px] font-semibold tracking-[-0.02em]">{pct(d.subjects.length ? studied / d.subjects.length : 0, 0)}</p>
+          <p className="tabular font-display text-[34px] leading-none">{pct(d.subjects.length ? studied / d.subjects.length : 0, 0)}</p>
         </div>
         <Progress className="mt-4" value={d.subjects.length ? studied / d.subjects.length : 0} />
-        <p className="mt-3 text-[15px] text-ink-2">{studied} de {d.subjects.length} temas estudados · {reviews} revisões feitas</p>
+        <p className="mt-3 text-[15px] text-ink-2">{studied} de {d.subjects.length} assuntos concluídos · {reviews} revisões feitas</p>
       </section>
 
       <div className="mt-16 border-t border-line">

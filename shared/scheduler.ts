@@ -30,6 +30,8 @@ export interface SchedulerSubject {
   examDate: ISODate | null;
   /** Métodos já concluídos (replanejamento). */
   completedMethodIds: string[];
+  /** Atividades escolhidas para este assunto (padrão: todos os métodos). */
+  methodIds?: string[];
   /** Cartão de revisão existente, se o assunto já foi estudado. */
   card?: { state: MemoryState; nextReview: ISODate | null } | null;
 }
@@ -201,7 +203,7 @@ export function buildSchedule(input: SchedulerInput): SchedulerOutput {
 
   const ordered = [...input.subjects].sort((a, b) => a.rank - b.rank);
   for (const s of ordered) {
-    const pending = input.methods.filter((m) => !s.completedMethodIds.includes(m.id));
+    const pending = input.methods.filter((m) => (!s.methodIds || s.methodIds.includes(m.id)) && !s.completedMethodIds.includes(m.id));
     if (pending.length === 0) {
       scheduled.push(s.subjectId);
       continue;

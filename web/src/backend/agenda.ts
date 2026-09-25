@@ -33,11 +33,13 @@ export async function todayView(ctx: Ctx) {
 
   const methodName = new Map((await loadMethods(ctx, userId)).map((m) => [m.id, m.name]));
   const doneKeys = new Set(subjects.flatMap((s) => s.checklist.filter((c) => c.done).map((c) => `${s.subjectId}|${c.methodId}`)));
+  // Só as atividades escolhidas para cada assunto contam (ver subject_activity_choices)
+  const chosenKeys = new Set(subjects.flatMap((s) => s.checklist.map((c) => `${s.subjectId}|${c.methodId}`)));
   const pending = (await selectAll((a, b) => ctx.sb.from('study_schedule')
     .select('id, subject_id, study_method_id, scheduled_date, estimated_minutes, activity_type, priority')
     .eq('study_plan_id', plan.id).eq('completed', false).lte('scheduled_date', today)
     .order('scheduled_date').order('priority').range(a, b)) as any[])
-    .filter((p) => !doneKeys.has(`${p.subject_id}|${p.study_method_id}`));
+    .filter((p) => chosenKeys.has(`${p.subject_id}|${p.study_method_id}`) && !doneKeys.has(`${p.subject_id}|${p.study_method_id}`));
 
   const groups = new Map<string, any[]>();
   for (const p of pending) {
@@ -102,7 +104,7 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
   const logs = await selectAll((a, b) => ctx.sb.from('review_logs').select('subject_id, reviewed_at, rating')
     .eq('user_id', userId).gte('reviewed_at', dayBounds(from)[0]).lt('reviewed_at', dayBounds(to)[1]).range(a, b));
   for (const l of logs as any[]) {
-    push(toISODateBR(l.reviewed_at), 'reviews', { subjectId: l.subject_id, name: byId.get(l.subject_id)?.name ?? '—', status: 'done', rating: l.rating });
+    push(toISODateBR(l.reviewed_at), 'reviews', { subjectId: l.subject_id, name: byId.get(l.subject_id)?.name ?? '—', area: byId.get(l.subject_id)?.area, status: 'done', rating: l.rating });
   }
 
   for (const s of subjects) {
@@ -110,16 +112,16 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
       const due = s.card.nextReview;
       if (!due) continue;
       if (due < today) {
-        push(today, 'reviews', { subjectId: s.subjectId, name: s.name, status: 'overdue', dueDate: due, overdueDays: diffDays(today, due) });
+        push(today, 'reviews', { subjectId: s.subjectId, name: s.name, area: s.area, status: 'overdue', dueDate: due, overdueDays: diffDays(today, due) });
         continue;
       }
       const st: MemoryState = { stability: s.card.stability, difficulty: s.card.difficulty, lastReview: s.card.lastReview, repetitions: s.card.repetitions, lapses: s.card.lapses };
-      projectReviews(st, due, s.examDate, lastDay).forEach((d, i) => push(d, 'reviews', { subjectId: s.subjectId, name: s.name, status: i === 0 ? 'scheduled' : 'projected' }));
+      projectReviews(st, due, s.examDate, lastDay).forEach((d, i) => push(d, 'reviews', { subjectId: s.subjectId, name: s.name, area: s.area, status: i === 0 ? 'scheduled' : 'projected' }));
     } else {
       const last = s.checklist.map((c) => c.scheduledDate).filter(Boolean).sort().pop() as ISODate | undefined;
       if (!last || !s.scheduled) continue;
       const first = review(null, 'good', last < today ? today : last, s.examDate);
-      projectReviews(first.state, first.nextReview, s.examDate, lastDay).forEach((d) => push(d, 'reviews', { subjectId: s.subjectId, name: s.name, status: 'projected' }));
+      projectReviews(first.state, first.nextReview, s.examDate, lastDay).forEach((d) => push(d, 'reviews', { subjectId: s.subjectId, name: s.name, area: s.area, status: 'projected' }));
     }
   }
 
@@ -127,18 +129,25 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
   const sched = await selectAll((a, b) => ctx.sb.from('study_schedule').select('subject_id, study_method_id, scheduled_date, completed, estimated_minutes')
     .eq('study_plan_id', plan.id).gte('scheduled_date', from).lte('scheduled_date', to).order('priority').range(a, b));
   const grouped = new Map<string, any>();
+  const chosen = new Set(subjects.flatMap((s) => s.checklist.map((c) => `${s.subjectId}|${c.methodId}`)));
   for (const r of sched as any[]) {
+    if (!chosen.has(`${r.subject_id}|${r.study_method_id}`)) continue;
     const key = `${r.scheduled_date}|${r.subject_id}`;
     if (!grouped.has(key)) {
       const s = byId.get(r.subject_id);
-      grouped.set(key, { date: r.scheduled_date, subjectId: r.subject_id, name: s?.name ?? '—', rank: s?.rank, methods: [], minutes: 0, completed: true });
+      grouped.set(key, { date: r.scheduled_date, subjectId: r.subject_id, name: s?.name ?? '—', area: s?.area, specialty: s?.specialty, rank: s?.rank, methods: [], methodIds: [], minutes: 0, completed: true, studied: s?.status === 'studied', progress: s?.progress ?? 0, totalActivities: s?.checklist.length ?? 0 });
     }
     const g = grouped.get(key);
     g.methods.push(methodName.get(r.study_method_id) ?? '—');
+    g.methodIds.push(r.study_method_id);
     g.minutes += r.estimated_minutes;
     g.completed = g.completed && r.completed;
   }
-  for (const g of grouped.values()) push(g.date, 'newSubjects', g);
+  for (const g of grouped.values()) {
+    const done = new Set(byId.get(g.subjectId)?.checklist.filter((c) => c.done).map((c) => c.methodId));
+    g.done = g.methodIds.every((m: string) => done.has(m));
+    push(g.date, 'newSubjects', g);
+  }
   for (const e of state.exams as any[]) if (e.exam_date && days.has(e.exam_date)) days.get(e.exam_date)!.exams.push(e.institution);
   return { from, to, today, planEnd: plan.end_date, days: [...days.values()] };
 }

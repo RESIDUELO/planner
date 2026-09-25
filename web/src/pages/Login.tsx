@@ -56,11 +56,12 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
       <div className="w-full max-w-[340px] animate-in">
-        <LogoMark className="mx-auto h-12 w-12" />
-        <h1 className="mt-8 text-center text-[32px] leading-tight font-semibold tracking-[-0.03em]">Residência Planner</h1>
-        <p className="mt-3 text-center text-[17px] text-ink-2">Planeje seus estudos com base no que realmente cai na sua prova.</p>
+        <LogoMark className="mx-auto h-12 w-12 text-[26px]" />
+        <h1 className="mt-8 text-center font-display text-[48px] leading-none">Residência</h1>
+        <p className="mt-2 text-center text-[11px] tracking-[0.3em] text-ink-2 uppercase">planner</p>
+        <p className="mt-6 text-center text-[16px] text-ink-2">Planeje seus estudos com base no que realmente cai na sua prova.</p>
 
-        <Segmented className="mt-10 flex w-full [&>button]:flex-1" value={mode} onChange={(m) => { setMode(m); setError(null); }}
+        <Segmented className="mt-10 flex w-full justify-center" value={mode} onChange={(m) => { setMode(m); setError(null); }}
           options={[{ value: 'login', label: 'Entrar' }, { value: 'register', label: 'Criar conta' }]} />
 
         <form onSubmit={submit} className="mt-6 space-y-3">

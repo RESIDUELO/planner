@@ -24,10 +24,10 @@ export function ReviewButtons({ subjectId, onDone }: { subjectId: string; onDone
     onError: (e) => onDone?.(errorMessage(e)),
   });
   return (
-    <div className="grid grid-cols-4 gap-1 rounded-[12px] bg-fill p-1" role="group" aria-label="Como foi a revisão?">
+    <div className="grid grid-cols-4 gap-2" role="group" aria-label="Como foi a revisão?">
       {OPTIONS.map((o) => (
         <button key={o.rating} disabled={m.isPending} title={o.hint} onClick={() => m.mutate(o.rating)}
-          className="rounded-[9px] py-2 text-[14px] text-ink transition-all duration-150 hover:bg-canvas hover:shadow-[0_1px_3px_rgba(0,0,0,0.08)] disabled:opacity-40 dark:hover:bg-fill-strong">
+          className="rounded-full border border-line py-2 text-[14px] text-ink transition-all duration-150 hover:border-ink hover:bg-ink hover:text-canvas disabled:opacity-40">
           {o.label}
         </button>
       ))}

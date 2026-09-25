@@ -10,6 +10,7 @@ import { PlannerPage } from './pages/Planner';
 import { ReviewsPage } from './pages/Reviews';
 import { PerformancePage } from './pages/Performance';
 import { SettingsPage } from './pages/Settings';
+import { FocusPage } from './pages/Focus';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -27,6 +28,7 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="provas" element={<ExamsPage />} />
         <Route path="planner" element={<PlannerPage />} />
+        <Route path="foco" element={<FocusPage />} />
         <Route path="revisoes" element={<ReviewsPage />} />
         <Route path="desempenho" element={<PerformancePage />} />
         <Route path="configuracoes" element={<SettingsPage />} />

@@ -1,49 +1,65 @@
 @import "tailwindcss";
 
 /*
- * Residência Planner — linguagem visual
- * Neutros + uma única cor de ação. Verde e vermelho só comunicam estado.
- * Hierarquia por tipografia e espaço, não por caixas.
+ * Residência Planner — planner editorial
+ * Papel creme, tinta grafite, linhas finas e pequenos destaques em pastel.
+ * Tipografia + espaço + linhas. Cor só como detalhe.
  */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --canvas: #ffffff;        /* fundo da página */
-  --surface: #ffffff;       /* folhas e menus */
-  --fill: #f5f5f7;          /* campos, áreas sutis */
-  --fill-strong: #e8e8ed;
-  --ink: #1d1d1f;           /* texto principal */
-  --ink-2: #6e6e73;         /* secundário */
-  --ink-3: #86868b;         /* terciário */
-  --line: #e5e5e5;          /* separadores */
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
-  --accent-soft: rgba(0, 113, 227, 0.08);
-  --positive: #1a7f37;
-  --negative: #d70015;
-  --scrim: rgba(0, 0, 0, 0.28);
+  --canvas: #f1eee8;        /* papel */
+  --surface: #f7f5f0;       /* folhas */
+  --fill: #e7e3db;
+  --fill-strong: #d9d4ca;
+  --ink: #1c1b19;           /* tinta */
+  --ink-2: #6f6a62;
+  --ink-3: #a29c92;
+  --line: #d8d3c9;
+  --accent: #1c1b19;        /* ações = tinta */
+  --accent-hover: #3a3833;
+  --accent-soft: rgba(28, 27, 25, 0.08);
+  --today: #e5484d;         /* marcador de hoje */
+  --positive: #2f8f5b;
+  --negative: #d9443b;
+  --scrim: rgba(28, 27, 25, 0.28);
+  /* Pastéis (fundo do destaque / tinta sobre ele) */
+  --rose: #f4cfd6;   --rose-ink: #1c1b19;
+  --lilac: #ddd5f6;  --lilac-ink: #1c1b19;
+  --butter: #f8ec8c; --butter-ink: #1c1b19;
+  --mint: #c4ecd4;   --mint-ink: #1c1b19;
+  --sky: #cfe3f7;    --sky-ink: #1c1b19;
+  --peach: #f7dac7;  --peach-ink: #1c1b19;
   color-scheme: light;
 }
 
 .dark {
-  --canvas: #000000;
-  --surface: #1c1c1e;
-  --fill: #1c1c1e;
-  --fill-strong: #2c2c2e;
-  --ink: #f5f5f7;
-  --ink-2: #a1a1a6;
-  --ink-3: #8e8e93;
-  --line: #2c2c2e;
-  --accent: #0a84ff;
-  --accent-hover: #409cff;
-  --accent-soft: rgba(10, 132, 255, 0.14);
-  --positive: #30d158;
-  --negative: #ff453a;
+  --canvas: #171614;
+  --surface: #201f1c;
+  --fill: #2a2825;
+  --fill-strong: #37342f;
+  --ink: #f1eee8;
+  --ink-2: #b3ada3;
+  --ink-3: #7f7a71;
+  --line: #34312c;
+  --accent: #f1eee8;
+  --accent-hover: #ffffff;
+  --accent-soft: rgba(241, 238, 232, 0.12);
+  --today: #ff6b6b;
+  --positive: #5cc98d;
+  --negative: #ff6b61;
   --scrim: rgba(0, 0, 0, 0.55);
+  --rose: rgba(244, 170, 186, 0.22);   --rose-ink: #f6c3cd;
+  --lilac: rgba(190, 175, 245, 0.22);  --lilac-ink: #d6ccfa;
+  --butter: rgba(248, 230, 120, 0.2);  --butter-ink: #f6e98f;
+  --mint: rgba(140, 225, 180, 0.2);    --mint-ink: #b5ecd0;
+  --sky: rgba(150, 200, 245, 0.22);    --sky-ink: #c5e0fa;
+  --peach: rgba(245, 190, 160, 0.22);  --peach-ink: #f6d2bd;
   color-scheme: dark;
 }
 
 @theme inline {
+  --font-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
@@ -59,6 +75,13 @@
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-scrim: var(--scrim);
+  --color-today: var(--today);
+  --color-rose: var(--rose);
+  --color-lilac: var(--lilac);
+  --color-butter: var(--butter);
+  --color-mint: var(--mint);
+  --color-sky: var(--sky);
+  --color-peach: var(--peach);
   --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
@@ -66,23 +89,24 @@ html, body, #root { min-height: 100%; }
 body {
   @apply bg-canvas text-ink antialiased;
   font-family: var(--font-sans);
-  font-size: 17px;
-  line-height: 1.47;
-  letter-spacing: -0.022em;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
   transition: background-color 250ms var(--ease-apple), color 250ms var(--ease-apple);
 }
 .tabular { font-variant-numeric: tabular-nums; }
+.font-display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.005em; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 ::selection { background: var(--accent-soft); }
 
 /* Campos: preenchimento sutil, sem borda pesada (em camada: utilitários como w-24 e pl-9 prevalecem) */
 @layer components {
 .field {
-  @apply w-full rounded-[10px] bg-fill px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-3 outline-none transition;
-  border: 1px solid transparent;
+  @apply w-full rounded-[10px] bg-transparent px-3 py-2.5 text-[15px] text-ink placeholder:text-ink-3 outline-none transition;
+  border: 1px solid var(--line);
 }
-.field:focus { border-color: var(--accent); background: var(--canvas); box-shadow: 0 0 0 3px var(--accent-soft); }
+.field:focus { border-color: var(--ink); background: var(--surface); box-shadow: none; }
 .field:disabled { opacity: 0.5; }
 input[type="date"].field, input[type="time"].field { min-height: 42px; }
 }
@@ -96,4 +120,18 @@ input[type="date"].field, input[type="time"].field { min-height: 42px; }
 .animate-sheet { animation: rp-sheet 280ms var(--ease-apple) both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+@layer components {
+/* Destaque de marca-texto (como num planner de papel) */
+.tint { border-radius: 999px; padding: 0.08em 0.55em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.tint-rose { background: var(--rose); color: var(--rose-ink); }
+.tint-lilac { background: var(--lilac); color: var(--lilac-ink); }
+.tint-butter { background: var(--butter); color: var(--butter-ink); }
+.tint-mint { background: var(--mint); color: var(--mint-ink); }
+.tint-sky { background: var(--sky); color: var(--sky-ink); }
+.tint-peach { background: var(--peach); color: var(--peach-ink); }
+.dot-rose { background: #e79aaa; }
+.dot-lilac { background: #a797e6; } .dot-butter { background: #e3cf3c; } .dot-mint { background: #5fcf92; }
+.dot-sky { background: #7fb3e6; } .dot-peach { background: #eba37d; }
 }

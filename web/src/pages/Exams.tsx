@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
 import { daysText, pct, REG_STATUS, shortDate, WINDOW_LABEL } from '../lib/format';
-import { Button, Empty, Field, Note, Section, Sheet, Spinner, Title, Toggle } from '../components/ui';
+import { Advanced, Button, Empty, Field, Note, Section, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
 
 export function ExamsPage() {
   const qc = useQueryClient();
@@ -62,19 +62,19 @@ function ExamList({ exams, open, setOpen, update, showHistory }: {
             <button onClick={() => setOpen(isOpen ? null : e.edition_id)} aria-expanded={isOpen}
               className="flex w-full items-center gap-4 py-5 text-left transition-opacity hover:opacity-70">
               <div className="min-w-0 flex-1">
-                <div className="text-[21px] font-semibold tracking-[-0.02em]">{e.institution}</div>
-                <div className="mt-0.5 text-[15px] text-ink-2">{e.exam_name}{e.is_primary && ' · principal'}</div>
+                <div className="font-display text-[30px] leading-tight">{e.institution}</div>
+                <div className="mt-0.5 text-[14px] text-ink-2">{e.exam_name}{e.is_primary && ' · principal'}</div>
               </div>
               <div className="shrink-0 text-right">
                 {e.selected ? (
                   e.exam_date ? (
                     <>
-                      <div className="tabular text-[17px]">{shortDate(e.exam_date)}</div>
-                      <div className="text-[14px] text-ink-2">{e.days_left >= 0 ? daysText(e.days_left) : 'realizada'}</div>
+                      <div className="tabular font-display text-[22px] leading-tight">{shortDate(e.exam_date)}</div>
+                      <div className="text-[13px] text-ink-2">{e.days_left >= 0 ? daysText(e.days_left) : 'realizada'}</div>
                     </>
-                  ) : <span className="text-[15px] text-accent">Definir data</span>
+                  ) : <Tint area="GO" className="text-[14px]">Definir data</Tint>
                 ) : (
-                  <span className="text-[15px] text-accent">Adicionar</span>
+                  <span className="text-[14px] text-ink underline underline-offset-4">Adicionar</span>
                 )}
               </div>
               <ChevronDown className={clsx('h-4 w-4 shrink-0 text-ink-3 transition-transform duration-200 ease-apple', isOpen && 'rotate-180')} />
@@ -124,28 +124,30 @@ function ExamDetails({ exam, update, showHistory }: { exam: any; update: (id: st
 
   return (
     <div className="pb-8 animate-in">
+      <div className="max-w-[12rem]">{input('examDate', 'Data da prova', 'date')}</div>
+      <div className="mt-2 h-5 text-[13px]">{saved ? <span className="text-ink">✓ Salvo</span> : exam.registration_window !== 'unknown' && <span className="text-ink-3">{w.label}</span>}</div>
+
+      <Advanced className="mt-4" label="Inscrição, valor e mais">
       <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-        {input('examDate', 'Data da prova', 'date')}
-        {input('registrationFee', 'Valor (R$)', 'number', { min: 0, step: '0.01', placeholder: '0,00' })}
         {input('registrationStart', 'Inscrição: início', 'date')}
         {input('registrationEnd', 'Inscrição: fim', 'date')}
+        {input('registrationFee', 'Valor (R$)', 'number', { min: 0, step: '0.01', placeholder: '0,00' })}
       </div>
-      <div className="mt-2 h-5 text-[13px]">{saved ? <span className="text-positive">Salvo</span> : exam.registration_window !== 'unknown' && <span className="text-ink-3">{w.label}</span>}</div>
-
-      <div className="mt-4 divide-y divide-line border-y border-line">
+      <div className="mt-6 divide-y divide-line border-y border-line">
         <label className="flex items-center justify-between gap-4 py-3.5">
-          <span className="text-[17px]">Situação da inscrição</span>
-          <select aria-label="Situação da inscrição" className="max-w-[55%] bg-transparent text-right text-[17px] text-ink-2 outline-none"
+          <span className="text-[15px]">Situação da inscrição</span>
+          <select aria-label="Situação da inscrição" className="max-w-[55%] bg-transparent text-right text-[15px] text-ink-2 outline-none"
             value={exam.registration_status ?? ''} onChange={(ev) => update(exam.edition_id, { status: ev.target.value || null })}>
             <option value="">Não informada</option>
             {Object.entries(REG_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </label>
         <div className="flex items-center justify-between gap-4 py-3">
-          <span className="text-[17px]">Prova principal</span>
+          <span className="text-[15px]">Prova principal</span>
           <Toggle label="Prova principal" checked={exam.is_primary} onChange={(on) => on && update(exam.edition_id, { isPrimary: true })} />
         </div>
       </div>
+      </Advanced>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
         <Button variant="plain" onClick={showHistory}>Assuntos mais cobrados</Button>
