@@ -1,10 +1,12 @@
 /**
  * priority_v2 — ranking e prioridade dos assuntos.
  *
- * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE (em quantas
- *    das provas analisadas o assunto caiu — os que caíram todos os anos vêm
- *    antes), depois a QUANTIDADE de questões (fração da prova) e, por fim, a
- *    recência. Com várias provas, usa a média ponderada pelo peso de cada prova.
+ * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE — em quantas
+ *    provas o assunto caiu, contando a partir da primeira em que apareceu (um
+ *    tema que cai todo ano desde 2023, ou o bloco de Saúde Mental desde 2024,
+ *    vale o mesmo que um que cai desde 2021; sempre olhando no mínimo as 3
+ *    últimas provas) —, depois a QUANTIDADE de questões nesse mesmo período e,
+ *    por fim, a recência. Com várias provas, média ponderada pelo peso de cada uma.
  *
  * 2) Score dinâmico (0–100), usado para "O que estudar hoje" e para a
  *    explicação de cada assunto:
@@ -61,6 +63,8 @@ export interface RankedSubject {
   level: PriorityLevel;
   percentage: number;
   presenceRate: number;
+  regularity: number;
+  activePercentage: number;
   recentPercentage: number;
   questions: number;
   weighted: number;
@@ -127,7 +131,7 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
   for (const e of exams) for (const s of e.stats.subjects) ids.add(s.subjectId);
 
   const combined = [...ids].map((subjectId) => {
-    let percentage = 0, presence = 0, recent = 0, estimated = 0, proximity = 0;
+    let percentage = 0, presence = 0, regularity = 0, active = 0, recent = 0, estimated = 0, proximity = 0;
     let questions = 0, weighted = 0, present = 0, analyzed = 0, annual = 0;
     let lastYear: number | null = null;
     const perExam: PerExamSubject[] = [];
@@ -152,6 +156,8 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
       if (!s) continue;
       percentage += w.weight * s.percentage;
       presence += w.weight * s.presenceRate;
+      regularity += w.weight * s.regularity;
+      active += w.weight * s.activePercentage;
       recent += w.weight * s.recentPercentage;
       questions += s.questions;
       weighted += s.weighted;
@@ -165,7 +171,7 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
       if (s.lastYear != null && (lastYear == null || s.lastYear > lastYear)) lastYear = s.lastYear;
     }
     return {
-      subjectId, percentage, presenceRate: presence, recentPercentage: recent, questions, weighted,
+      subjectId, percentage, presenceRate: presence, regularity, activePercentage: active, recentPercentage: recent, questions, weighted,
       editionsPresent: present, editionsAnalyzed: analyzed, annualAverage: annual, lastYear,
       estimatedQuestions: estimated, proximity, perExam,
     };
@@ -174,7 +180,7 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
   // Só entram assuntos com peso nas provas consideradas
   const relevant = combined.filter((c) => c.percentage > 0);
   relevant.sort(compareHistorical);
-  const maxPct = relevant[0]?.percentage || 1;
+  const maxPct = Math.max(...relevant.map((r) => r.activePercentage), 0) || 1;
   const maxRecent = Math.max(...relevant.map((r) => r.recentPercentage), 0) || 1;
 
   const subjects: RankedSubject[] = relevant.map((c, i) => ({
@@ -182,8 +188,8 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
     rank: i + 1,
     level: levelForRank(i + 1, relevant.length),
     historicalScore:
-      PRIORITY.historical.frequency * (c.percentage / maxPct) +
-      PRIORITY.historical.consistency * c.presenceRate +
+      PRIORITY.historical.frequency * (c.activePercentage / maxPct) +
+      PRIORITY.historical.consistency * c.regularity +
       PRIORITY.historical.recency * (c.recentPercentage / maxRecent),
   }));
   return { weights, subjects };

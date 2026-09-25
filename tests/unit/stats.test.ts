@@ -40,6 +40,23 @@ describe('computeExamStats', () => {
     expect(s2.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'cirrose', 'vacinas', 'diabetes']);
   });
 
+  it('regularidade conta a partir da primeira aparição (tema que passou a cair todo ano)', () => {
+    const extra = [...links];
+    // Saúde mental: só a partir de 2023, e em todas desde então → 3/3
+    for (const ed of ['e23', 'e24', 'e25']) extra.push({ questionId: `sm-${ed}`, editionId: ed, subjectId: 'saude-mental', weight: 1 });
+    // Tema de uma prova só, recente → não vira "todo ano" (mínimo das 3 últimas)
+    extra.push({ questionId: 'x25a', editionId: 'e25', subjectId: 'novo', weight: 1 });
+    extra.push({ questionId: 'x25b', editionId: 'e25', subjectId: 'novo', weight: 1 });
+    const s2 = computeExamStats(eds, extra);
+    const sm = s2.subjects.find((s) => s.subjectId === 'saude-mental')!;
+    expect(sm.regularity).toBe(1);
+    expect(sm.presenceRate).toBe(0.75);
+    expect(sm.activePercentage).toBeCloseTo(3 / 150);
+    expect(s2.subjects.find((s) => s.subjectId === 'novo')!.regularity).toBeCloseTo(1 / 3);
+    // Empata em regularidade com quem caiu todos os anos; vem antes de quem falhou um ano
+    expect(s2.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'saude-mental', 'vacinas', 'novo', 'diabetes']);
+  });
+
   it('não conta edições sem questões classificadas', () => {
     const s2 = computeExamStats([...eds, { id: 'e26', year: 2026, questionCount: 0 }], links);
     expect(s2.editionsAnalyzed).toBe(4);

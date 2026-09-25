@@ -41,6 +41,15 @@ export interface SubjectHistStats {
   editionsPresent: number;
   editionsAnalyzed: number;
   presenceRate: number;
+  /**
+   * Regularidade: presença contada a partir da primeira edição em que o assunto
+   * apareceu (mínimo das últimas `regularityMinSpan` edições). Tema que caiu
+   * em todas desde que surgiu (ex.: 2023–2026, ou um bloco novo 2024–2026)
+   * vale o mesmo que um que caiu em todas desde a primeira edição.
+   */
+  regularity: number;
+  /** Fração da prova nas edições desde a primeira aparição (mesmo período). */
+  activePercentage: number;
   annualAverage: number;
   recentPercentage: number;
   lastYear: number | null;
@@ -121,8 +130,12 @@ export function computeExamStats(
   }
 
   const n = analyzed.length;
+  const minSpan = Math.min(n, PRIORITY.regularityMinSpan);
   const subjects: SubjectHistStats[] = [...acc.entries()].map(([subjectId, a]) => {
     const years = [...a.byYear.keys()].sort();
+    const firstIdx = analyzed.findIndex((e) => a.eds.has(e.id));
+    const span = Math.max(minSpan, n - firstIdx);
+    const spanTotal = analyzed.slice(n - span).reduce((s, e) => s + e.questionCount, 0);
     return {
       subjectId,
       questions: a.qs.size,
@@ -131,6 +144,8 @@ export function computeExamStats(
       editionsPresent: a.eds.size,
       editionsAnalyzed: n,
       presenceRate: n ? a.eds.size / n : 0,
+      regularity: span ? a.eds.size / span : 0,
+      activePercentage: spanTotal ? a.weighted / spanTotal : 0,
       annualAverage: n ? a.weighted / n : 0,
       recentPercentage: recentTotal ? a.recent / recentTotal : 0,
       lastYear: years.length ? years[years.length - 1] : null,
@@ -151,15 +166,13 @@ export function computeExamStats(
   };
 }
 
-/** Ordem histórica: frequência (fração da prova) → presença → recência. */
-export function compareHistorical(
-  a: { percentage: number; presenceRate: number; recentPercentage: number; subjectId: string },
-  b: { percentage: number; presenceRate: number; recentPercentage: number; subjectId: string },
-): number {
-  // Regularidade primeiro (caiu em todas as provas?), depois quantidade e recência.
-  const presence = Math.round((b.presenceRate - a.presenceRate) * 1e6);
+type Comparable = { percentage: number; activePercentage: number; regularity: number; recentPercentage: number; subjectId: string };
+/** Ordem histórica: regularidade (desde a 1ª aparição) → quantidade no mesmo período → recência. */
+export function compareHistorical(a: Comparable, b: Comparable): number {
+  const regular = Math.round((b.regularity - a.regularity) * 1e6);
   return (
-    presence ||
+    regular ||
+    b.activePercentage - a.activePercentage ||
     b.percentage - a.percentage ||
     b.recentPercentage - a.recentPercentage ||
     a.subjectId.localeCompare(b.subjectId)

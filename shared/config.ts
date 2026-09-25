@@ -27,6 +27,8 @@ export const PRIORITY = {
   },
   /** Quantas edições mais recentes contam como "frequência recente". */
   recentEditions: 2,
+  /** Regularidade: conta no mínimo as últimas N edições (um tema de uma única prova recente não vira "todo ano"). */
+  regularityMinSpan: 3,
   /** Peso extra da prova principal no modo multiprova. */
   primaryBoost: 2,
   /** Meia-vida (dias) do fator de proximidade da prova. */
