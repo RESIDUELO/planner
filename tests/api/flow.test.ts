@@ -403,7 +403,7 @@ describe('FAMEMA (relatório sem anexo questão a questão)', () => {
     const r = await dbQuery(`select count(distinct q.id)::int as n, count(distinct qs.question_id)::int as c from questions q
       join exam_editions ed on ed.id = q.exam_edition_id join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
       left join question_subjects qs on qs.question_id = q.id where i.abbreviation = 'FAMEMA'`);
-    expect(r.rows[0]).toEqual({ n: 600, c: 433 });
+    expect(r.rows[0]).toEqual({ n: 600, c: 443 });
     const list = await student.ok('GET', '/api/exams');
     const f = list.find((e: any) => e.institution === 'FAMEMA');
     expect(f).toMatchObject({ exam_date: '2026-12-08', date_official: true });

@@ -763,12 +763,92 @@
    "subsubject": null,
    "area": "Clínica Médica",
    "specialty": null,
-   "subject": "Insuficiência cardíaca",
+   "subject": "COVID-19",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
    "year": 2021,
    "question_number": 110,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Ginecologia e Obstetrícia",
+   "specialty": null,
+   "subject": "Endometriose",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2021,
+   "question_number": 111,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Clínica Médica",
+   "specialty": null,
+   "subject": "Glomerulopatias",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2021,
+   "question_number": 112,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Clínica Médica",
+   "specialty": null,
+   "subject": "DPOC e asma",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2021,
+   "question_number": 113,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Cirurgia",
+   "specialty": null,
+   "subject": "Pancreatite",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2021,
+   "question_number": 114,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Clínica Médica",
+   "specialty": null,
+   "subject": "Insuficiência cardíaca",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2021,
+   "question_number": 115,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -784,7 +864,7 @@
   },
   {
    "year": 2021,
-   "question_number": 111,
+   "question_number": 116,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -800,7 +880,7 @@
   },
   {
    "year": 2021,
-   "question_number": 112,
+   "question_number": 117,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -816,7 +896,7 @@
   },
   {
    "year": 2021,
-   "question_number": 113,
+   "question_number": 118,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -832,7 +912,7 @@
   },
   {
    "year": 2021,
-   "question_number": 114,
+   "question_number": 119,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -848,7 +928,7 @@
   },
   {
    "year": 2021,
-   "question_number": 115,
+   "question_number": 120,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -861,86 +941,6 @@
    "specialty": null,
    "subject": "Hemorragia pós-parto",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
-  },
-  {
-   "year": 2021,
-   "question_number": 116,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
-  },
-  {
-   "year": 2021,
-   "question_number": 117,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
-  },
-  {
-   "year": 2021,
-   "question_number": 118,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
-  },
-  {
-   "year": 2021,
-   "question_number": 119,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
-  },
-  {
-   "year": 2021,
-   "question_number": 120,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
   },
   {
    "year": 2021,
@@ -2590,6 +2590,38 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
+   "area": "Clínica Médica",
+   "specialty": null,
+   "subject": "COVID-19",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2022,
+   "question_number": 111,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Ginecologia e Obstetrícia",
+   "specialty": null,
+   "subject": "Endometriose",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2022,
+   "question_number": 112,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
    "area": "Ginecologia e Obstetrícia",
    "specialty": null,
    "subject": "Vitalidade fetal/CTG",
@@ -2597,7 +2629,7 @@
   },
   {
    "year": 2022,
-   "question_number": 111,
+   "question_number": 113,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -2613,7 +2645,7 @@
   },
   {
    "year": 2022,
-   "question_number": 112,
+   "question_number": 114,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -2626,38 +2658,6 @@
    "specialty": null,
    "subject": "Dermatologia pediátrica",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
-  },
-  {
-   "year": 2022,
-   "question_number": 113,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
-  },
-  {
-   "year": 2022,
-   "question_number": 114,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
   },
   {
    "year": 2022,
@@ -4156,7 +4156,7 @@
    "subsubject": null,
    "area": "Clínica Médica",
    "specialty": null,
-   "subject": "Cefaleia e HSA",
+   "subject": "COVID-19",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4172,7 +4172,7 @@
    "subsubject": null,
    "area": "Clínica Médica",
    "specialty": null,
-   "subject": "Tuberculose",
+   "subject": "Cefaleia e HSA",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4186,9 +4186,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Ginecologia e Obstetrícia",
+   "area": "Clínica Médica",
    "specialty": null,
-   "subject": "Mastologia",
+   "subject": "Tuberculose",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4204,7 +4204,7 @@
    "subsubject": null,
    "area": "Ginecologia e Obstetrícia",
    "specialty": null,
-   "subject": "Miomas",
+   "subject": "Mastologia",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4218,9 +4218,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Pediatria",
+   "area": "Ginecologia e Obstetrícia",
    "specialty": null,
-   "subject": "Faringoamigdalite",
+   "subject": "Miomas",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4236,7 +4236,7 @@
    "subsubject": null,
    "area": "Pediatria",
    "specialty": null,
-   "subject": "Icterícia neonatal",
+   "subject": "Faringoamigdalite",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4252,7 +4252,7 @@
    "subsubject": null,
    "area": "Pediatria",
    "specialty": null,
-   "subject": "Dermatologia pediátrica",
+   "subject": "Icterícia neonatal",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4268,7 +4268,7 @@
    "subsubject": null,
    "area": "Pediatria",
    "specialty": null,
-   "subject": "Doenças exantemáticas",
+   "subject": "Dermatologia pediátrica",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -4282,10 +4282,10 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": null,
+   "area": "Pediatria",
    "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
+   "subject": "Doenças exantemáticas",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
    "year": 2023,
@@ -8894,7 +8894,7 @@
    "subsubject": null,
    "area": "Clínica Médica",
    "specialty": null,
-   "subject": "Cefaleia e HSA",
+   "subject": "Sepse",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -8908,9 +8908,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Cirurgia",
+   "area": "Clínica Médica",
    "specialty": null,
-   "subject": "Obstrução intestinal",
+   "subject": "Sepse",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -8924,9 +8924,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Cirurgia",
+   "area": "Clínica Médica",
    "specialty": null,
-   "subject": "Lesões hepáticas benignas",
+   "subject": "Cefaleia e HSA",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -8942,7 +8942,7 @@
    "subsubject": null,
    "area": "Cirurgia",
    "specialty": null,
-   "subject": "Tórax (empiema, timoma)",
+   "subject": "Obstrução intestinal",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -8956,9 +8956,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Ginecologia e Obstetrícia",
+   "area": "Cirurgia",
    "specialty": null,
-   "subject": "Vulvovaginites",
+   "subject": "Lesões hepáticas benignas",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -8972,9 +8972,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Ginecologia e Obstetrícia",
+   "area": "Cirurgia",
    "specialty": null,
-   "subject": "Contracepção",
+   "subject": "Tórax (empiema, timoma)",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -8990,7 +8990,7 @@
    "subsubject": null,
    "area": "Ginecologia e Obstetrícia",
    "specialty": null,
-   "subject": "Mastologia",
+   "subject": "Vulvovaginites",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -9006,7 +9006,7 @@
    "subsubject": null,
    "area": "Ginecologia e Obstetrícia",
    "specialty": null,
-   "subject": "Miomas",
+   "subject": "Contracepção",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -9020,9 +9020,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Pediatria",
+   "area": "Ginecologia e Obstetrícia",
    "specialty": null,
-   "subject": "Convulsão febril e estado de mal",
+   "subject": "Mastologia",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -9036,9 +9036,9 @@
    "question_type": null,
    "guideline": null,
    "subsubject": null,
-   "area": "Pediatria",
+   "area": "Ginecologia e Obstetrícia",
    "specialty": null,
-   "subject": "Icterícia neonatal",
+   "subject": "Miomas",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
@@ -9054,12 +9054,44 @@
    "subsubject": null,
    "area": "Pediatria",
    "specialty": null,
-   "subject": "Dermatologia pediátrica",
+   "subject": "Convulsão febril e estado de mal",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
   },
   {
    "year": 2026,
    "question_number": 124,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Pediatria",
+   "specialty": null,
+   "subject": "Icterícia neonatal",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2026,
+   "question_number": 125,
+   "statement": null,
+   "summary": null,
+   "correct_answer": null,
+   "annulled": false,
+   "difficulty": null,
+   "question_type": null,
+   "guideline": null,
+   "subsubject": null,
+   "area": "Pediatria",
+   "specialty": null,
+   "subject": "Dermatologia pediátrica",
+   "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
+  },
+  {
+   "year": 2026,
+   "question_number": 126,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -9075,7 +9107,7 @@
   },
   {
    "year": 2026,
-   "question_number": 125,
+   "question_number": 127,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -9091,7 +9123,7 @@
   },
   {
    "year": 2026,
-   "question_number": 126,
+   "question_number": 128,
    "statement": null,
    "summary": null,
    "correct_answer": null,
@@ -9104,38 +9136,6 @@
    "specialty": "Psiquiatria",
    "subject": "TDAH e depressão",
    "notes": "Número da questão não informado no relatório: o assunto foi contado pelo ano (seções 5, 10 e 11 da análise)."
-  },
-  {
-   "year": 2026,
-   "question_number": 127,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
-  },
-  {
-   "year": 2026,
-   "question_number": 128,
-   "statement": null,
-   "summary": null,
-   "correct_answer": null,
-   "annulled": false,
-   "difficulty": null,
-   "question_type": null,
-   "guideline": null,
-   "subsubject": null,
-   "area": null,
-   "specialty": null,
-   "subject": null,
-   "notes": "Questão não classificada no relatório."
   },
   {
    "year": 2026,
