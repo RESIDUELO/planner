@@ -95,7 +95,7 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
     }
     const t = page.getByTestId(`day-${inDays(n)}`).getByTestId('task').first();
     if (await t.count()) {
-      const name = (await t.locator('button').first().locator('span').nth(1).textContent())!.trim();
+      const name = (await t.getByTestId('task-name').textContent())!.trim();
       await t.getByRole('checkbox').click();
       await expect(t.getByRole('checkbox')).toHaveCount(0, { timeout: 5000 }).catch(() => {});
       future = { name };
@@ -222,7 +222,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await page.getByRole('button', { name: 'Próxima semana' }).click();
   const src = page.getByTestId(`day-${inDays(mon)}`).getByTestId('task').first();
   await expect(src).toBeVisible();
-  const name = (await src.locator('button').first().locator('span').nth(1).textContent())!.trim();
+  const name = (await src.getByTestId('task-name').textContent())!.trim();
   await src.dragTo(page.getByTestId(`day-${inDays(mon + 1)}`).getByTestId('col-reviews'));
   await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).toContainText(name);
   const target = page.getByTestId(`day-${inDays(mon + 1)}`).getByTestId('col-subjects');
@@ -239,7 +239,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(dropDay).toContainText(libName);
 
   // Excluir do planner: some da semana, continua nos assuntos
-  await target.getByTestId('task').filter({ hasText: name }).locator('button').first().click();
+  await target.getByTestId('task').filter({ hasText: name }).getByTestId('task-name').click();
   await page.getByRole('dialog').getByRole('button', { name: 'Excluir do planner' }).click();
   await expect(page.getByRole('dialog').getByText('Fora do planner:', { exact: false })).toBeVisible();
   await page.keyboard.press('Escape');

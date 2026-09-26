@@ -42,10 +42,12 @@ export function Layout() {
     ]} />
   );
 
+  // Planner no desktop: usa mais da largura em telas grandes (7 colunas de dias)
+  const width = home ? 'max-w-7xl fit:max-w-[1560px]' : 'max-w-7xl';
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-5 sm:px-8">
+        <div className={clsx('mx-auto flex h-16 items-center', width, 'justify-between gap-6 px-5 sm:px-8')}>
           <Link to="/planner" className="flex shrink-0 items-center transition-opacity hover:opacity-70" aria-label="Planner">
             <span className="hidden sm:flex"><Logo /></span>
             <span className="flex sm:hidden"><LogoMark /></span>
@@ -56,10 +58,10 @@ export function Layout() {
             {profile}
           </div>
         </div>
-        <div className="mx-auto max-w-7xl px-5 sm:px-8"><div className="h-px bg-line" /></div>
+        <div className={clsx('mx-auto px-5 sm:px-8', width)}><div className="h-px bg-line" /></div>
       </header>
 
-      <main key={loc.pathname} className="mx-auto max-w-7xl px-5 pt-8 pb-24 sm:px-8 sm:pt-12">
+      <main key={loc.pathname} className={clsx('mx-auto px-5 pt-8 pb-24 sm:px-8 sm:pt-12', width, home && 'fit:pt-5 fit:pb-5')}>
         <Outlet />
       </main>
       <FocusOverlay />
