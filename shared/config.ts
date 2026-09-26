@@ -3,7 +3,7 @@
  *
  * Todos os pesos ficam aqui, versionados. Se algum valor mudar de forma que
  * altere resultados, crie uma nova versão (ex.: priority_v2) e registre-a na
- * tabela algorithm_versions — os planners antigos continuam identificando qual
+ * tabela algorithm_versions - os planners antigos continuam identificando qual
  * versão os gerou.
  */
 

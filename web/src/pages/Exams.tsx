@@ -107,7 +107,7 @@ function ExamDetails({ exam, update, showHistory }: { exam: any; update: (id: st
   };
   const input = (key: keyof typeof v, label: string, type: string, extra: any = {}) => (
     <Field label={label}>
-      <input type={type} className="field" aria-label={`${label} — ${exam.institution}`} value={v[key]} {...extra}
+      <input type={type} className="field" aria-label={`${label} - ${exam.institution}`} value={v[key]} {...extra}
         onChange={(ev) => setV({ ...v, [key]: ev.target.value })} onBlur={(ev) => save(key, ev.target.value)} />
     </Field>
   );

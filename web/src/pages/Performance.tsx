@@ -111,7 +111,7 @@ export function PerformancePage({ embedded = false }: { embedded?: boolean }) {
           <div className="space-y-5">
             {d.areas.map((a: any) => (
               <div key={a.area}>
-                <div className="flex justify-between text-[15px]"><span>{a.area}</span><span className="tabular text-ink-2">{a.answered ? pct(a.correct / a.answered, 0) : '—'}</span></div>
+                <div className="flex justify-between text-[15px]"><span>{a.area}</span><span className="tabular text-ink-2">{a.answered ? pct(a.correct / a.answered, 0) : '-'}</span></div>
                 <Progress className="mt-2" value={a.answered ? a.correct / a.answered : 0} tone="ink" />
                 <div className="mt-1 text-[13px] text-ink-3">{a.studied}/{a.subjects} temas · {a.answered} questões · {pct(a.percentage, 0)} da prova</div>
               </div>
@@ -146,7 +146,7 @@ export function PerformancePage({ embedded = false }: { embedded?: boolean }) {
                   <span className="truncate">{l.name}</span>
                   <span className="flex shrink-0 items-center gap-3">
                     <span className="tabular text-ink-2">{l.correct_count}/{l.questions_count} · {dateTimeBR(l.practiced_at)}</span>
-                    <Button variant="destructive" size="sm" disabled={del.isPending} onClick={() => del.mutate(l.id)} aria-label={`Excluir registro — ${l.name}`}>Excluir</Button>
+                    <Button variant="destructive" size="sm" disabled={del.isPending} onClick={() => del.mutate(l.id)} aria-label={`Excluir registro - ${l.name}`}>Excluir</Button>
                   </span>
                 </li>
               ))}

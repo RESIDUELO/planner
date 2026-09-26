@@ -1,7 +1,7 @@
 /**
  * As telas continuam chamando api.get('/api/...'). Esses caminhos são
  * atendidos no próprio navegador (src/backend/routes.ts), que fala direto com
- * o Supabase — não há servidor próprio.
+ * o Supabase - não há servidor próprio.
  */
 import { ApiError } from '../backend/core';
 import { handle } from '../backend/routes';
@@ -9,11 +9,23 @@ import { afterMutation, getCtx } from './supabase';
 
 export { ApiError };
 
+/** O site não usa travessão: textos vindos do banco (nomes de provas, cronogramas…) trocam "-" por "-". */
+export function noDash<T>(v: T): T {
+  if (typeof v === 'string') return (v.includes('\u2014') ? v.replace(/\u2014/g, '-') : v) as T;
+  if (Array.isArray(v)) return v.map(noDash) as T;
+  if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+    const o: any = {};
+    for (const k in v) o[k] = noDash((v as any)[k]);
+    return o;
+  }
+  return v;
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = (await handle(getCtx(), method, url, body)) as T;
   // App off-line: a ação só termina depois de gravada no disco (a tela já marcou na hora)
   if (method !== 'GET') await afterMutation();
-  return r;
+  return noDash(r);
 }
 
 export const api = {
@@ -27,8 +39,8 @@ export const api = {
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     const d = e.details as any;
-    if (Array.isArray(d) && d[0]?.message) return `${e.message} ${d.map((x: any) => `${x.path ? x.path + ': ' : ''}${x.message}`).join('; ')}`;
-    return e.message;
+    if (Array.isArray(d) && d[0]?.message) return noDash(`${e.message} ${d.map((x: any) => `${x.path ? x.path + ': ' : ''}${x.message}`).join('; ')}`);
+    return noDash(e.message);
   }
-  return (e as Error)?.message ?? 'Erro inesperado.';
+  return noDash((e as Error)?.message ?? 'Erro inesperado.');
 }

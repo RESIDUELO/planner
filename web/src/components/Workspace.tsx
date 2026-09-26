@@ -124,7 +124,7 @@ export function PerformanceStrip() {
   const studied = d.subjects.filter((s: any) => s.status === 'studied');
   const secured = Math.min(1, studied.reduce((t: number, s: any) => t + (s.percentage ?? 0), 0));
   const stats = [
-    { label: 'acertos', value: answered ? pct(correct / answered, 0) : '—' },
+    { label: 'acertos', value: answered ? pct(correct / answered, 0) : '-' },
     { label: 'questões', value: int(answered) },
     { label: 'de foco', value: hours(p.focusMinutesTotal ?? 0) },
     { label: 'assuntos concluídos', value: String(studied.length) },

@@ -1,8 +1,8 @@
 /**
- * Análise histórica de uma prova — calculada EXCLUSIVAMENTE a partir das
+ * Análise histórica de uma prova - calculada EXCLUSIVAMENTE a partir das
  * questões cadastradas no banco.
  *
- * Métricas (seção 18) — não confundir:
+ * Métricas (seção 18) - não confundir:
  *  - questions         → nº absoluto de questões sobre o assunto ("apareceu 8 vezes")
  *  - percentage        → fração da prova ("representa 8% da prova")
  *  - editionsPresent   → em quantas edições apareceu

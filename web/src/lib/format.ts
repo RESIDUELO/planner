@@ -2,14 +2,14 @@ const nf1 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1, minimumFr
 const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
 export const pct = (x: number | null | undefined, digits = 1) =>
-  x == null ? '—' : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(x * 100)}%`;
-export const num1 = (x: number | null | undefined) => (x == null ? '—' : nf1.format(x));
-export const int = (x: number | null | undefined) => (x == null ? '—' : nf0.format(x));
+  x == null ? '-' : `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(x * 100)}%`;
+export const num1 = (x: number | null | undefined) => (x == null ? '-' : nf1.format(x));
+export const int = (x: number | null | undefined) => (x == null ? '-' : nf0.format(x));
 export const money = (x: number | null | undefined) =>
-  x == null ? '—' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(x);
+  x == null ? '-' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(x);
 
 export function dateBR(d: string | null | undefined, opts: Intl.DateTimeFormatOptions = {}) {
-  if (!d) return '—';
+  if (!d) return '-';
   const iso = d.length === 10 ? `${d}T12:00:00Z` : d;
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', ...opts }).format(new Date(iso));
 }
@@ -24,7 +24,7 @@ export function minutes(m: number) {
 }
 
 export function relativeDays(days: number | null | undefined) {
-  if (days == null) return '—';
+  if (days == null) return '-';
   if (days === 0) return 'hoje';
   if (days === 1) return 'amanhã';
   if (days === -1) return 'ontem';
@@ -65,7 +65,7 @@ export const isoBR = (ts: string) => new Intl.DateTimeFormat('en-CA', { timeZone
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 /** "12 nov 2026" (ou "12 nov" sem o ano). */
 export function shortDate(d: string | null | undefined, withYear = true) {
-  if (!d) return '—';
+  if (!d) return '-';
   const [y, m, day] = d.slice(0, 10).split('-').map(Number);
   return `${day} ${MONTHS[m - 1]}${withYear ? ` ${y}` : ''}`;
 }

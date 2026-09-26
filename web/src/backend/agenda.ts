@@ -58,12 +58,12 @@ export async function todayView(ctx: Ctx) {
     .map(([subjectId, items]) => {
       const s = byId.get(subjectId);
       return {
-        kind: 'study' as const, subjectId, name: s?.name ?? '—', area: s?.area ?? '—', rank: s?.rank ?? 999,
+        kind: 'study' as const, subjectId, name: s?.name ?? '-', area: s?.area ?? '-', rank: s?.rank ?? 999,
         level: s?.level, levelLabel: s?.levelLabel,
         minutes: items.reduce((t, i) => t + i.estimated_minutes, 0),
         overdue: items.some((i) => i.scheduled_date < today),
         oldestDate: items[0].scheduled_date,
-        methods: items.map((i) => ({ scheduleId: i.id, methodId: i.study_method_id, name: methodName.get(i.study_method_id) ?? '—', minutes: i.estimated_minutes, date: i.scheduled_date })),
+        methods: items.map((i) => ({ scheduleId: i.id, methodId: i.study_method_id, name: methodName.get(i.study_method_id) ?? '-', minutes: i.estimated_minutes, date: i.scheduled_date })),
         percentage: s?.percentage ?? 0,
       };
     })
@@ -119,7 +119,7 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
     const d = toISODateBR(l.reviewed_at);
     if (seen.has(`${d}|${l.subject_id}`)) continue;
     seen.add(`${d}|${l.subject_id}`);
-    push(d, 'reviews', { subjectId: l.subject_id, name: byId.get(l.subject_id)?.name ?? '—', area: byId.get(l.subject_id)?.area, status: 'done', rating: l.rating });
+    push(d, 'reviews', { subjectId: l.subject_id, name: byId.get(l.subject_id)?.name ?? '-', area: byId.get(l.subject_id)?.area, status: 'done', rating: l.rating });
   }
 
   // Revisões pendentes: a fila (limite diário escolhido pelo aluno)
@@ -154,11 +154,11 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
     const key = `${it.date}|${it.subjectId}`;
     if (!grouped.has(key)) {
       const s = byId.get(it.subjectId);
-      grouped.set(key, { date: it.date, subjectId: it.subjectId, name: s?.name ?? '—', area: s?.area, specialty: s?.specialty, rank: s?.rank ?? 999,
+      grouped.set(key, { date: it.date, subjectId: it.subjectId, name: s?.name ?? '-', area: s?.area, specialty: s?.specialty, rank: s?.rank ?? 999,
         methods: [], methodIds: [], done: true, doneAt: null, studied: s?.status === 'studied', progress: s?.progress ?? 0, totalActivities: s?.checklist.length ?? 0 });
     }
     const g = grouped.get(key);
-    g.methods.push(methodName.get(it.methodId) ?? '—');
+    g.methods.push(methodName.get(it.methodId) ?? '-');
     g.methodIds.push(it.methodId);
     g.done = g.done && it.done;
     if (it.at && (!g.doneAt || it.at > g.doneAt)) g.doneAt = it.at;
@@ -259,7 +259,7 @@ export async function performanceView(ctx: Ctx) {
   const counts = new Map<string, number>();
   for (const r of reviewRows as any[]) counts.set(r.rating, (counts.get(r.rating) ?? 0) + 1);
   const ratings = [...counts.entries()].map(([rating, n]) => ({ rating, n }));
-  const logs = (allLogs as any[]).slice(0, 50).map((l) => ({ ...l, name: l.subjects?.name ?? '—' }));
+  const logs = (allLogs as any[]).slice(0, 50).map((l) => ({ ...l, name: l.subjects?.name ?? '-' }));
   if (!state) return { hasPlan: false, history, ratings, logs, subjects: [], areas: [] };
   const visible = state.subjects.filter((s) => !s.hidden);
 

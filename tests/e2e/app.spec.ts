@@ -72,10 +72,10 @@ test('datas oficiais fixas; inscrição e valor são do aluno (teste 3)', async 
   await card.locator('button').first().click();
   await card.getByRole('button', { name: 'Adicionar à minha preparação' }).click();
   await expect(card).toContainText('data oficial');
-  await expect(card.getByLabel('Data da prova — FAMERP')).toHaveCount(0);
+  await expect(card.getByLabel('Data da prova - FAMERP')).toHaveCount(0);
   await card.getByRole('button', { name: 'Inscrição, valor e mais' }).click();
-  await card.getByLabel('Valor (R$) — FAMERP').fill('450');
-  await card.getByLabel('Valor (R$) — FAMERP').blur();
+  await card.getByLabel('Valor (R$) - FAMERP').fill('450');
+  await card.getByLabel('Valor (R$) - FAMERP').blur();
   await expect(card.getByText('Salvo')).toBeVisible();
   await expect(card).toContainText('principal');
 });
@@ -131,7 +131,7 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await expect(page.getByRole('link', { name: 'Provas' })).toHaveCount(0);
 
   // Pomodoro a partir da tarefa: abre o foco por cima, sem sair da página
-  await page.getByTestId(`day-${inDays(0)}`).getByRole('button', { name: 'Iniciar Pomodoro — Saúde do Trabalhador' }).click();
+  await page.getByTestId(`day-${inDays(0)}`).getByRole('button', { name: 'Iniciar Pomodoro - Saúde do Trabalhador' }).click();
   const focus = page.getByRole('dialog', { name: 'Foco' });
   await expect(focus).toBeVisible();
   await expect(page).toHaveURL(HOME);
@@ -373,9 +373,9 @@ test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no 
   // Editar e excluir o assunto próprio pela folha do assunto
   await day2.getByTestId('task-name').filter({ hasText: 'Revisar ECG' }).click();
   await page.getByRole('button', { name: 'Editar assunto' }).click();
-  await page.getByLabel('Nome do assunto').fill('ECG — revisão');
+  await page.getByLabel('Nome do assunto').fill('ECG - revisão');
   await page.getByRole('button', { name: 'Salvar' }).click();
-  await expect(page.getByRole('dialog').getByRole('heading', { name: 'ECG — revisão' })).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'ECG - revisão' })).toBeVisible();
   await page.getByRole('button', { name: 'Excluir assunto' }).click();
   await page.getByRole('button', { name: 'Excluir de vez' }).click();
   await expect(day2.getByTestId('task-name').filter({ hasText: 'ECG' })).toHaveCount(0);

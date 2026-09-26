@@ -1,7 +1,7 @@
 /**
  * "Questões potencialmente dominadas" (seção 26).
  *
- * Estimativa matemática — NÃO é promessa de acerto:
+ * Estimativa matemática - NÃO é promessa de acerto:
  *   questões esperadas do assunto na prova × domínio estimado do assunto
  *
  * Domínio estimado:

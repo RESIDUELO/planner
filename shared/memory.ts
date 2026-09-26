@@ -1,12 +1,12 @@
 /**
- * fsrs_v1 — modelo próprio de repetição espaçada inspirado nos princípios do
+ * fsrs_v1 - modelo próprio de repetição espaçada inspirado nos princípios do
  * FSRS (estabilidade, dificuldade, retrievability), adaptado ao tempo até a
  * prova. Não reutiliza código do Anki/FSRS; os parâmetros estão em config.ts.
  *
  * Conceitos:
  *  - Estabilidade S (dias): tempo para a probabilidade de lembrar cair a 90%.
  *  - Dificuldade D (1–10): quanto o assunto resiste a ganhar estabilidade.
- *  - Retrievability R(t) = (1 + t / (9·S))^-1 — curva de esquecimento em lei de potência.
+ *  - Retrievability R(t) = (1 + t / (9·S))^-1 - curva de esquecimento em lei de potência.
  *
  * Adaptação à prova:
  *  - retenção-alvo sobe de 0,90 (≥120 dias) para 0,95 (≤7 dias);
@@ -191,7 +191,7 @@ export function initialRatingFromAccuracy(accuracy: number | null): Rating {
 
 /**
  * Projeta as próximas revisões supondo avaliação "Good" (usado para prever a
- * carga no calendário e no planejamento — nunca substitui a revisão real).
+ * carga no calendário e no planejamento - nunca substitui a revisão real).
  */
 export function projectReviews(state: MemoryState, firstDue: ISODate | null, examDate: ISODate | null, until: ISODate, maxCount = 12): ISODate[] {
   const out: ISODate[] = [];

@@ -32,7 +32,7 @@ export interface SelectedEdition {
   is_primary: boolean;
 }
 
-export const editionLabel = (e: { institution: string; exam_name: string }) => `${e.institution} — ${e.exam_name}`;
+export const editionLabel = (e: { institution: string; exam_name: string }) => `${e.institution} - ${e.exam_name}`;
 
 /** Provas escolhidas: data oficial cadastrada ou, sem ela, a informada pelo próprio aluno. */
 export async function loadEditions(ctx: Ctx, editionIds: string[]): Promise<SelectedEdition[]> {
@@ -452,7 +452,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
   const exams = (planExams as any[])
     .map((pe) => {
       const c: any = (catalog as any[]).find((x) => x.edition_id === pe.exam_edition_id) ?? {};
-      return { ...pe, weight: Number(pe.weight), year: c.year, total_questions: c.total_questions, exam_name: c.exam_name ?? '—', exam_total_questions: c.exam_total_questions, institution: c.institution ?? '—', exam_id: c.exam_id };
+      return { ...pe, weight: Number(pe.weight), year: c.year, total_questions: c.total_questions, exam_name: c.exam_name ?? '-', exam_total_questions: c.exam_total_questions, institution: c.institution ?? '-', exam_id: c.exam_id };
     })
     .sort((a, b) => (a.exam_date ?? '9999').localeCompare(b.exam_date ?? '9999'));
   const planSubjects = await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('*').eq('study_plan_id', plan.id).order('priority_rank').range(a, b));
@@ -512,7 +512,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
     const lastDone = [...prog.values()].sort().pop() ?? null;
     const pendingDates = scheduleRows.filter((x) => !prog.has(x.study_method_id)).map((x) => x.scheduled_date).sort();
     return {
-      subjectId: s.subject_id, name: inf?.name ?? '—', area: inf?.area ?? '—', specialty: inf?.specialty ?? null,
+      subjectId: s.subject_id, name: inf?.name ?? '-', area: inf?.area ?? '-', specialty: inf?.specialty ?? null,
       rank: s.priority_rank, level: s.priority_level, levelLabel: LEVEL_LABEL[s.priority_level as PriorityLevel],
       percentage: num(s.historical_percentage), frequency: num(s.historical_frequency), annualAverage: num(s.annual_average),
       yearsPresent: s.years_present, yearsAnalyzed: s.years_analyzed, recentPercentage: num(s.recent_frequency),
@@ -707,7 +707,7 @@ export async function setReviewsPerDay(ctx: Ctx, n: number) {
  *  - tarefa adiantada passa a constar no dia em que foi feita (histórico real);
  *  - o que está planejado para hoje (e o que está atrasado) fica onde está;
  *  - tudo o que vem depois é redistribuído a partir de amanhã, na ordem de
- *    prioridade, ocupando o espaço liberado — sem buracos.
+ *    prioridade, ocupando o espaço liberado - sem buracos.
  */
 export async function reflowSchedule(ctx: Ctx, userId: string) {
   const today = ctx.today();

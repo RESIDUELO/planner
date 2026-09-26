@@ -44,7 +44,7 @@ export function AgendaRow({ task, onOpen, checklist, inPlanner, className }: {
         <ul className="mt-2 ml-[33px] space-y-1.5">
           {task.checklist.map((c, i) => (
             <li key={i} className="flex items-center gap-2.5 text-[14px]">
-              <SquareButton size="sm" on={c.done} onChange={(v) => setItem(i, v)} label={`${c.text} — feito`} />
+              <SquareButton size="sm" on={c.done} onChange={(v) => setItem(i, v)} label={`${c.text} - feito`} />
               <span className={clsx(c.done && 'text-ink-3 line-through decoration-1')}>{c.text}</span>
             </li>
           ))}
@@ -155,7 +155,7 @@ export function TaskEditor({ task, onClose }: { task: AgendaTask; onClose: () =>
           <ul>
             {list.map((c, i) => (
               <li key={i} className="flex items-center gap-3 border-b border-line/70 py-2">
-                <SquareButton size="sm" on={c.done} onChange={(v) => set({ checklist: list.map((x, j) => (j === i ? { ...x, done: v } : x)) })} label={`${c.text} — feito`} />
+                <SquareButton size="sm" on={c.done} onChange={(v) => set({ checklist: list.map((x, j) => (j === i ? { ...x, done: v } : x)) })} label={`${c.text} - feito`} />
                 <input className="min-w-0 flex-1 bg-transparent text-[15px] outline-none" value={c.text} aria-label="Item da checklist"
                   onChange={(e) => set({ checklist: list.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)) })} />
                 <button onClick={() => set({ checklist: list.filter((_, j) => j !== i) })} aria-label={`Remover ${c.text}`} className="rounded-full p-1 text-ink-3 hover:text-ink"><X className="h-3.5 w-3.5" /></button>

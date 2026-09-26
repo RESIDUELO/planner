@@ -56,7 +56,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
       setPractice({ questions: '', correct: '' });
       setMsg({ undoId: r.id, tone: r.reviewAnticipated ? 'neutral' : 'positive', text: r.reviewAnticipated
         ? `Registrado: ${r.performance?.questions_answered ?? ''} questões no total. Como o acerto ficou abaixo de 60%, a revisão foi antecipada.`
-        : r.studied ? 'Registrado. Assunto concluído — revisão agendada.' : 'Questões registradas.' });
+        : r.studied ? 'Registrado. Assunto concluído - revisão agendada.' : 'Questões registradas.' });
     },
     onError,
   });
@@ -167,7 +167,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
 
           {s.card?.nextReview && s.card.nextReview <= today && (
             <section className="mt-10">
-              <p className="mb-3 text-[15px]">↻ Revisão de hoje — como foi lembrar deste assunto?</p>
+              <p className="mb-3 text-[15px]">↻ Revisão de hoje - como foi lembrar deste assunto?</p>
               <ReviewButtons subjectId={s.subjectId} onDone={(t) => setMsg({ tone: 'positive', text: t })} />
             </section>
           )}
@@ -240,12 +240,12 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
                       const ex = d.exams.find((e: any) => e.editionId === pe.editionId);
                       return (
                         <div key={pe.editionId}>
-                          <div className="text-[15px]">{ex?.label?.split(' — ')[0]} <span className="text-ink-3">· {pe.percentage > 0 ? `${pct(pe.percentage)} · ${pe.editionsPresent}/${pe.editionsAnalyzed} edições` : 'não aparece'}</span></div>
+                          <div className="text-[15px]">{ex?.label?.split(' - ')[0]} <span className="text-ink-3">· {pe.percentage > 0 ? `${pct(pe.percentage)} · ${pe.editionsPresent}/${pe.editionsAnalyzed} edições` : 'não aparece'}</span></div>
                           {pe.byYear?.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] tabular">
                               {pe.byYear.map((y: any) => (
                                 <span key={y.year} className={y.questions ? 'text-ink' : 'text-ink-3'} title={`${y.year}: ${y.questions} questão(ões)`}>
-                                  {y.year} {y.questions ? `✓ ${y.questions}` : '—'}
+                                  {y.year} {y.questions ? `✓ ${y.questions}` : '-'}
                                 </span>
                               ))}
                             </div>
@@ -264,7 +264,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
                     {s.card && <>
                       <div><dt className="text-ink-2">Lembrança hoje</dt><dd className="tabular">{pct(s.card.retrievability, 0)}</dd></div>
                       <div><dt className="text-ink-2">Estabilidade</dt><dd className="tabular">{num1(s.card.stability)} dias</dd></div>
-                      <div><dt className="text-ink-2">Último estudo</dt><dd>{s.lastStudiedAt ? relativeDays(-daysBetween(today, isoBR(s.lastStudiedAt))) : '—'}</dd></div>
+                      <div><dt className="text-ink-2">Último estudo</dt><dd>{s.lastStudiedAt ? relativeDays(-daysBetween(today, isoBR(s.lastStudiedAt))) : '-'}</dd></div>
                     </>}
                   </dl>
                   <p className="mt-4 text-[13px] text-ink-3">{studied ? 'Assunto concluído: a fatia dele na prova conta como garantida.' : 'Conclua o assunto para garantir a fatia dele na prova.'} Em média, caiu {pct(s.percentage)} das questões nas provas analisadas.</p>

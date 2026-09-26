@@ -1,5 +1,5 @@
 /**
- * reviewqueue_v1 — revisões como uma fila, com limite diário escolhido pelo aluno.
+ * reviewqueue_v1 - revisões como uma fila, com limite diário escolhido pelo aluno.
  *
  * Cada cartão tem uma data "vencida" (FSRS). A fila distribui os cartões pelos
  * dias de estudo, do mais antigo para o mais novo (e, no empate, do mais

@@ -1,11 +1,11 @@
 /**
- * priority_v2 — ranking e prioridade dos assuntos.
+ * priority_v2 - ranking e prioridade dos assuntos.
  *
- * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE — em quantas
+ * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE - em quantas
  *    provas o assunto caiu, contando a partir da primeira em que apareceu (um
  *    tema que cai todo ano desde 2023, ou o bloco de Saúde Mental desde 2024,
  *    vale o mesmo que um que cai desde 2021; sempre olhando no mínimo as 3
- *    últimas provas) —, depois a QUANTIDADE de questões nesse mesmo período e,
+ *    últimas provas) -, depois a QUANTIDADE de questões nesse mesmo período e,
  *    por fim, a recência. Com várias provas, média ponderada pelo peso de cada uma.
  *
  * 2) Score dinâmico (0–100), usado para "O que estudar hoje" e para a

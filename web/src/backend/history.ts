@@ -1,4 +1,4 @@
-/** Dados da análise histórica — somente questões cadastradas no banco. */
+/** Dados da análise histórica - somente questões cadastradas no banco. */
 import { computeExamStats, type ExamHistStats } from '../../../shared/stats';
 import { rpc, type Ctx } from './core';
 

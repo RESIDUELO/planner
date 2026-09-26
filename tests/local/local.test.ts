@@ -173,7 +173,7 @@ describe('app off-line', () => {
     const detail = await ok('GET', `/api/planner/subjects/${ecg}`);
     expect(detail.subject.card.nextReview).toBeTruthy();
     expect(detail.explanation).toMatch(/criado por você/);
-    await ok('PATCH', `/api/subjects/${ecg}`, { name: 'ECG — revisão' });
+    await ok('PATCH', `/api/subjects/${ecg}`, { name: 'ECG - revisão' });
     // Não entra na base global de assuntos da prova
     const exams = await ok('GET', '/api/exams');
     const famerp = exams.find((e: any) => e.institution === 'FAMERP');
@@ -188,7 +188,7 @@ describe('app off-line', () => {
     p = await ok('GET', '/api/planner');
     expect(p.plan.settings_snapshot.manual).toBeUndefined();
     const own = p.subjects.filter((x: any) => x.own);
-    expect(own.map((x: any) => x.name).sort()).toEqual(['ECG — revisão', 'Síndrome de Brugada']);
+    expect(own.map((x: any) => x.name).sort()).toEqual(['ECG - revisão', 'Síndrome de Brugada']);
     expect(p.subjects.filter((x: any) => !x.own).length).toBeGreaterThan(50);
     week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
     const before = on(week, '2026-10-02');
@@ -198,9 +198,9 @@ describe('app off-line', () => {
     // "+" com assunto da prova e com assunto novo no mesmo dia: o que já estava planejado continua lá
     const examSubject = p.subjects.find((x: any) => !x.own && !before.includes(x.name) && x.status === 'pending');
     await ok('POST', '/api/planner/days/2026-10-02/subjects', { subjectId: examSubject.subjectId });
-    await ok('POST', '/api/planner/days/2026-10-02/subjects', { name: 'Arritmias — meu resumo' });
+    await ok('POST', '/api/planner/days/2026-10-02/subjects', { name: 'Arritmias - meu resumo' });
     week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
-    expect(on(week, '2026-10-02')).toEqual(expect.arrayContaining([...before, examSubject.name, 'Arritmias — meu resumo']));
+    expect(on(week, '2026-10-02')).toEqual(expect.arrayContaining([...before, examSubject.name, 'Arritmias - meu resumo']));
 
     // Concluir um assunto reorganiza a fila automática, mas não mexe nos assuntos próprios
     const firstAuto = p.subjects.find((x: any) => x.name === before[0]);
@@ -208,7 +208,7 @@ describe('app off-line', () => {
     await ok('POST', '/api/planner/replan');
     week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
     expect(on(week, '2026-10-01')).toContain('Síndrome de Brugada');
-    expect(on(week, '2026-10-02')).toContain('Arritmias — meu resumo');
+    expect(on(week, '2026-10-02')).toContain('Arritmias - meu resumo');
 
     // Excluir o assunto próprio apaga só ele
     await ok('DELETE', `/api/subjects/${brugada}`);

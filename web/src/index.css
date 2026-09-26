@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 /*
- * Residência Planner — planner editorial
+ * Residência Planner - planner editorial
  * Papel creme, tinta grafite, linhas finas e pequenos destaques em pastel.
  * Tipografia + espaço + linhas. Cor só como detalhe.
  */
 @custom-variant dark (&:where(.dark, .dark *));
-/* Tela larga (computador, tablet/celular deitados — ver lib/zoom.ts): o workspace cabe inteiro na tela */
+/* Tela larga (computador, tablet/celular deitados - ver lib/zoom.ts): o workspace cabe inteiro na tela */
 @custom-variant fit (&:where(.rp-wide, .rp-wide *));
 
 :root {

@@ -128,7 +128,7 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
 
   const lessonSlots = dated.filter((i) => i.kind === 'lesson').map((i) => i.date!);
   const covered = [...dated, ...studied].reduce((s, i) => s + (i.total ?? 0), 0);
-  const label = `${ed?.institution ?? 'Prova'} — ${ed?.exam_name ?? ''}`;
+  const label = `${ed?.institution ?? 'Prova'} - ${ed?.exam_name ?? ''}`;
   const planId = await savePlan(ctx, {
       name: t.name, start_date: today, end_date: examDate, primary_exam_edition_id: edition, mode: 'single',
       algorithm_version: `template:${t.code}`, scheduler_version: 'template_v1',

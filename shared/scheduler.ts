@@ -1,5 +1,5 @@
 /**
- * scheduler_v1 — distribui o estudo no calendário respeitando a carga (seção 34).
+ * scheduler_v1 - distribui o estudo no calendário respeitando a carga (seção 34).
  *
  * Regras:
  *  - só usa dias de estudo configurados e nunca passa das horas diárias;
@@ -7,7 +7,7 @@
  *  - preenche o restante com assuntos NOVOS na ordem do ranking histórico
  *    (os mais frequentes primeiro), método a método;
  *  - reserva a reta final para revisões;
- *  - o que não couber fica marcado como "fora do tempo disponível" — o planner
+ *  - o que não couber fica marcado como "fora do tempo disponível" - o planner
  *    nunca inventa horas que o usuário não tem.
  */
 import { SCHEDULER } from './config';
@@ -104,7 +104,7 @@ export function roundTo5(x: number): number {
 /**
  * Tamanho relativo do assunto: sqrt(% / referência), limitado a
  * [sizeFactorMin, sizeFactorMax]. A referência é a mediana dos assuntos que,
- * juntos, cobrem os primeiros 80% das questões — assim a cauda de assuntos
+ * juntos, cobrem os primeiros 80% das questões - assim a cauda de assuntos
  * raríssimos não infla o tempo dos assuntos centrais.
  */
 export function sizeFactors(percentages: number[]): number[] {

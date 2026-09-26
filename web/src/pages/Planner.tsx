@@ -39,7 +39,7 @@ export function PlannerPage() {
 }
 
 // ============================================================================
-// Começar — tudo numa tela só, dentro do próprio Planner
+// Começar - tudo numa tela só, dentro do próprio Planner
 // ============================================================================
 
 export const REVIEW_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
@@ -173,7 +173,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
                     <div className="mt-3 ml-10 flex flex-wrap items-end gap-x-6 gap-y-3 animate-in">
                       {!e.date_official && (
                         <Field label="Data da prova" className="w-44">
-                          <input type="date" className="field" aria-label={`Data da prova — ${e.institution}`} min={todayBR()}
+                          <input type="date" className="field" aria-label={`Data da prova - ${e.institution}`} min={todayBR()}
                             value={dateOf(e)} onChange={(ev) => setDates({ ...dates, [e.edition_id]: ev.target.value })} />
                         </Field>
                       )}
@@ -239,7 +239,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
                       <label key={m.id} className="flex items-center justify-between gap-4 text-[15px]">
                         {m.name}
                         <span className="flex items-center gap-2 text-ink-2">
-                          <input type="number" min={5} max={600} className="field w-20 text-right" aria-label={`Minutos — ${m.name}`} value={m.minutes}
+                          <input type="number" min={5} max={600} className="field w-20 text-right" aria-label={`Minutos - ${m.name}`} value={m.minutes}
                             onChange={(e) => setMethods(methods.map((x) => (x.id === m.id ? { ...x, minutes: e.target.value } : x)))} /> min
                         </span>
                       </label>
@@ -265,7 +265,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 }
 
 // ============================================================================
-// Planner — semana editorial: assuntos | revisões
+// Planner - semana editorial: assuntos | revisões
 // ============================================================================
 
 const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -422,7 +422,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, o
   const isThisWeek = from === mondayOf(today);
   const late = (single ? day === today : isThisWeek) ? (t.data?.newSubjects ?? []).filter((s: any) => s.overdue) : [];
   const [a, b] = [from, to].map((d) => d.split('-').map(Number));
-  const range = a[1] === b[1] ? `${a[2]} — ${b[2]} ${MONTHS[b[1] - 1]}` : `${a[2]} ${MONTHS[a[1] - 1]} — ${b[2]} ${MONTHS[b[1] - 1]}`;
+  const range = a[1] === b[1] ? `${a[2]} - ${b[2]} ${MONTHS[b[1] - 1]}` : `${a[2]} ${MONTHS[a[1] - 1]} - ${b[2]} ${MONTHS[b[1] - 1]}`;
 
   const onCheck = (item: any, done: boolean) => check.mutate({ subjectId: item.subjectId, methodIds: item.methodIds, done });
   const busy = check.isPending || reviewDone.isPending || dnd.busy;
@@ -600,7 +600,7 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd,
                 pomodoro={isToday || detailed} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} disabled={busy}
                 drag={n.done ? undefined : dragProps(dnd, { type: 'task', subjectId: n.subjectId, from: day.date, methodIds: n.methodIds, name: n.name })} />
             ))}
-            {!day.newSubjects.length && <li className="py-3 text-[14px] text-ink-3">{past ? '—' : 'Livre'}</li>}
+            {!day.newSubjects.length && <li className="py-3 text-[14px] text-ink-3">{past ? '-' : 'Livre'}</li>}
           </ul>
           {!past && (
             <button onClick={() => onAdd(day.date)} data-testid="add-subject" title="Adicionar um assunto neste dia"
@@ -621,11 +621,11 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd,
                     <span className={clsx('block text-[16px] leading-snug', done && 'text-ink-3 line-through decoration-1')}>{r.name}</span>
                     {r.status === 'overdue' && <span className="text-[11px] text-today">atrasada</span>}
                   </button>
-                  <CheckButton on={done} disabled={done || busy} onChange={() => onReview(r.subjectId)} label={`Revisão feita — ${r.name}`} />
+                  <CheckButton on={done} disabled={done || busy} onChange={() => onReview(r.subjectId)} label={`Revisão feita - ${r.name}`} />
                 </li>
               );
             })}
-            {!reviews.length && <li className="py-3 text-[14px] text-ink-3">—</li>}
+            {!reviews.length && <li className="py-3 text-[14px] text-ink-3">-</li>}
           </ul>
         </div>
       </div>
@@ -699,7 +699,7 @@ export function TaskRow({ item, onOpen, onCheck, detail, pomodoro, disabled, dra
       </button>
       {!item.done && (
         <button onClick={() => { p.start({ subject: { id: item.subjectId, name: item.name, area: item.area } }); p.setExpanded(true); }}
-          aria-label={`Iniciar Pomodoro — ${item.name}`} title="Iniciar Pomodoro"
+          aria-label={`Iniciar Pomodoro - ${item.name}`} title="Iniciar Pomodoro"
           className={clsx('flex items-center gap-1.5 rounded-full text-[12px] text-ink-3 transition hover:text-ink', !pomodoro && 'opacity-0 group-hover:opacity-100 focus:opacity-100')}>
           <Timer className="h-4 w-4" strokeWidth={1.5} />
         </button>
@@ -793,7 +793,7 @@ function MultiTable({ data, onOpen }: { data: any; onOpen: (id: string) => void 
   return (
     <>
       <p className="mb-8 flex items-center gap-1.5 text-[15px] text-ink-2">
-        Peso de cada prova: {weights.map((w) => `${w.label.split(' — ')[0]} ${pct(w.weight, 0)}`).join(' · ')}
+        Peso de cada prova: {weights.map((w) => `${w.label.split(' - ')[0]} ${pct(w.weight, 0)}`).join(' · ')}
         <Hint text="Peso = (2 se principal, 1 se não) × (0,5 + proximidade), normalizado. Proximidade = 1 / (1 + dias até a prova / 60)." />
       </p>
       <div className="-mx-5 overflow-x-auto px-5">
@@ -801,7 +801,7 @@ function MultiTable({ data, onOpen }: { data: any; onOpen: (id: string) => void 
           <thead>
             <tr className="border-b border-line text-[13px] text-ink-2">
               <th className="py-3 pr-3 font-normal">Assunto</th>
-              {exams.map((e) => <th key={e.editionId} className="px-2 py-3 text-right font-normal">{e.label.split(' — ')[0]}</th>)}
+              {exams.map((e) => <th key={e.editionId} className="px-2 py-3 text-right font-normal">{e.label.split(' - ')[0]}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -810,7 +810,7 @@ function MultiTable({ data, onOpen }: { data: any; onOpen: (id: string) => void 
                 <td className="py-3 pr-3"><span className="mr-3 tabular text-[13px] text-ink-3">{s.rank}</span>{s.name}</td>
                 {exams.map((e) => {
                   const pe = s.perExam.find((p: any) => p.editionId === e.editionId);
-                  return <td key={e.editionId} className="tabular px-2 py-3 text-right text-ink-2" title={pe?.level ? LV[pe.level] : 'Não aparece'}>{pe?.percentage ? pct(pe.percentage) : '—'}</td>;
+                  return <td key={e.editionId} className="tabular px-2 py-3 text-right text-ink-2" title={pe?.level ? LV[pe.level] : 'Não aparece'}>{pe?.percentage ? pct(pe.percentage) : '-'}</td>;
                 })}
               </tr>
             ))}
@@ -828,7 +828,7 @@ function AboutPlan({ data, onClose }: { data: any; onClose: () => void }) {
     <Sheet open onClose={onClose} title="Sobre este plano">
       <dl className="space-y-6 text-[15px]">
         <div><dt className="text-ink-2">Período</dt><dd className="mt-1">{shortDate(data.plan.start_date)} → {shortDate(data.plan.end_date)} · {s.studyDays} dias de estudo</dd></div>
-        <div><dt className="text-ink-2">Base da análise</dt><dd className="mt-1 space-y-1">{s.exams.map((e: any) => <div key={e.editionId}>{e.label.split(' — ')[0]}: {e.message}{e.years?.length ? ` (${e.years.join(', ')})` : ''}</div>)}</dd></div>
+        <div><dt className="text-ink-2">Base da análise</dt><dd className="mt-1 space-y-1">{s.exams.map((e: any) => <div key={e.editionId}>{e.label.split(' - ')[0]}: {e.message}{e.years?.length ? ` (${e.years.join(', ')})` : ''}</div>)}</dd></div>
         <div><dt className="text-ink-2">Cobertura</dt><dd className="mt-1">O tempo disponível cobre {pct(s.historicalCoverageScheduled)} das questões históricas.</dd></div>
         <div><dt className="text-ink-2">Reta final</dt><dd className="mt-1">Últimos {s.finalPhaseDays} dias reservados só para revisões.</dd></div>
         {s.warnings?.length > 0 && <div><dt className="text-ink-2">Avisos</dt><dd className="mt-1 space-y-2">{s.warnings.map((w: string) => <p key={w}>{w}</p>)}</dd></div>}
