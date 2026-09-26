@@ -163,7 +163,7 @@ export function Sheet({ open, onClose, title, children, wide, footer }: { open: 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim animate-fade sm:items-center sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" className={clsx('relative flex max-h-[92vh] w-full flex-col rounded-t-[22px] border border-line bg-canvas animate-sheet sm:rounded-[20px]', wide ? 'sm:max-w-2xl' : 'sm:max-w-lg')}>
+      <div role="dialog" aria-modal="true" className={clsx('relative flex max-h-[calc(var(--app-h,100vh)*0.92)] w-full flex-col rounded-t-[22px] border border-line bg-canvas animate-sheet sm:rounded-[20px]', wide ? 'sm:max-w-2xl' : 'sm:max-w-lg')}>
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-fill-strong sm:hidden" />
         <button onClick={onClose} aria-label="Fechar" className="absolute top-4 right-4 z-10 rounded-full p-1.5 text-ink-2 transition hover:bg-fill hover:text-ink">
           <X className="h-4 w-4" />

@@ -54,7 +54,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
+    <div className="flex min-h-[var(--app-h,100vh)] flex-col items-center justify-center px-6 py-16">
       <div className="w-full max-w-[340px] animate-in">
         <LogoMark className="mx-auto h-12 w-12 text-[26px]" />
         <h1 className="mt-8 text-center font-display text-[48px] leading-none">Residência</h1>

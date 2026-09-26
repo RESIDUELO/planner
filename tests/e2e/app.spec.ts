@@ -208,7 +208,8 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
 
   // Sem configuração: prova → planner → marcar a primeira tarefa
   await page.goto('planner');
-  await page.getByLabel(/Selecionar FAMERP/).check({ force: true });
+  await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
+  await expect(page.getByLabel(/Selecionar FAMERP/)).toBeChecked();
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
   const task = page.getByTestId(`day-${inDays(0)}`).getByTestId('task').first();
   const circle = task.getByRole('checkbox');

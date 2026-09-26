@@ -18,8 +18,8 @@ import { Button, Sheet } from './ui';
 
 function AreaHead({ title, trailing }: { title: string; trailing?: React.ReactNode }) {
   return (
-    <div className="flex shrink-0 items-baseline gap-3 border-b border-ink/70 pb-2 fit:pb-[clamp(4px,0.8vh,8px)]">
-      <span className="font-display text-[26px] leading-none fit:text-[clamp(20px,2.9vh,26px)]">{title}</span>
+    <div className="flex shrink-0 items-baseline gap-3 border-b border-ink/70 pb-2">
+      <span className="font-display text-[26px] leading-none">{title}</span>
       <span className="flex-1" />
       {trailing}
     </div>
@@ -43,7 +43,7 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
   return (
     <section aria-label="Assuntos" className="animate-in fit:flex fit:min-h-[140px] fit:flex-1 fit:flex-col">
       <AreaHead title="Assuntos" trailing={<button onClick={onAll} className="text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">ver todos</button>} />
-      <div className="mt-3 flex shrink-0 items-center gap-3 fit:mt-[clamp(6px,1.2vh,12px)]">
+      <div className="mt-3 flex shrink-0 items-center gap-3">
         <label className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" />
           <input className="field py-1.5 pl-8 text-[14px]" placeholder="Buscar" aria-label="Buscar na lista de assuntos" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -58,7 +58,7 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
           const date = s.nextScheduledDate as string | null;
           return (
             <li key={s.subjectId} {...dp?.li} data-testid="library-item"
-              className={clsx('group flex items-center gap-3 border-b border-line/60 py-2.5 last:border-0 fit:py-[clamp(5px,1vh,10px)]', dp?.className)}>
+              className={clsx('group flex items-center gap-3 border-b border-line/60 py-2.5 last:border-0', dp?.className)}>
               <span className={`h-2 w-2 shrink-0 rounded-full dot-${tintFor(s.area)}`} aria-hidden />
               <button onClick={() => onOpen(s.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
                 <span className={clsx('block truncate text-[15px] leading-snug', s.status === 'studied' && 'text-ink-3 line-through decoration-1')}>{s.name}</span>
@@ -89,13 +89,13 @@ export function FocusWidget() {
   const progress = active ? 1 - p.left / p.total : 0;
 
   return (
-    <section aria-label="Foco" className={clsx('shrink-0 animate-in transition-all duration-300 ease-apple', active && 'rounded-[18px] border border-line bg-surface p-5 fit:p-[clamp(10px,1.8vh,20px)]')}>
+    <section aria-label="Foco" className={clsx('shrink-0 animate-in transition-all duration-300 ease-apple', active && 'rounded-[18px] border border-line bg-surface p-5')}>
       <AreaHead title="Foco" trailing={
         <button onClick={() => p.setExpanded(true)} aria-label="Abrir foco" className="rounded-full p-1 text-ink-2 hover:text-ink"><Maximize2 className="h-4 w-4" strokeWidth={1.5} /></button>
       } />
-      <div className="mt-4 flex items-end justify-between gap-4 fit:mt-[clamp(6px,1.4vh,16px)]">
+      <div className="mt-4 flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className={clsx('tabular font-display leading-none transition-all duration-300', active ? 'text-[64px] fit:text-[clamp(38px,6.4vh,64px)]' : 'text-[52px] fit:text-[clamp(34px,5.4vh,52px)]')} role="timer">{clock(p.left)}</p>
+          <p className={clsx('tabular font-display leading-none transition-all duration-300', active ? 'text-[64px]' : 'text-[52px]')} role="timer">{clock(p.left)}</p>
           <p className="mt-2 truncate text-[13px] text-ink-2 fit:mt-1">{p.phase === 'break' ? 'Pausa' : subject?.name ?? 'Tempo de foco'}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
@@ -104,8 +104,8 @@ export function FocusWidget() {
           {active && <button onClick={p.reset} className="text-[12px] text-ink-3 hover:text-ink">reiniciar</button>}
         </div>
       </div>
-      {active && <div className="mt-4 fit:mt-[clamp(6px,1.2vh,16px)] h-[3px] w-full overflow-hidden rounded-full bg-fill"><div className="h-full rounded-full bg-ink transition-[width] duration-300" style={{ width: `${progress * 100}%` }} /></div>}
-      <p className="mt-3 text-[11px] text-ink-3 fit:mt-[clamp(4px,0.9vh,12px)]">{p.focusMin}/{p.breakMin} min · {p.done.n > 0 ? `${p.done.n} hoje · ` : ''}<button onClick={() => p.setExpanded(true)} className="underline underline-offset-4 hover:text-ink">trocar</button></p>
+      {active && <div className="mt-4 h-[3px] w-full overflow-hidden rounded-full bg-fill"><div className="h-full rounded-full bg-ink transition-[width] duration-300" style={{ width: `${progress * 100}%` }} /></div>}
+      <p className="mt-3 text-[11px] text-ink-3">{p.focusMin}/{p.breakMin} min · {p.done.n > 0 ? `${p.done.n} hoje · ` : ''}<button onClick={() => p.setExpanded(true)} className="underline underline-offset-4 hover:text-ink">trocar</button></p>
     </section>
   );
 }
@@ -132,12 +132,12 @@ export function PerformanceStrip() {
   return (
     <section aria-label="Desempenho" className="shrink-0 animate-in">
       <AreaHead title="Desempenho" trailing={<button onClick={() => setOpen(true)} className="text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">detalhes</button>} />
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 fit:mt-[clamp(6px,1.4vh,16px)] fit:gap-y-[clamp(4px,1.1vh,12px)]">
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
         {stats.map((s) => (
-          <div key={s.label}><dd className="tabular font-display text-[26px] leading-none fit:text-[clamp(18px,2.8vh,26px)]">{s.value}</dd><dt className="mt-1 text-[11px] text-ink-2">{s.label}</dt></div>
+          <div key={s.label}><dd className="tabular font-display text-[26px] leading-none">{s.value}</dd><dt className="mt-1 text-[11px] text-ink-2">{s.label}</dt></div>
         ))}
       </dl>
-      <p className="mt-4 text-[12px] text-ink-2 fit:mt-[clamp(4px,1.1vh,16px)]"><span className="text-ink">{pct(secured)}</span> da prova garantidos</p>
+      <p className="mt-4 text-[12px] text-ink-2"><span className="text-ink">{pct(secured)}</span> da prova garantidos</p>
       {open && <Sheet open onClose={() => setOpen(false)} wide title="Desempenho"><PerformancePage embedded /></Sheet>}
     </section>
   );

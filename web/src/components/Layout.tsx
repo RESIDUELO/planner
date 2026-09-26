@@ -42,7 +42,7 @@ export function Layout() {
     ]} />
   );
 
-  const width = 'max-w-7xl';
+  const width = 'max-w-7xl fit:max-w-[1440px]';
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md">

@@ -15,7 +15,8 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
   await page.getByLabel('E-mail').fill(user.email);
   await page.getByLabel('Senha').fill(user.password);
   await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
-  await page.getByLabel('Selecionar FAMERP').check({ force: true });
+  await page.locator('label', { has: page.getByLabel('Selecionar FAMERP') }).click();
+  await expect(page.getByLabel('Selecionar FAMERP')).toBeChecked();
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
   await expect(page.getByTestId('week-scroll')).toBeVisible();
 

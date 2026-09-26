@@ -281,11 +281,11 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   }, []);
 
   return (
-    <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_240px] lg:gap-7 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-10 2xl:grid-cols-[minmax(0,1fr)_330px] fit:h-[calc(100dvh-105px)] fit:grid-rows-[minmax(0,1fr)]">
+    <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_240px] lg:gap-7 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-10 2xl:grid-cols-[minmax(0,1fr)_330px] fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-rows-[minmax(0,1fr)]">
       <section aria-label="Semana" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
         <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} />
       </section>
-      <aside aria-label="Estudo" className="min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-[clamp(12px,2.4vh,30px)] fit:space-y-0">
+      <aside aria-label="Estudo" className="min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-10 fit:space-y-0">
         <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} fit={desktop} />
         <FocusWidget />
         <PerformanceStrip />
@@ -378,7 +378,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
         <Eyebrow>{eyebrow}</Eyebrow>
         <div className="-mt-2">{menu}</div>
       </div>
-      <div className={clsx('mt-3 flex items-center justify-between gap-3', desktop ? 'mb-8 shrink-0' : 'mb-10')}>
+      <div className={clsx('mt-3 flex items-center justify-between gap-3', desktop ? 'mb-10 shrink-0' : 'mb-10')}>
         <button onClick={() => setFrom(addDays(from, -7))} aria-label="Semana anterior"
           className="flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-[13px] text-ink-2 transition hover:text-ink">
           <ChevronLeft className="h-5 w-5" strokeWidth={1.5} /><span className="hidden sm:inline">semana anterior</span>
@@ -392,7 +392,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
           <span className="hidden sm:inline">semana seguinte</span><ChevronRight className="h-5 w-5" strokeWidth={1.5} />
         </button>
       </div>
-      <div className={clsx('-mt-6 min-h-5 text-center text-[13px]', desktop ? 'mb-2 shrink-0' : 'mb-8')} aria-live="polite">
+      <div className={clsx('-mt-6 min-h-5 text-center text-[13px]', desktop ? 'mb-5 shrink-0' : 'mb-8')} aria-live="polite">
         {dnd.message
           ? <span className={dnd.message.tone === 'positive' ? 'text-ink' : 'text-negative'}>{dnd.message.text}</span>
           : <span className="hidden text-ink-3 md:inline">Arraste aulas, revisões ou assuntos da lista para qualquer dia.</span>}
