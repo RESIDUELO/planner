@@ -45,6 +45,8 @@ export function toApiError(e: any): ApiError {
   if (code && ['23514', '22023', '22P02', '22007', '22008', '23502'].includes(code)) return new ApiError(400, code === '22023' ? msg : 'Valor inválido.', e.details ?? msg);
   if (code === 'P0001') return new ApiError(400, msg);
   if (code === 'PGRST116') return new ApiError(404, 'Registro não encontrado.');
+  // Tabela que ainda não existe no banco (falta rodar a parte nova do schema no Supabase)
+  if (code === 'PGRST205' || code === '42P01') return new ApiError(503, 'O banco do site está desatualizado: rode no Supabase o SQL mais recente de supabase/parts/.', msg);
   return new ApiError(e?.status ?? 500, msg);
 }
 

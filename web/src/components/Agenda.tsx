@@ -58,6 +58,7 @@ export function AgendaRow({ task, onOpen, checklist, inPlanner, className }: {
 export function AddLine({ label, onAdd, testId, bell }: { label: string; onAdd: (text: string) => Promise<unknown>; testId?: string; bell?: boolean }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
   // Salva em segundo plano: dá para seguir escrevendo a próxima sem esperar
@@ -65,7 +66,8 @@ export function AddLine({ label, onAdd, testId, bell }: { label: string; onAdd: 
     const t = text.trim();
     if (!t) return;
     setText('');
-    onAdd(t).catch(() => setText((cur) => cur || t));
+    setError(null);
+    onAdd(t).catch((e) => { setText((cur) => cur || t); setError(errorMessage(e)); });
   };
   if (!open) return (
     <button onClick={() => setOpen(true)} data-testid={testId} className="flex items-center gap-3.5 py-3 text-[14px] text-ink-3 transition hover:text-ink">
@@ -73,6 +75,7 @@ export function AddLine({ label, onAdd, testId, bell }: { label: string; onAdd: 
     </button>
   );
   return (
+    <>
     <div className="flex items-center gap-3.5 py-2">
       {bell ? <Bell className="h-[19px] w-[19px] shrink-0 text-ink-3" strokeWidth={1.25} /> : <CheckSquare on={false} className="opacity-50" />}
       <input ref={input} value={text} aria-label={label} placeholder={label}
@@ -81,6 +84,8 @@ export function AddLine({ label, onAdd, testId, bell }: { label: string; onAdd: 
         onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setText(''); setOpen(false); } }}
         onBlur={() => { if (!text.trim()) setOpen(false); }} />
     </div>
+    {error && <p role="alert" className="-mt-1 mb-2 ml-[33px] text-[12px] text-negative">Não foi possível salvar: {error}</p>}
+    </>
   );
 }
 

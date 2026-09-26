@@ -8,12 +8,12 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
-import { api } from '../lib/api';
+import { api, ApiError, errorMessage } from '../lib/api';
 import { todayBR } from '../lib/format';
 import { useWide } from '../lib/zoom';
 import { longDate, MONTHS_LONG, weekdayLong, type AgendaRange, type AgendaTask } from '../lib/agenda';
 import { AddLine, AgendaRow, TaskEditor, useQuickAdd } from '../components/Agenda';
-import { Eyebrow, Spinner } from '../components/ui';
+import { Eyebrow, Note, Spinner } from '../components/ui';
 import { addDays, weekday } from '../../../shared/dates';
 
 const WD1 = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -54,9 +54,15 @@ export function AgendaPage() {
     for (const t of q.data?.tasks ?? []) if (t.date) m.set(t.date, [...(m.get(t.date) ?? []), t]);
     return m;
   }, [q.data]);
-  const mark = (d: string) => {
+  // Marcas do calendário: bolinha escura = tarefa (clara quando todas feitas), rosa = lembrete, traço = anotação
+  const mark = (d: string): Mark => {
     const l = byDay.get(d) ?? [];
-    return l.some((t) => !t.done) ? 'open' : l.length || q.data?.notes[d] ? 'done' : null;
+    const tasks = l.filter((t) => t.kind !== 'reminder');
+    return {
+      task: tasks.some((t) => !t.done) ? 'open' : tasks.length ? 'done' : null,
+      reminder: l.some((t) => t.kind === 'reminder'),
+      note: !!q.data?.notes[d],
+    };
   };
 
   const items = byDay.get(day) ?? [];
@@ -65,6 +71,7 @@ export function AgendaPage() {
   const general = sortGeneral(q.data?.general ?? []);
 
   if (q.isLoading) return <Spinner />;
+  if (q.error && !q.data) return <AgendaError error={q.error} />;
   return (
     <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-cols-[minmax(0,1fr)_320px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
       <section aria-label="Dia" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
@@ -123,7 +130,33 @@ function ColumnHead({ children }: { children: string }) {
 }
 
 /** Os sete dias da semana, como as abas de um planner de papel. */
-function WeekStrip({ day, today, mark, onPick }: { day: string; today: string; mark: (d: string) => string | null; onPick: (d: string) => void }) {
+type Mark = { task: 'open' | 'done' | null; reminder: boolean; note: boolean };
+
+function Marks({ m, className }: { m: Mark; className?: string }) {
+  return (
+    <span className={clsx('flex h-[6px] items-center justify-center gap-[3px]', className)} aria-hidden>
+      {m.task && <span data-mark="task" className={clsx('h-[6px] w-[6px] rounded-full', m.task === 'open' ? 'bg-ink' : 'bg-ink-3/60')} />}
+      {m.reminder && <span data-mark="reminder" className="h-[6px] w-[6px] rounded-full dot-rose" />}
+      {m.note && !m.task && !m.reminder && <span data-mark="note" className="h-[2px] w-[8px] rounded-full bg-ink-3" />}
+    </span>
+  );
+}
+
+/** A Agenda não abriu: explica o motivo (no site, geralmente falta rodar o SQL da Agenda). */
+function AgendaError({ error }: { error: unknown }) {
+  const missing = error instanceof ApiError && error.status === 503;
+  return (
+    <div className="mx-auto max-w-xl py-10">
+      <Note tone="negative">
+        {missing
+          ? <>A Agenda ainda não foi ativada no banco do site. No Supabase, abra <b>SQL Editor → New query</b>, cole o arquivo <b>supabase/parts/13_agenda.sql</b> e clique em <b>Run</b>. Depois recarregue esta página.</>
+          : <>Não foi possível abrir a Agenda: {errorMessage(error)}</>}
+      </Note>
+    </div>
+  );
+}
+
+function WeekStrip({ day, today, mark, onPick }: { day: string; today: string; mark: (d: string) => Mark; onPick: (d: string) => void }) {
   const mon = mondayOf(day);
   return (
     <div className="grid grid-cols-7 border-y border-line" role="tablist" aria-label="Dias da semana">
@@ -135,7 +168,7 @@ function WeekStrip({ day, today, mark, onPick }: { day: string; today: string; m
             className={clsx('relative flex flex-col items-center gap-1 py-2.5 transition', sel ? 'text-ink' : 'text-ink-3 hover:text-ink')}>
             <span className={clsx('text-[10px] font-medium tracking-[0.16em] uppercase', d === today && 'text-today')}>{WD[weekday(d)]}</span>
             <span className={clsx('tabular font-display text-[22px] leading-none', d === today && 'text-today')}>{Number(d.slice(8))}</span>
-            <span className={clsx('h-1 w-1 rounded-full', m === 'open' ? 'bg-ink-2' : m === 'done' ? 'bg-line' : 'bg-transparent')} />
+            <Marks m={m} />
             {sel && <span className="absolute inset-x-3 -bottom-px h-[2px] bg-ink" />}
           </button>
         );
@@ -145,7 +178,7 @@ function WeekStrip({ day, today, mark, onPick }: { day: string; today: string; m
 }
 
 function MonthCalendar({ month, day, today, mark, onPick, onMonth }: {
-  month: string; day: string; today: string; mark: (d: string) => string | null; onPick: (d: string) => void; onMonth: (m: string) => void;
+  month: string; day: string; today: string; mark: (d: string) => Mark; onPick: (d: string) => void; onMonth: (m: string) => void;
 }) {
   const start = mondayOf(month);
   const end = addDays(mondayOf(monthEnd(month)), 6);
@@ -170,7 +203,7 @@ function MonthCalendar({ month, day, today, mark, onPick, onMonth }: {
               className={clsx('group flex flex-col items-center py-[3px]', !inMonth && 'opacity-35')}>
               <span className={clsx('tabular flex h-8 w-8 items-center justify-center rounded-full text-[14px] transition',
                 sel ? 'bg-ink text-canvas' : d === today ? 'text-today' : 'text-ink group-hover:bg-fill')}>{Number(d.slice(8))}</span>
-              <span className={clsx('mt-0.5 h-1 w-1 rounded-full', mk === 'open' ? 'bg-ink-2' : mk === 'done' ? 'bg-line' : 'bg-transparent')} />
+              <Marks m={mk} className="mt-[3px]" />
             </button>
           );
         })}
@@ -205,13 +238,14 @@ function DayNote({ date, initial }: { date: string; initial: string }) {
   const qc = useQueryClient();
   const [text, setText] = useState(initial);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [reason, setReason] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const last = useRef(initial);
   const latest = useRef(initial);
   latest.current = text;
   // Chegou do banco depois (primeira carga) e a pessoa ainda não escreveu nada
   useEffect(() => { if (text === last.current && initial !== last.current) { setText(initial); last.current = initial; } }, [initial]);
-  const save = async (content: string) => {
+  const save = async (content: string, retry = true): Promise<void> => {
     if (content === last.current) return;
     setState('saving');
     try {
@@ -219,7 +253,12 @@ function DayNote({ date, initial }: { date: string; initial: string }) {
       last.current = content;
       qc.setQueriesData({ queryKey: ['agenda'] }, (old: any) => (old?.notes ? { ...old, notes: { ...old.notes, [date]: content } } : old));
       setState('saved');
-    } catch { setState('error'); }
+    } catch (e) {
+      // Uma falha passageira (conexão) tenta de novo sozinha; se persistir, mostra o motivo
+      if (retry) { await new Promise((r) => setTimeout(r, 1500)); return save(latest.current, false); }
+      setReason(errorMessage(e));
+      setState('error');
+    }
   };
   const onChange = (v: string) => {
     setText(v);
@@ -228,7 +267,7 @@ function DayNote({ date, initial }: { date: string; initial: string }) {
   };
   // Trocou de dia com algo por salvar: salva antes de sair
   useEffect(() => () => { clearTimeout(timer.current); if (latest.current !== last.current) save(latest.current); }, []);
-  const status = state === 'saving' ? 'Salvando…' : state === 'saved' ? 'Salvo' : state === 'error' ? 'Não foi possível salvar' : '';
+  const status = state === 'saving' ? 'Salvando…' : state === 'saved' ? 'Salvo' : state === 'error' ? `Não foi possível salvar${reason ? `: ${reason}` : ''}` : '';
   return (
     <section className="mt-14" aria-label="Anotação do dia">
       <div className="flex items-baseline gap-3">
@@ -239,7 +278,7 @@ function DayNote({ date, initial }: { date: string; initial: string }) {
         <textarea className="notebook-text" rows={Math.max(5, text.split('\n').length + 1)} value={text} aria-label="Anotação do dia"
           placeholder="Escreva aqui…" onChange={(e) => onChange(e.target.value)} onBlur={() => { clearTimeout(timer.current); save(text); }} />
       </div>
-      <p className="mt-2 h-4 text-right text-[12px] text-ink-3">{status}</p>
+      <p className={clsx('mt-2 min-h-4 text-right text-[12px]', state === 'error' ? 'text-negative' : 'text-ink-3')} role={state === 'error' ? 'alert' : undefined}>{status}</p>
     </section>
   );
 }

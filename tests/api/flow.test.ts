@@ -640,6 +640,9 @@ describe('Agenda (organização pessoal, fora do planner de estudos)', () => {
     await student.ok('PATCH', `/api/agenda/tasks/${t.id}`, { done: true });
     const agenda = await student.ok('GET', '/api/agenda?from=2026-10-26&to=2026-11-01');
     expect(agenda.tasks.find((x: any) => x.id === t.id).done).toBe(true);
+    await student.ok('PUT', '/api/agenda/notes/2026-10-27', { content: 'Levar RG.' });
+    await student.ok('PUT', '/api/agenda/notes/2026-10-27', { content: 'Levar RG e CPF.' });
+    expect((await student.ok('GET', '/api/agenda?from=2026-10-26&to=2026-11-01')).notes).toEqual({ '2026-10-27': 'Levar RG e CPF.' });
     const after = await student.ok('GET', '/api/reviews/calendar?from=2026-10-26&to=2026-11-01');
     expect(after.days).toEqual(before.days);
   });
