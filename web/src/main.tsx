@@ -23,6 +23,23 @@ if (redirect) {
   history.replaceState(null, '', redirect);
 }
 
+// Versão nova publicada? Recarrega uma vez (o GitHub Pages guarda o HTML em cache por até 10 min)
+async function checkForNewVersion() {
+  try {
+    const html = await (await fetch(`${import.meta.env.BASE_URL}index.html?v=${Date.now()}`, { cache: 'no-store' })).text();
+    const latest = html.match(/assets\/index-[\w-]+\.js/)?.[0];
+    const current = [...document.scripts].map((s) => s.src).find((src) => /assets\/index-[\w-]+\.js/.test(src));
+    if (!latest || !current || current.endsWith(latest)) { sessionStorage.removeItem('rp-reloaded-for'); return; }
+    if (sessionStorage.getItem('rp-reloaded-for') === latest) return; // já tentou para esta versão
+    sessionStorage.setItem('rp-reloaded-for', latest);
+    location.reload();
+  } catch { /* sem rede: segue com a versão atual */ }
+}
+if (import.meta.env.PROD) {
+  checkForNewVersion();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForNewVersion(); });
+}
+
 const root = createRoot(document.getElementById('root')!);
 initSupabase().then((cfg) => {
   root.render(
