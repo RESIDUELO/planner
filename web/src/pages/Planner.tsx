@@ -309,7 +309,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   }, []);
 
   return (
-    <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-cols-[minmax(0,1fr)_300px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
+    <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-var(--chrome-h))] fit:grid-cols-[minmax(0,1fr)_300px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
       <section aria-label="Semana" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
         <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} onAdd={setAdding} jump={jump} />
       </section>

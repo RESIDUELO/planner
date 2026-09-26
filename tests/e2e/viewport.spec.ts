@@ -21,13 +21,39 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
   await expect(page.getByTestId('week-scroll')).toBeVisible();
 
+  // Barra lateral aberta (padrão) e recolhida: nos dois casos tudo cabe na tela
+  for (const state of ['open', 'closed'] as const) {
+  if (state === 'closed') {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.waitForTimeout(700);
+    const wideBefore = (await page.locator('section[aria-label="Semana"]').first().boundingBox())!.width;
+    const sidebar = page.getByTestId('sidebar');
+    await page.getByRole('button', { name: 'Recolher menu' }).click();
+    await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+    await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(70);
+    await expect.poll(async () => (await page.locator('section[aria-label="Semana"]').first().boundingBox())!.width).toBeGreaterThan(wideBefore + 100);
+    // Só ícones, clicáveis, com o nome ao passar o mouse
+    await sidebar.getByRole('link', { name: 'Agenda' }).hover();
+    await expect(sidebar.getByText('Agenda', { exact: true }).last()).toBeVisible();
+    await sidebar.getByRole('link', { name: 'Agenda' }).click();
+    await expect(page).toHaveURL(/agenda/);
+    await sidebar.getByRole('link', { name: 'Planner' }).click();
+    await sidebar.getByRole('button', { name: 'Perfil' }).click();
+    for (const item of ['Meu perfil', 'Provas', 'Revisões', 'Configurações', 'Sair']) await expect(page.getByRole('menuitem', { name: item })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.mouse.click(700, 300);
+    // Continua recolhida depois de recarregar
+    await page.reload();
+    await expect(page.getByTestId('sidebar')).toHaveAttribute('data-collapsed', 'true');
+    await expect(page.getByTestId('week-scroll')).toBeVisible();
+  }
   for (const [width, height] of SIZES) {
     await page.setViewportSize({ width, height });
     await page.waitForTimeout(700);
     const m = await page.evaluate(() => {
       const d = document.documentElement;
       const rect = (sel: string) => document.querySelector(sel)?.getBoundingClientRect();
-      const regions = ['[aria-label="Semana"]', 'section[aria-label="Assuntos"]', 'section[aria-label="Calendário"]', 'section[aria-label="Desempenho"]', 'header']
+      const regions = ['[aria-label="Semana"]', 'section[aria-label="Assuntos"]', 'section[aria-label="Calendário"]', 'section[aria-label="Desempenho"]', '[data-testid="sidebar"]']
         .map((s) => ({ s, r: rect(s) }));
       // Elementos que rolam por dentro (além da lista de Assuntos e das colunas-salvaguarda dos dias)
       const scrollers = [...document.querySelectorAll<HTMLElement>('body *')].filter((el) => {
@@ -43,15 +69,16 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
     });
     if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/ws-${width}x${height}.png` });
     // Sem rolagem vertical nem horizontal da página
-    expect(m.scrollH, `${width}x${height} altura`).toBeLessThanOrEqual(m.innerH);
-    expect(m.scrollW, `${width}x${height} largura`).toBeLessThanOrEqual(m.innerW);
+    expect(m.scrollH, `${state} ${width}x${height} altura`).toBeLessThanOrEqual(m.innerH);
+    expect(m.scrollW, `${state} ${width}x${height} largura`).toBeLessThanOrEqual(m.innerW);
     // Cabeçalho, Semana, Assuntos, Calendário e Desempenho visíveis de uma vez
     for (const r of m.regions) {
-      expect(r.top, `${width}x${height} ${r.s}`).toBeGreaterThanOrEqual(0);
-      expect(r.bottom, `${width}x${height} ${r.s}`).toBeLessThanOrEqual(m.innerH + 0.5);
-      expect(r.right, `${width}x${height} ${r.s}`).toBeLessThanOrEqual(m.innerW + 0.5);
+      expect(r.top, `${state} ${width}x${height} ${r.s}`).toBeGreaterThanOrEqual(0);
+      expect(r.bottom, `${state} ${width}x${height} ${r.s}`).toBeLessThanOrEqual(m.innerH + 0.5);
+      expect(r.right, `${state} ${width}x${height} ${r.s}`).toBeLessThanOrEqual(m.innerW + 0.5);
     }
     // Só a lista de Assuntos e os dias da semana rolam por dentro
-    expect(m.scrollers.filter((s) => s !== 'library' && s !== 'week-scroll'), `${width}x${height} rolagens internas`).toEqual([]);
+    expect(m.scrollers.filter((s) => s !== 'library' && s !== 'week-scroll'), `${state} ${width}x${height} rolagens internas`).toEqual([]);
+  }
   }
 });

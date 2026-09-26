@@ -71,7 +71,7 @@ export function AgendaPage() {
   if (q.isLoading) return <Spinner />;
   if (q.error && !q.data) return <AgendaError error={q.error} />;
   return (
-    <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-cols-[minmax(0,1fr)_320px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
+    <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-var(--chrome-h))] fit:grid-cols-[minmax(0,1fr)_320px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
       <section aria-label="Dia" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
         <div className="fit:shrink-0">
           <Eyebrow>Agenda · {weekdayLong(day)}{day === today ? ' · hoje' : ''}</Eyebrow>

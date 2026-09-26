@@ -181,6 +181,9 @@ input[type="date"].field, input[type="time"].field { min-height: 42px; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
 /* Desktop: a tela do planner cabe inteira na viewport, sem rolagem da página */
+/* Altura ocupada fora do conteúdo: topo do celular (65px) ou só o respiro de cima/baixo com a barra lateral */
+:root { --chrome-h: 105px; }
+@media (min-width: 768px) { :root { --chrome-h: 40px; } }
 html.rp-wide.rp-fit, html.rp-wide.rp-fit body, html.rp-wide.rp-fit #root { height: 100%; overflow: hidden; }
 /* Bordas suaves nas áreas que rolam por dentro (em vez de um corte seco) */
 @utility fade-scroll {

@@ -179,7 +179,7 @@ export function Sheet({ open, onClose, title, children, wide, footer }: { open: 
 }
 
 // ---------------------------------------------------------------- Menu "⋯"
-export function Menu({ items, label = 'Mais opções', trigger }: { items: { label: string; onClick: () => void; destructive?: boolean; hidden?: boolean; divider?: boolean }[]; label?: string; trigger?: ReactNode }) {
+export function Menu({ items, label = 'Mais opções', trigger, up, className }: { items: { label: string; onClick: () => void; destructive?: boolean; hidden?: boolean; divider?: boolean }[]; label?: string; trigger?: ReactNode; up?: boolean; className?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -189,13 +189,13 @@ export function Menu({ items, label = 'Mais opções', trigger }: { items: { lab
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
   return (
-    <div className="relative" ref={ref}>
+    <div className={clsx('relative', className)} ref={ref}>
       <button aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}
-        className="flex items-center rounded-full text-ink-2 transition hover:text-ink">
+        className="flex w-full items-center rounded-full text-ink-2 transition hover:text-ink">
         {trigger ?? <span className="rounded-full p-2 hover:bg-fill"><MoreHorizontal className="h-4 w-4" /></span>}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-40 mt-2 min-w-56 overflow-hidden rounded-[14px] border border-line bg-canvas py-1 animate-fade">
+        <div role="menu" className={clsx('absolute z-40 min-w-56', up ? 'bottom-full left-0 mb-2' : 'right-0 mt-2', ' overflow-hidden rounded-[14px] border border-line bg-canvas py-1 animate-fade')}>
           {items.filter((i) => !i.hidden).map((i) => (
             <button key={i.label} role="menuitem" onClick={() => { setOpen(false); i.onClick(); }}
               className={clsx('block w-full px-4 py-2.5 text-left text-[15px] transition hover:bg-fill', i.destructive ? 'text-negative' : 'text-ink', i.divider && 'mt-1 border-t border-line pt-3')}>
