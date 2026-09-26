@@ -25,10 +25,10 @@ export function PlannerPage() {
   if (q.isLoading) return <Spinner />;
   return (
     <>
-      {/* Sem prova escolhida o planner começa vazio, para montar à mão; a prova é opcional */}
-      {setup
-        ? <PlannerSetup onDone={() => setSetup(false)} canCancel />
-        : <PlannerView data={q.data?.plan ? q.data : EMPTY} onReconfigure={() => setSetup(true)} />}
+      {/* Primeira vez: escolher uma prova (cronograma automático) ou montar do zero, à mão */}
+      {setup || !q.data?.plan
+        ? <PlannerSetup onDone={() => setSetup(false)} canCancel={!!q.data?.plan} />
+        : <PlannerView data={q.data} onReconfigure={() => setSetup(true)} />}
       {user?.isGuest && (
         <p className="mx-auto mt-20 max-w-3xl text-[13px] text-ink-3">
           Você está no modo visitante. <Link to="/configuracoes" className="text-ink underline underline-offset-4">Crie uma conta</Link> para acessar de outros dispositivos.
@@ -43,7 +43,6 @@ export function PlannerPage() {
 // ============================================================================
 
 export const REVIEW_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
-const EMPTY = { plan: null, exams: [], subjects: [], methods: [] };
 
 function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
   const qc = useQueryClient();
@@ -91,6 +90,11 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
     onSuccess: () => { qc.invalidateQueries(); onDone(); },
     onError: (e) => setError(errorMessage(e)),
   });
+  const scratch = useMutation({
+    mutationFn: () => api.post('/api/planner/manual'),
+    onSuccess: () => { qc.invalidateQueries(); onDone(); },
+    onError: (e) => setError(errorMessage(e)),
+  });
 
   if (exams.isLoading || settings.isLoading || !profile || sel === null) return <Spinner />;
   const available = (exams.data ?? []).filter((e) => e.days_left == null || e.days_left > 0);
@@ -112,6 +116,16 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   return (
     <div className="mx-auto max-w-2xl">
       <Title eyebrow="Seu planner começa aqui" trailing={canCancel ? <Button variant="plain" size="sm" onClick={onDone}>Cancelar</Button> : undefined}>Planner</Title>
+      {!canCancel && (
+        <div className="-mt-6 mb-12 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-line pb-6 animate-in">
+          <p className="text-[15px] text-ink-2">Escolha uma prova para o cronograma automático.<span className="block text-[13px] text-ink-3">Prefere montar você mesmo, dia a dia?</span></p>
+          <button onClick={() => { setError(null); scratch.mutate(); }} disabled={scratch.isPending} data-testid="scratch"
+            className="rounded-full border border-line px-4 py-2 text-[14px] text-ink transition hover:border-ink disabled:opacity-40">
+            {scratch.isPending ? 'Abrindo…' : 'Montar do zero'}
+          </button>
+        </div>
+      )}
+      {!canCancel && error && !chosen.length && !tplId && <Note tone="negative" className="-mt-8 mb-10">{error}</Note>}
 
       {tpls.length > 0 && (
         <section className="-mt-4 mb-12 animate-in" aria-label="Só para você">
@@ -269,7 +283,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   // Sem prova: planner montado à mão (a prova e o cronograma automático são opcionais)
   const noExam = !data.exams.length;
   const eyebrow: ReactNode = noExam
-    ? <>Meu planner · <button onClick={onReconfigure} className="tracking-[0.16em] uppercase underline decoration-line underline-offset-4 hover:text-ink hover:decoration-ink">usar o cronograma de uma prova</button></>
+    ? 'Meu planner'
     : data.plan.summary?.template
     ? `${data.plan.name} · ${shortDate(exam?.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}`
     : exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : data.plan.name.replace(/^Planner /, '');
@@ -279,7 +293,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate(), hidden: noExam },
       { label: 'Todos os assuntos', onClick: () => setSheet('subjects'), hidden: !data.subjects.length },
       { label: 'Tabela combinada das provas', onClick: () => setSheet('multi'), hidden: data.exams.length < 2 },
-      { label: noExam ? 'Usar o cronograma de uma prova' : 'Reconfigurar planner', onClick: onReconfigure },
+      { label: noExam ? 'Escolher prova para montar cronograma' : 'Reconfigurar planner', onClick: onReconfigure },
       { label: 'Sobre este plano', onClick: () => setSheet('about'), hidden: noExam },
     ]} />
   );
@@ -298,6 +312,12 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       </section>
       <aside aria-label="Estudo" className="no-scrollbar min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-10 fit:space-y-0 fit:overflow-y-auto">
         <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} fit={desktop} />
+        {noExam && (
+          <button onClick={onReconfigure} data-testid="choose-exam"
+            className="-mt-8 block shrink-0 text-left text-[13px] text-ink-2 underline decoration-line underline-offset-4 hover:text-ink hover:decoration-ink fit:-mt-7">
+            Escolher prova para montar cronograma
+          </button>
+        )}
         <FocusWidget />
         <PerformanceStrip />
       </aside>

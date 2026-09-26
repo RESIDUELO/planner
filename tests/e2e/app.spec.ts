@@ -11,8 +11,11 @@ const inDays = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Amer
 const HOME = /\/planner\/planner$/;
 
 /** Sem prova o planner abre vazio; o cronograma de uma prova é opcional. */
+/** Tela das provas: aparece sozinha na primeira vez; num planner montado do zero, pelo link abaixo dos assuntos. */
 async function openSetup(page: Page) {
-  await page.getByRole('button', { name: 'usar o cronograma de uma prova' }).click();
+  const first = page.getByTestId('scratch'), later = page.getByTestId('choose-exam');
+  await expect(first.or(later)).toBeVisible();
+  if (await later.isVisible()) await later.click();
 }
 
 async function login(page: Page, email: string, password: string) {
@@ -41,11 +44,9 @@ test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async
   await page.getByLabel('Senha').fill(student.password);
   await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
   await expect(page).toHaveURL(HOME);
-  // Planner vazio, pronto para montar à mão; a prova é opcional
-  await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
-  await expect(page.getByTestId('add-subject').first()).toBeVisible();
-  await openSetup(page);
+  // Primeira vez: as provas (cronograma automático) ou montar do zero
   await expect(page.getByRole('heading', { name: 'Planner' })).toBeVisible();
+  await expect(page.getByTestId('scratch')).toBeVisible();
   await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
   await expect(page.getByText('Receba seu planner')).toHaveCount(0);
   await page.goto('provas');
@@ -332,7 +333,10 @@ test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no 
   await page.goto('login');
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
   await expect(page).toHaveURL(HOME);
+  await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
+  await page.getByTestId('scratch').click();
   await expect(page.getByText('Meu planner')).toBeVisible();
+  await expect(page.getByTestId('choose-exam')).toHaveText('Escolher prova para montar cronograma');
 
   // Planner vazio: "+" num dia → novo assunto
   // Hoje sempre está na semana aberta

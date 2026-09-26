@@ -144,6 +144,13 @@ describe('app off-line', () => {
     const cardio = areas.find((a: any) => /Clínica/.test(a.name));
     expect(outros && cardio).toBeTruthy();
 
+    // "Montar do zero": planner vazio, sem prova (e repetir não cria outro)
+    await ok('POST', '/api/planner/manual');
+    await ok('POST', '/api/planner/manual');
+    const manual = await ok('GET', '/api/planner');
+    expect(manual.plan?.summary?.manual).toBe(true);
+    expect(manual.subjects).toHaveLength(0);
+
     // Primeiro "+": cria o planner vazio e o assunto do próprio aluno
     const { subjectId: brugada } = await ok('POST', '/api/planner/days/2026-09-30/subjects', { name: 'Síndrome de Brugada', areaId: cardio.id });
     const { subjectId: ecg } = await ok('POST', '/api/planner/days/2026-09-29/subjects', { name: 'Revisar ECG' });

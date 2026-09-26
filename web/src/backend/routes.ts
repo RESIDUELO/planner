@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { addSubjectToDay, deleteOwnSubject, updateOwnSubject, generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
+import { addSubjectToDay, ensurePlan, deleteOwnSubject, updateOwnSubject, generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
 import { agendaView, createTask, deleteTask, plannerTasks, saveNote, updateTask } from './personal';
@@ -452,6 +452,11 @@ route('POST', '/api/planner/days/:date/subjects', async ({ ctx, params, body }) 
     areaId: uuid.nullable().optional(),
   }).refine((x) => !!x.subjectId !== !!x.name, 'Escolha um assunto ou escreva um novo.').parse(body);
   return addSubjectToDay(ctx, { date: isoDate.parse(params.date), ...b });
+});
+// "Montar do zero": planner vazio, sem prova (os assuntos entram pelo "+" de cada dia)
+route('POST', '/api/planner/manual', async ({ ctx }) => {
+  await ensurePlan(ctx, await currentUserId(ctx));
+  return { ok: true };
 });
 route('PATCH', '/api/subjects/:id', async ({ ctx, params, body }) => {
   const b = z.object({ name: z.string().trim().min(1, 'Escreva o nome do assunto.').max(200), areaId: uuid.nullable().optional() }).parse(body);
