@@ -28,9 +28,9 @@ describe('app off-line', () => {
     expect(me.user).toMatchObject({ role: 'admin', isGuest: false });
   });
 
-  it('tem as 4 provas e o cronograma privado', async () => {
+  it('tem as 5 provas e o cronograma privado', async () => {
     const exams = await ok('GET', '/api/exams');
-    expect(exams.map((e: any) => e.institution).sort()).toEqual(['FAMEMA', 'FAMERP', 'HU-UEL', 'UNOESTE/HRPP']);
+    expect(exams.map((e: any) => e.institution).sort()).toEqual(['FAMEMA', 'FAMERP', 'HU-UEL', 'Santa Casa Araçatuba', 'UNOESTE/HRPP']);
     const tpl = await ok('GET', '/api/templates');
     expect(tpl).toHaveLength(1);
     expect(tpl[0]).toMatchObject({ lessons: 45, studied: 27, examDate: '2026-12-05' });

@@ -10,6 +10,7 @@ import { createLocalSupabase } from './client';
 import agendaSql from '../../../supabase/parts/13_agenda.sql?raw';
 import ownSubjectsSql from '../../../supabase/parts/14_own_subjects.sql?raw';
 import residenciesSql from '../../../supabase/parts/15_residencies.sql?raw';
+import santaCasaSql from '../../../supabase/data/santa_casa_aracatuba_r1.sql?raw';
 // Fontes dentro do app (sem internet não há Google Fonts)
 import '@fontsource/tinos/latin-400.css';
 import '@fontsource/tinos/latin-400-italic.css';
@@ -21,8 +22,8 @@ import '@fontsource/patrick-hand/latin-400.css';
 const DATA_DIR = 'idb://residencia-planner';
 const READY_KEY = 'rp-local-db';
 /** Versão do schema local; quem instalou uma versão anterior recebe as migrações que faltam. */
-export const LOCAL_DB_VERSION = '4';
-const MIGRATIONS: Record<string, string> = { '2': agendaSql, '3': ownSubjectsSql, '4': residenciesSql };
+export const LOCAL_DB_VERSION = '5';
+const MIGRATIONS: Record<string, string> = { '2': agendaSql, '3': ownSubjectsSql, '4': residenciesSql, '5': santaCasaSql };
 
 /** Cliente local e `flush` (grava no disco o que mudou; o app chama uma vez ao fim de cada ação). */
 export async function initLocal(): Promise<{ client: SupabaseClient; flush: () => Promise<void> }> {

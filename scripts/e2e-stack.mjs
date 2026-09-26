@@ -16,7 +16,7 @@ writeFileSync('dist/config.json', JSON.stringify({ supabaseUrl: sb.url, supabase
 // Provas cadastradas como em produção: arquivos SQL gerados em supabase/data/
 const c = new pg.Client({ connectionString: sb.dbUrl });
 await c.connect();
-for (const f of ['famerp_r1', 'uel_r1', 'unoeste_r1', 'famema_r1', 'cronograma_medcof_unoeste_v3']) await c.query(readFileSync(`supabase/data/${f}.sql`, 'utf8'));
+for (const f of ['famerp_r1', 'uel_r1', 'unoeste_r1', 'famema_r1', 'santa_casa_aracatuba_r1', 'cronograma_medcof_unoeste_v3']) await c.query(readFileSync(`supabase/data/${f}.sql`, 'utf8'));
 await c.end();
 console.log(`E2E pronto em ${sb.url}/planner/`);
 process.on('SIGTERM', async () => { await sb.stop(); process.exit(0); });

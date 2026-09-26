@@ -425,6 +425,26 @@ describe('FAMEMA (relatório sem anexo questão a questão)', () => {
   });
 });
 
+describe('Santa Casa Araçatuba (anexo questão a questão, sem gabarito)', () => {
+  it('entra com 480 questões classificadas, 2 anuladas e sem data oficial', async () => {
+    await runDataFile('santa_casa_aracatuba_r1');
+    await runDataFile('santa_casa_aracatuba_r1');
+    const r = await dbQuery(`select count(distinct q.id)::int as n, count(distinct qs.question_id)::int as c,
+      count(distinct q.id) filter (where q.annulled)::int as a from questions q
+      join exam_editions ed on ed.id = q.exam_edition_id join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
+      left join question_subjects qs on qs.question_id = q.id where i.abbreviation = 'Santa Casa Araçatuba'`);
+    expect(r.rows[0]).toEqual({ n: 480, c: 480, a: 2 });
+    const list = await student.ok('GET', '/api/exams');
+    const s = list.find((e: any) => e.institution === 'Santa Casa Araçatuba');
+    expect(s).toMatchObject({ exam_date: null, date_official: false });
+    const h = await student.ok('GET', `/api/exams/${s.exam_id}/history`);
+    expect(h.editionsAnalyzed).toBe(6);
+    const bio = h.subjects.find((x: any) => x.name === 'Bioestatística - testes diagnósticos');
+    expect(bio).toMatchObject({ questions: 9, editionsPresent: 4 });
+    expect(h.subjects.find((x: any) => x.name === 'UTI pediátrica - VM/fluidos/sepse')).toMatchObject({ questions: 14 });
+  });
+});
+
 describe('Desfazer questões e zerar o perfil', () => {
   it('registro de questões errado pode ser desfeito', async () => {
     const g = new Client();

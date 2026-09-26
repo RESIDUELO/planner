@@ -10,6 +10,7 @@ Administração → Importação (com prévia, validação e confirmação expl�
 Uso:
   pip install pymupdf
   python3 scripts/pdf-annex-to-import.py <famerp.pdf> <uel.pdf> <unoeste.pdf>
+  python3 scripts/pdf-annex-to-import.py --santa-casa-aracatuba <santa_casa.pdf>
 
 Hierarquia gerada: area (grande área) → specialty (especialidade, opcional) →
 subject (assunto, unidade do planner) → subsubject (subassunto, opcional).
@@ -150,6 +151,38 @@ def unoeste(pdf):
         }, qs)
 
 
+def fix(s):
+    """Palavra quebrada no fim da linha do PDF ("esôfago- estômago" → "esôfago-estômago") e traço "–" → "-"."""
+    return re.sub(r'(\w)- (\w)', r'\1-\2', s).replace('–', '-').replace('—', '-')
+
+
+def santa_casa_aracatuba(pdf):
+    rows = parse(pdf, 12, 'Q', 'Análise R1 SCMA', r'^Prova (20\d\d)$')
+    qs = []
+    for r in rows:
+        c = r['cells']
+        summary = fix(join(c[3]))
+        # O anexo marca a anulada no resumo; não traz o gabarito questão a questão
+        annulled = '[ANULADA]' in summary
+        summary = summary.replace('[ANULADA]', '').strip()
+        qs.append({
+            'year': int(r['label'].split()[-1]), 'question_number': int(join(c[0])), 'area': area(join(c[1])),
+            'specialty': None, 'subject': fix(join(c[2])), 'subsubject': None,
+            'summary': summary or None, 'statement': None,
+            'correct_answer': None, 'annulled': annulled,
+            'difficulty': DIFF.get(join(c[5])), 'question_type': join(c[4]) or None,
+            'guideline': 'Depende de diretriz' if join(c[6]) == 'Sim' else None,
+        })
+    write('santa_casa_aracatuba_r1_2020-2026.json', {
+        'exam_hint': {'institution': 'Santa Casa Araçatuba', 'exam': 'R1 Acesso Direto'},
+        'source': 'Relatório "Análise das provas de R1 - Santa Casa de Misericórdia de Araçatuba (SCMA-SP)", Anexo - classificação questão a questão (sem gabarito)',
+    }, qs)
+
+
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
-    famerp(sys.argv[1]); uel(sys.argv[2]); unoeste(sys.argv[3])
+    # Uso: python3 scripts/pdf-annex-to-import.py --santa-casa-aracatuba <pdf>
+    if sys.argv[1] == '--santa-casa-aracatuba':
+        santa_casa_aracatuba(sys.argv[2])
+    else:
+        famerp(sys.argv[1]); uel(sys.argv[2]); unoeste(sys.argv[3])

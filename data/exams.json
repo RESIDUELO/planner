@@ -92,6 +92,28 @@
         "notes": "Próxima prova. Data oficial: 08/12/2026.",
         "exam_date": "2026-12-08"
       }
+    },
+    {
+      "id": "santa_casa_aracatuba_r1",
+      "institution": {
+        "abbreviation": "Santa Casa Araçatuba",
+        "name": "Santa Casa de Misericórdia de Araçatuba",
+        "state": "SP",
+        "city": "Araçatuba"
+      },
+      "exam": {
+        "name": "R1 Acesso Direto",
+        "total_questions": 80
+      },
+      "file": "santa_casa_aracatuba_r1_2020-2026.json",
+      "source": {
+        "name": "Relatório \"Análise das provas de R1 - Santa Casa de Misericórdia de Araçatuba (SCMA-SP)\" (provas 2020-2023, 2025 e 2026; a de 2024 não estava no material), Anexo - classificação questão a questão. Sem gabarito no anexo.",
+        "checked_at": "2026-09-26"
+      },
+      "upcoming": {
+        "year": 2027,
+        "notes": "Próxima prova. Data oficial ainda não divulgada: cada aluno informa a data."
+      }
     }
   ]
 }
