@@ -10,8 +10,9 @@ import { areaShort, tintFor } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
 import { useWide } from '../lib/zoom';
 import { IS_LOCAL } from '../lib/platform';
-import { nearest, useResidencies } from '../lib/residency';
-import { DeadlineLine } from '../components/Residencies';
+import { allEvents, nearest, useResidencies } from '../lib/residency';
+import type { ResidencyEvent } from '../../../shared/residency';
+import { DeadlineLine, TypeDot } from '../components/Residencies';
 import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
 import { AgendaRow, TaskEditor } from '../components/Agenda';
 import { AddSubjectSheet } from '../components/AddSubject';
@@ -525,6 +526,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, o
   // Prazo mais próximo das residências (linha discreta sob o título)
   const residencies = useResidencies();
   const deadline = nearest(residencies.data, today);
+  const resOn = (date: string) => allEvents(residencies.data).filter((e) => e.date === date);
   // Ainda sem planner: a semana aparece vazia, pronta para receber assuntos
   const days = week.data?.days ?? Array.from({ length: 7 }, (_, i) => ({ date: addDays(from, i), reviews: [], newSubjects: [], exams: [] }));
   const shown = days.filter((d: any) => !single || d.date === day);
@@ -586,7 +588,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, o
           {shown.map((d: any) => (
             <DayBlock key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
               onCheck={onCheck} onReview={(id) => reviewDone.mutate(id)} busy={busy} dnd={dnd}
-              agenda={agendaOn(d.date)} onTask={setTask} detailed={single} onAdd={onAdd} />
+              agenda={agendaOn(d.date)} onTask={setTask} detailed={single} onAdd={onAdd} residency={resOn(d.date)} />
           ))}
         </div>
       )}
@@ -644,14 +646,14 @@ function ColumnHead({ children }: { children: string }) {
   return <div className="border-b border-ink/70 pb-1.5 text-[10.5px] font-medium tracking-[0.18em] text-ink-2 uppercase">{children}</div>;
 }
 
-function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd, agenda = [], onTask, detailed, onAdd }: {
+function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd, agenda = [], onTask, detailed, onAdd, residency = [] }: {
   day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; onReview: (id: string) => void; questions?: any; busy?: boolean; dnd: DnD;
-  agenda?: AgendaTask[]; onTask: (t: AgendaTask) => void; detailed?: boolean; onAdd: (date: string) => void;
+  agenda?: AgendaTask[]; onTask: (t: AgendaTask) => void; detailed?: boolean; onAdd: (date: string) => void; residency?: ResidencyEvent[];
 }) {
   const isToday = day.date === today;
   const past = day.date < today;
   const reviews = (day.reviews as any[]).filter((r, i, arr) => arr.findIndex((x) => x.subjectId === r.subjectId) === i);
-  const empty = !day.newSubjects.length && !reviews.length && !day.exams.length && !agenda.length;
+  const empty = !day.newSubjects.length && !reviews.length && !day.exams.length && !agenda.length && !residency.length;
   const count = (done: number, total: number, one: string, many: string) => (total ? `${done} de ${total} ${total === 1 ? one : many}` : `sem ${many}`);
   const tasks = agenda.filter((a) => a.kind !== 'reminder');
   if (past && empty && !detailed) return (
@@ -666,6 +668,12 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd,
       {detailed ? (
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-[13px] text-ink-2 sm:pl-12">
           {day.exams.map((e: string) => <span key={e} className="tint tint-rose text-[13px] font-medium">Prova · {e}</span>)}
+          {residency.map((e) => (
+            <Link key={`${e.residencyId}-${e.stepId}-${e.edge}`} to={`/residencias?r=${e.residencyId}`} data-testid="planner-residency"
+              className={clsx('inline-flex items-center gap-1.5 self-center rounded-full border border-line px-2.5 py-0.5 text-[13px] text-ink transition hover:border-ink', e.done && 'text-ink-3 line-through decoration-1')}>
+              <TypeDot type={e.type} />{e.residency} - {e.label}
+            </Link>
+          ))}
           <span>{count(day.newSubjects.filter((n: any) => n.done).length, day.newSubjects.length, 'assunto', 'assuntos')}</span>
           <span className="text-line">·</span>
           <span>{count(reviews.filter((r) => r.status === 'done').length, reviews.length, 'revisão', 'revisões')}</span>
@@ -676,6 +684,14 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd,
         <span className={clsx('w-9 text-[11px] font-medium tracking-[0.16em] uppercase', isToday ? 'text-today' : 'text-ink-2')}>{WD[weekday(day.date)]}</span>
         <span className={clsx('tabular font-display text-[40px] leading-none', isToday ? 'text-today' : past ? 'text-ink-3' : 'text-ink')}>{Number(day.date.slice(8))}</span>
         {day.exams.map((e: string) => <span key={e} className="tint tint-rose self-center text-[13px] font-medium">Prova · {e}</span>)}
+        <span className="flex min-w-0 flex-wrap gap-2 self-center">
+        {residency.map((e) => (
+          <Link key={`${e.residencyId}-${e.stepId}-${e.edge}`} to={`/residencias?r=${e.residencyId}`} data-testid="planner-residency"
+            className={clsx('inline-flex items-center gap-1.5 self-center rounded-full border border-line px-2.5 py-0.5 text-[13px] text-ink transition hover:border-ink', e.done && 'text-ink-3 line-through decoration-1')}>
+            <TypeDot type={e.type} />{e.residency} - {e.label}
+          </Link>
+        ))}
+        </span>
         <span className="flex-1" />
         {isToday && <span className="text-[11px] tracking-[0.16em] text-today uppercase">hoje</span>}
       </div>

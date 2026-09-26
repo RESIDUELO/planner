@@ -473,6 +473,9 @@ test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no
   // Planner: linha discreta com o prazo mais próximo; clicar leva à residência
   await page.getByRole('link', { name: 'Planner', exact: true }).click();
   await expect(page.getByTestId('deadline-line')).toHaveText('Inscrição FAMEMA termina em 3 dias');
+  // E cada prazo aparece no dia dele, na semana do Planner
+  if (!(await page.getByTestId(`day-${end}`).count())) await page.getByRole('button', { name: 'Próxima semana' }).click();
+  await expect(page.getByTestId(`day-${end}`).getByTestId('planner-residency')).toHaveText('FAMEMA - fim da inscrição');
   await page.getByTestId('deadline-line').click();
   await expect(page).toHaveURL(/residencias\?r=/);
   await expect(page.getByRole('dialog').getByLabel('Nome da residência')).toHaveValue('FAMEMA');
