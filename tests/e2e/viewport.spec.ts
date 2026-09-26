@@ -5,7 +5,8 @@
 import { expect, test } from '@playwright/test';
 
 const user = { name: 'Tela E2E', email: `tela${Date.now()}@e2e.test`, password: 'senha-tela-123' };
-const SIZES = [[1366, 768], [1280, 800], [1440, 900], [1536, 864], [1920, 1080], [2560, 1440], [1024, 768]] as const;
+// Computadores e tablets deitados
+const SIZES = [[1366, 768], [1280, 800], [1440, 900], [1536, 864], [1920, 1080], [2560, 1440], [1024, 768], [1138, 712], [1024, 600]] as const;
 
 test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });

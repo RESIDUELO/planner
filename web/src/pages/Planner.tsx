@@ -8,7 +8,7 @@ import { api, errorMessage } from '../lib/api';
 import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/format';
 import { areaShort, tintFor } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
-import { DESKTOP, useMedia } from '../lib/media';
+import { useWide } from '../lib/zoom';
 import { IS_LOCAL } from '../lib/platform';
 import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
 import { FocusWidget, PerformanceStrip, SubjectLibrary } from '../components/Workspace';
@@ -274,19 +274,19 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
     ]} />
   );
 
-  // Desktop: a tela inteira cabe na viewport (sem rolagem da página)
-  const desktop = useMedia(DESKTOP);
+  // Tela larga (computador, tablet ou celular deitados): tudo cabe na tela, sem rolagem da página
+  const desktop = useWide();
   useEffect(() => {
     document.documentElement.classList.add('rp-fit');
     return () => document.documentElement.classList.remove('rp-fit');
   }, []);
 
   return (
-    <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_240px] lg:gap-7 xl:grid-cols-[minmax(0,1fr)_300px] xl:gap-10 2xl:grid-cols-[minmax(0,1fr)_330px] fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-rows-[minmax(0,1fr)]">
+    <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-cols-[minmax(0,1fr)_300px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
       <section aria-label="Semana" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
         <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} />
       </section>
-      <aside aria-label="Estudo" className="min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-10 fit:space-y-0">
+      <aside aria-label="Estudo" className="no-scrollbar min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-10 fit:space-y-0 fit:overflow-y-auto">
         <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} fit={desktop} />
         <FocusWidget />
         <PerformanceStrip />
@@ -332,10 +332,18 @@ function useDnd(): DnD {
 /** Marca/desmarca as atividades daquele dia (ou o assunto inteiro). O servidor reorganiza a fila. */
 export function useCheck() {
   const invalidate = useInvalidateStudy();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ subjectId, methodIds, done }: { subjectId: string; methodIds?: string[]; done: boolean }) => {
       if (!methodIds?.length) return api.post(`/api/planner/subjects/${subjectId}/complete`, { done });
       for (const m of methodIds) await api.post(`/api/planner/subjects/${subjectId}/methods/${m}`, { done });
+    },
+    // O círculo marca na hora; a semana se atualiza logo depois com a resposta
+    onMutate: ({ subjectId, methodIds, done }) => {
+      const same = (ids?: string[]) => !methodIds?.length || (ids?.length === methodIds.length && ids.every((x) => methodIds.includes(x)));
+      qc.setQueriesData({ queryKey: ['week'] }, (old: any) => old?.days ? {
+        ...old, days: old.days.map((d: any) => ({ ...d, newSubjects: d.newSubjects.map((n: any) => (n.subjectId === subjectId && same(n.methodIds) ? { ...n, done } : n)) })),
+      } : old);
     },
     onSettled: invalidate,
   });
@@ -344,7 +352,16 @@ export function useCheck() {
 /** ✓ Revisão feita (lembrou bem). Outras respostas ficam na folha do assunto. */
 function useReviewDone() {
   const invalidate = useInvalidateStudy();
-  return useMutation({ mutationFn: (subjectId: string) => api.post(`/api/reviews/${subjectId}`, { rating: 'good' }), onSettled: invalidate });
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (subjectId: string) => api.post(`/api/reviews/${subjectId}`, { rating: 'good' }),
+    onMutate: (subjectId) => {
+      qc.setQueriesData({ queryKey: ['week'] }, (old: any) => old?.days ? {
+        ...old, days: old.days.map((d: any) => ({ ...d, reviews: d.reviews.map((r: any) => (r.subjectId === subjectId && r.status !== 'done' && d.date <= todayBR() ? { ...r, status: 'done' } : r)) })),
+      } : old);
+    },
+    onSettled: invalidate,
+  });
 }
 
 function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean; dnd: DnD; eyebrow: string; menu: ReactNode; desktop?: boolean }) {

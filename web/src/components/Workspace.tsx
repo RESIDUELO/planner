@@ -41,7 +41,7 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
   const shown = fit ? list : list.slice(0, limit);
 
   return (
-    <section aria-label="Assuntos" className="animate-in fit:flex fit:min-h-[140px] fit:flex-1 fit:flex-col">
+    <section aria-label="Assuntos" className="animate-in fit:flex fit:min-h-[230px] fit:flex-1 fit:flex-col">
       <AreaHead title="Assuntos" trailing={<button onClick={onAll} className="text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">ver todos</button>} />
       <div className="mt-3 flex shrink-0 items-center gap-3">
         <label className="relative flex-1">

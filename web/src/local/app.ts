@@ -19,18 +19,36 @@ const READY_KEY = 'rp-local-db';
 /** Versão do banco pronto; ao mudar o schema, o app precisará migrar os dados. */
 export const LOCAL_DB_VERSION = '1';
 
-export async function initLocal(): Promise<SupabaseClient> {
+/** Cliente local e `flush` (grava no disco o que mudou; o app chama uma vez ao fim de cada ação). */
+export async function initLocal(): Promise<{ client: SupabaseClient; flush: () => Promise<void> }> {
   let ready = false;
   try { ready = localStorage.getItem(READY_KEY) != null; } catch { /* sem armazenamento */ }
   let db: PGlite;
-  if (ready) db = await PGlite.create(DATA_DIR);
+  // Grava no IndexedDB em segundo plano, sem esperar a cada consulta (bem mais rápido no celular)
+  const opts = { relaxedDurability: true };
+  if (ready) db = await PGlite.create(DATA_DIR, opts);
   else {
     // Extensão neutra: o Android renomeia arquivos .gz dentro do APK
     const res = await fetch(`${import.meta.env.BASE_URL}local-db.pgdata`);
     if (!res.ok) throw new Error('Banco inicial não encontrado no app.');
     const tarball = new Blob([await res.arrayBuffer()], { type: 'application/x-gzip' });
-    db = await PGlite.create(DATA_DIR, { loadDataDir: tarball });
+    db = await PGlite.create(DATA_DIR, { ...opts, loadDataDir: tarball });
     try { localStorage.setItem(READY_KEY, LOCAL_DB_VERSION); } catch { /* ignore */ }
   }
-  return createLocalSupabase(db);
+  // O banco roda na memória e é gravado no disco (IndexedDB) ao fim de cada ação (lib/api.ts),
+  // numa gravação só mesmo com várias ações seguidas, e sempre ao sair do app.
+  const syncFs = () => ((db as any).fs?.syncToFs?.(false) as Promise<void> | undefined) ?? Promise.resolve();
+  let running: Promise<void> | null = null;
+  let dirty = false;
+  const flush = (): Promise<void> => {
+    if (running) { dirty = true; return running; }
+    running = syncFs().catch(() => {}).then(() => {
+      running = null;
+      if (dirty) { dirty = false; return flush(); }
+    });
+    return running;
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+  addEventListener('pagehide', () => { flush(); });
+  return { client: createLocalSupabase(db), flush };
 }

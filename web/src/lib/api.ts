@@ -5,11 +5,16 @@
  */
 import { ApiError } from '../backend/core';
 import { handle } from '../backend/routes';
-import { getCtx } from './supabase';
+import { afterMutation, getCtx } from './supabase';
 
 export { ApiError };
 
-const request = <T>(method: string, url: string, body?: unknown) => handle(getCtx(), method, url, body) as Promise<T>;
+async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const r = (await handle(getCtx(), method, url, body)) as T;
+  // App off-line: a ação só termina depois de gravada no disco (a tela já marcou na hora)
+  if (method !== 'GET') await afterMutation();
+  return r;
+}
 
 export const api = {
   get: <T = any>(url: string) => request<T>('GET', url),

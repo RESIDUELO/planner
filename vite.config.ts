@@ -21,11 +21,17 @@ function spaFallback(): Plugin {
   };
 }
 
-/** App off-line: as fontes vêm no próprio app (sem Google Fonts). */
+/**
+ * App off-line: as fontes vêm no próprio app (sem Google Fonts) e, sem
+ * viewport-fit=cover, o Android mantém o app entre a barra de status e a de
+ * navegação (em pé e deitado), sem precisar de margens de área segura.
+ */
 function offlineHtml(): Plugin {
   return {
     name: 'offline-html',
-    transformIndexHtml: (html) => html.replace(/\s*<link[^>]+fonts\.(googleapis|gstatic)\.com[^>]*>/g, ''),
+    transformIndexHtml: (html) => html
+      .replace(/\s*<link[^>]+fonts\.(googleapis|gstatic)\.com[^>]*>/g, '')
+      .replace(/,\s*viewport-fit=cover/, ''),
   };
 }
 

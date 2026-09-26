@@ -5,13 +5,18 @@ import { IS_LOCAL } from './platform';
 export interface AppConfig { supabaseUrl: string; supabaseAnonKey: string }
 
 let ctx: Ctx | null = null;
+/** App off-line: grava no disco o que mudou (chamado ao fim de cada ação). */
+let flushLocal: (() => Promise<void>) | null = null;
+export const afterMutation = () => flushLocal?.() ?? Promise.resolve();
 
 /** Lê config.json (publicado junto com o site) e cria o cliente do Supabase. */
 export async function initSupabase(): Promise<AppConfig | null> {
   if (IS_LOCAL) {
     // App off-line: banco PostgreSQL dentro do aparelho (carregado só no build do app)
     const { initLocal } = await import('../local/app');
-    ctx = createCtx(await initLocal());
+    const local = await initLocal();
+    ctx = createCtx(local.client);
+    flushLocal = local.flush;
     return { supabaseUrl: 'local', supabaseAnonKey: 'local' };
   }
   try {

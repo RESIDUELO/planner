@@ -6,8 +6,8 @@
  * Tipografia + espaço + linhas. Cor só como detalhe.
  */
 @custom-variant dark (&:where(.dark, .dark *));
-/* Desktop com altura suficiente: o workspace cabe inteiro na tela (sem rolagem da página) */
-@custom-variant fit (@media (min-width: 1024px) and (min-height: 600px));
+/* Tela larga (computador, tablet/celular deitados — ver lib/zoom.ts): o workspace cabe inteiro na tela */
+@custom-variant fit (&:where(.rp-wide, .rp-wide *));
 
 :root {
   --canvas: #f1eee8;        /* papel */
@@ -180,9 +180,7 @@ input[type="date"].field, input[type="time"].field { min-height: 42px; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
 /* Desktop: a tela do planner cabe inteira na viewport, sem rolagem da página */
-@media (min-width: 1024px) and (min-height: 600px) {
-  html.rp-fit, html.rp-fit body, html.rp-fit #root { height: 100%; overflow: hidden; }
-}
+html.rp-wide.rp-fit, html.rp-wide.rp-fit body, html.rp-wide.rp-fit #root { height: 100%; overflow: hidden; }
 /* Bordas suaves nas áreas que rolam por dentro (em vez de um corte seco) */
 @utility fade-scroll {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 32px), transparent 100%);

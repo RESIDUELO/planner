@@ -41,12 +41,13 @@ export function buildWidgetData(planner: any, calendar: any): WidgetData {
 /** Mantém o widget em dia: roda sempre que o planner ou a agenda mudam. */
 export function WidgetSync() {
   const today = todayBR();
-  const planner = useQuery({ queryKey: ['planner'], queryFn: () => api.get('/api/planner') });
+  const native = Capacitor.isNativePlatform();
+  const planner = useQuery({ queryKey: ['planner'], queryFn: () => api.get('/api/planner'), enabled: native });
   const to = addDays(today, DAYS - 1);
   const calendar = useQuery({
     queryKey: ['calendar', 'widget', today],
     queryFn: () => api.get(`/api/reviews/calendar?from=${today}&to=${to}`),
-    enabled: !!planner.data?.plan,
+    enabled: native && !!planner.data?.plan,
   });
   const data = planner.data && (!planner.data.plan || calendar.data) ? JSON.stringify(buildWidgetData(planner.data, calendar.data)) : null;
   useEffect(() => {
