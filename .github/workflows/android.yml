@@ -2,20 +2,8 @@
 # https://github.com/<dono>/<repo>/releases/tag/app-android
 name: Gerar APK Android
 
+# Só roda quando pedido (Actions → Gerar APK Android → Run workflow)
 on:
-  push:
-    branches: [claude/confident-bell-0pj7j0]
-    paths:
-      - 'web/**'
-      - 'shared/**'
-      - 'android/**'
-      - 'supabase/**'
-      - 'scripts/build-local-db.mjs'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'capacitor.config.ts'
-      - 'vite.config.ts'
-      - '.github/workflows/android.yml'
   workflow_dispatch:
 
 permissions:
