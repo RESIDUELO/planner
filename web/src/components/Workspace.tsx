@@ -30,11 +30,12 @@ function AreaHead({ title, trailing }: { title: string; trailing?: React.ReactNo
 export function SubjectLibrary({ data, dnd, onOpen, onAll }: { data: any; dnd: DnD; onOpen: (id: string) => void; onAll: () => void }) {
   const [q, setQ] = useState('');
   const [show, setShow] = useState<'todo' | 'all'>('todo');
+  const [limit, setLimit] = useState(8);
   const today = todayBR();
   const visible = data.subjects.filter((s: any) => !s.hidden);
   const list = useMemo(() => visible
     .filter((s: any) => (show === 'all' || s.status !== 'studied') && (!q || s.name.toLowerCase().includes(q.toLowerCase())))
-    .slice(0, 80), [data, q, show]);
+    , [data, q, show]);
   const todo = visible.filter((s: any) => s.status !== 'studied').length;
 
   return (
@@ -49,8 +50,8 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll }: { data: any; dnd: D
           {show === 'todo' ? `${todo} a estudar` : 'todos'}
         </button>
       </div>
-      <ul className="mt-2 max-h-[340px] overflow-y-auto pr-1" data-testid="library">
-        {list.map((s: any) => {
+      <ul className="mt-2" data-testid="library">
+        {list.slice(0, limit).map((s: any) => {
           const dp = s.status === 'studied' ? undefined : dragProps(dnd, { type: 'library', subjectId: s.subjectId, from: '', name: s.name });
           const date = s.nextScheduledDate as string | null;
           return (
@@ -66,6 +67,11 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll }: { data: any; dnd: D
         })}
         {!list.length && <li className="py-3 text-[14px] text-ink-3">Nada por aqui.</li>}
       </ul>
+      {list.length > limit && (
+        <button onClick={() => setLimit(limit + 10)} className="mt-2 text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">
+          mostrar mais ({list.length - limit})
+        </button>
+      )}
       <p className="mt-2 hidden text-[11px] text-ink-3 lg:block">Arraste um assunto para um dia da semana.</p>
     </section>
   );

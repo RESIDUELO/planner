@@ -277,7 +277,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       <section aria-label="Semana" className="min-w-0">
         <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} />
       </section>
-      <aside aria-label="Estudo" className="min-w-0 space-y-12 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
+      <aside aria-label="Estudo" className="min-w-0 space-y-12 lg:pt-1">
         <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} />
         <FocusWidget />
         <PerformanceStrip />

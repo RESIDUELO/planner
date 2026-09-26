@@ -231,9 +231,9 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).not.toContainText(name);
 
   // Arrastar da lista de Assuntos para um dia da semana
-  const libItem = page.getByTestId('library-item').filter({ hasNotText: name }).nth(8);
+  const libItem = page.getByTestId('library-item').filter({ hasNotText: name }).nth(5);
   const libName = (await libItem.locator('button span').first().textContent())!.trim();
-  const dropDay = page.getByTestId(`day-${inDays(mon + 2)}`).getByTestId('col-subjects');
+  const dropDay = page.getByTestId(`day-${inDays(mon)}`).getByTestId("col-subjects");
   await libItem.dragTo(dropDay);
   await expect(page.getByText(`✓ ${libName} adicionado a`, { exact: false })).toBeVisible();
   await expect(dropDay).toContainText(libName);
