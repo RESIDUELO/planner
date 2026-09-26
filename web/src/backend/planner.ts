@@ -13,7 +13,7 @@ import { assignReviews } from '../../../shared/reviewQueue';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { ensureStudiedReviews, reflowTemplate, replanTemplate } from './templates';
+import { applyExtras, ensureStudiedReviews, reflowTemplate, replanTemplate } from './templates';
 
 // ---------------------------------------------------------------------------
 // Seleção de provas e configuração
@@ -381,7 +381,12 @@ export async function replan(ctx: Ctx): Promise<string> {
   const today = ctx.today();
   const plan = await activePlan(ctx, userId);
   if (!plan) throw badRequest('Nenhum planner ativo.');
-  if (plan.settings_snapshot?.template) return replanTemplate(ctx);
+  if (plan.settings_snapshot?.template) {
+    await replanTemplate(ctx);
+    // Outras provas junto com o cronograma: atrasadas voltam para a fila a partir de hoje
+    if (plan.settings_snapshot.template.extraEditions?.length) await redistribute(ctx, userId, plan, today, { includeOverdue: true });
+    return plan.id;
+  }
   // Planner montado à mão: nada a redistribuir (o atrasado continua como atrasado)
   if (plan.settings_snapshot?.manual) return plan.id;
   const exams = await q(ctx.sb.from('study_plan_exams').select('exam_edition_id, is_primary, exam_date').eq('study_plan_id', plan.id));
@@ -411,10 +416,23 @@ export async function syncPlanToSelection(ctx: Ctx): Promise<PlanSync> {
   const today = ctx.today();
   const plan = await activePlan(ctx, userId);
   if (!plan) return { planner: 'none' };
-  if (plan.settings_snapshot?.template) return { planner: 'template', name: plan.name };
   if (plan.settings_snapshot?.manual) return { planner: 'manual' };
   // Prova que já passou não entra (como na tela de montar o planner)
   const sel = (await selectedEditions(ctx, userId)).filter((e) => !e.exam_date || e.exam_date > today);
+  // Cronograma pessoal: ele fica; as outras provas escolhidas vêm junto
+  const tpl = plan.settings_snapshot?.template;
+  if (tpl) {
+    const extras = sel.filter((e) => e.edition_id !== plan.primary_exam_edition_id);
+    const primary = extras.find((e) => e.is_primary) ?? extras[0];
+    const inPlan = await q<any[]>(ctx.sb.from('study_plan_exams').select('exam_edition_id, exam_date').eq('study_plan_id', plan.id)
+      .neq('exam_edition_id', plan.primary_exam_edition_id));
+    const key = (xs: [string, string | null][]) => xs.map(([id, d]) => `${id}|${d ?? ''}`).sort().join(',');
+    const same = key(inPlan.map((e) => [e.exam_edition_id, e.exam_date])) === key(extras.map((e) => [e.edition_id, e.exam_date]))
+      && (extras.length < 2 || tpl.extraPrimary === primary.edition_id);
+    if (same) return { planner: 'unchanged' };
+    await applyExtras(ctx, userId, plan, extras.map((e) => e.edition_id), primary?.edition_id ?? null);
+    return { planner: 'updated' };
+  }
   if (!sel.length) return { planner: 'unchanged' };
   const primary = sel.find((e) => e.is_primary) ?? sel[0];
   const inPlan = await q<any[]>(ctx.sb.from('study_plan_exams').select('exam_edition_id, is_primary, exam_date').eq('study_plan_id', plan.id));
@@ -769,38 +787,74 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
     for (let i = 0; i < ids.length; i += 40) await q(ctx.sb.from('study_schedule').update({ scheduled_date: d }).in('id', ids.slice(i, i + 40)));
   }
 
-  // Cronograma pessoal: a fila anda nos dias de aula do próprio cronograma
-  if (plan.settings_snapshot?.template) return reflowTemplate(ctx, plan);
+  // Cronograma pessoal: a fila anda nos dias de aula do próprio cronograma;
+  // as outras provas junto com ele seguem a regra de sempre, no tempo que sobra
+  const tpl = plan.settings_snapshot?.template;
+  if (tpl) {
+    await reflowTemplate(ctx, plan);
+    if (!tpl.extraEditions?.length) return;
+  }
   // Montado à mão: cada assunto fica no dia em que foi colocado
   if (plan.settings_snapshot?.manual) return;
   if (tomorrow >= plan.end_date) return;
+  await redistribute(ctx, userId, plan, tomorrow);
+}
 
-  // 1b) Assunto começado hoje: o resto dele (se estava em outro dia) vem para hoje também
-  const startedToday = new Set(rows.filter((r) => r.scheduled_date === today && !r.pinned).map((r) => r.subject_id));
-  const join = rows.filter((r) => !r.completed && !r.pinned && r.scheduled_date > today && startedToday.has(r.subject_id));
-  for (const r of join) r.scheduled_date = today;
-  for (let i = 0; i < join.length; i += 40) {
-    await q(ctx.sb.from('study_schedule').update({ scheduled_date: today }).in('id', join.slice(i, i + 40).map((r) => r.id)));
+/**
+ * Redistribui, a partir de `start`, os assuntos do cronograma automático na
+ * ordem de prioridade, ocupando o espaço livre - sem buracos. O que ficou
+ * antes de `start` e o que foi arrastado para um dia ficam onde estão
+ * (`includeOverdue`: as atrasadas também entram na fila). Com cronograma
+ * pessoal, as aulas dele não se mexem aqui e ocupam o tempo do dia.
+ */
+export async function redistribute(ctx: Ctx, userId: string, plan: any, start: ISODate, opts: { includeOverdue?: boolean } = {}) {
+  const today = ctx.today();
+  if (start >= plan.end_date) return;
+  const tpl = plan.settings_snapshot?.template;
+  const offset: number = tpl ? tpl.offset ?? Infinity : 0;
+  const progress = await selectAll((a, b) => ctx.sb.from('subject_method_progress').select('subject_id, study_method_id, completed_at').eq('user_id', userId).range(a, b)) as any[];
+  const doneAt = new Map(progress.map((p) => [`${p.subject_id}|${p.study_method_id}`, toISODateBR(p.completed_at)]));
+  // Assuntos do aluno ficam no dia escolhido: o cronograma automático não os redistribui
+  const own = await ownSubjectIds(ctx, userId);
+  const ps = (await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank, historical_percentage, size_factor, exam_date, scheduled')
+    .eq('study_plan_id', plan.id).range(a, b)) as any[]).filter((s) => !own.has(s.subject_id) && s.priority_rank > offset);
+  const scope = new Set(ps.map((s) => s.subject_id));
+  const all = await selectAll((a, b) => ctx.sb.from('study_schedule').select('*')
+    .eq('study_plan_id', plan.id).neq('activity_type', 'review').range(a, b)) as any[];
+  const rows = all.filter((r) => scope.has(r.subject_id));
+
+  if (start > today && !opts.includeOverdue) {
+    // Assunto começado hoje: o resto dele (se estava em outro dia) vem para hoje também
+    const startedToday = new Set(rows.filter((r) => r.scheduled_date === today && !r.pinned).map((r) => r.subject_id));
+    const join = rows.filter((r) => !r.completed && !r.pinned && r.scheduled_date > today && startedToday.has(r.subject_id));
+    for (const r of join) r.scheduled_date = today;
+    for (let i = 0; i < join.length; i += 40) {
+      await q(ctx.sb.from('study_schedule').update({ scheduled_date: today }).in('id', join.slice(i, i + 40).map((r) => r.id)));
+    }
   }
 
-  // 2) Hoje e atrasadas ficam; o futuro é redistribuído
-  // (e as que foram arrastadas para um dia ficam nesse dia)
-  const kept = new Set(rows.filter((r) => !r.completed && (r.scheduled_date <= today || r.pinned)).map((r) => `${r.subject_id}|${r.study_method_id}`));
+  // Antes de `start` fica; o resto é redistribuído (e o que foi arrastado para um dia fica nesse dia)
+  const stays = (r: any) => !r.completed && (r.pinned || (!opts.includeOverdue && r.scheduled_date < start));
+  const kept = new Set(rows.filter(stays).map((r) => `${r.subject_id}|${r.study_method_id}`));
+  // Tempo já ocupado pelas aulas do cronograma pessoal
+  const busy: Record<ISODate, number> = {};
+  if (tpl) {
+    for (const r of all) {
+      if (scope.has(r.subject_id) || own.has(r.subject_id) || r.completed || r.scheduled_date < start) continue;
+      busy[r.scheduled_date] = (busy[r.scheduled_date] ?? 0) + (r.estimated_minutes ?? 0);
+    }
+  }
   const profile = await loadProfile(ctx, userId);
   const allMethods = await loadMethods(ctx, userId);
   const enabledIds = allMethods.filter((m) => m.enabled).map((m) => m.id);
   const choices = await loadActivityChoices(ctx, userId);
   const hiddenIds = await loadHidden(ctx, userId);
-  // Assuntos do aluno ficam no dia escolhido: o cronograma automático não os redistribui
-  const own = await ownSubjectIds(ctx, userId);
-  const ps = (await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank, historical_percentage, size_factor, exam_date, scheduled')
-    .eq('study_plan_id', plan.id).range(a, b)) as any[]).filter((s) => !own.has(s.subject_id));
   const cards = await selectAll<CardRow>((a, b) => ctx.sb.from('spaced_repetition_cards').select('*').eq('user_id', userId).range(a, b));
   const cardBy = new Map(cards.map((c) => [c.subject_id, c]));
   const planExams = await q(ctx.sb.from('study_plan_exams').select('exam_date').eq('study_plan_id', plan.id)) as any[];
 
   const schedule = buildSchedule({
-    startDate: tomorrow,
+    startDate: start,
     endDate: plan.end_date,
     dailyMinutes: Math.round(profile.daily_hours * 60),
     studyWeekdays: studyWeekdays(profile),
@@ -821,9 +875,10 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
       };
     }),
     examDates: planExams.map((e) => e.exam_date).filter(Boolean),
+    busyMinutes: busy,
   });
 
-  const stale = rows.filter((r) => !r.completed && !r.pinned && r.scheduled_date > today).map((r) => r.id);
+  const stale = rows.filter((r) => !r.completed && !stays(r)).map((r) => r.id);
   for (let i = 0; i < stale.length; i += 40) await q(ctx.sb.from('study_schedule').delete().in('id', stale.slice(i, i + 40)));
   if (schedule.activities.length) {
     await q(ctx.sb.from('study_schedule').insert(schedule.activities.map((a) => ({

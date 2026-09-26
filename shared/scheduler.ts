@@ -48,6 +48,8 @@ export interface SchedulerInput {
   subjects: SchedulerSubject[];
   /** Datas das provas: não se estuda conteúdo novo no dia da prova. */
   examDates: ISODate[];
+  /** Minutos já ocupados em cada dia (ex.: aulas do cronograma pessoal): sobra o resto do dia. */
+  busyMinutes?: Record<ISODate, number>;
 }
 
 export interface PlannedActivity {
@@ -160,7 +162,7 @@ export function buildSchedule(input: SchedulerInput): SchedulerOutput {
 
   const days: DayLoad[] = studyDays.map((date, i) => ({
     date,
-    capacity: input.dailyMinutes,
+    capacity: Math.max(0, input.dailyMinutes - (input.busyMinutes?.[date] ?? 0)),
     reviews: 0,
     questions: 0,
     newStudy: 0,
@@ -303,7 +305,7 @@ export function buildSchedule(input: SchedulerInput): SchedulerOutput {
     summary: {
       studyDays: span,
       finalPhaseDays,
-      capacityMinutes: span * input.dailyMinutes,
+      capacityMinutes: days.reduce((t, d) => t + d.capacity, 0),
       newStudyMinutesPlanned: activities.reduce((t, a) => t + a.minutes, 0),
       newStudyMinutesRequired: required,
       reviewMinutesProjected: reviews.reduce((t, r) => t + r.minutes, 0),

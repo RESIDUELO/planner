@@ -5,13 +5,23 @@
  * sábados de questões, simulados e a revisão final entram nas datas do
  * cronograma. A fila continua dinâmica: aula adiantada sobe as seguintes para
  * os dias de aula livres, sem mexer em sábados, simulados e revisão final.
+ *
+ * Outras provas podem vir junto: o cronograma é o começo do planner e os
+ * assuntos delas seguem as regras de qualquer prova (ver applyExtras).
  */
-import { type ISODate } from '../../../shared/dates';
+import { maxDate, type ISODate } from '../../../shared/dates';
 import { MEMORY_VERSION } from '../../../shared/config';
 import { review } from '../../../shared/memory';
+import { rankSubjects, type ExamInput } from '../../../shared/priority';
+import { sizeFactors } from '../../../shared/scheduler';
+import { sufficiencyMessage } from '../../../shared/stats';
 import { assignReviews } from '../../../shared/reviewQueue';
 import { badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
-import { activePlan, savePlan, loadEditions, loadHidden, loadMethods, loadProfile, readjustCards, saveSelection, studyWeekdays } from './planner';
+import { loadExamHistories } from './history';
+import {
+  activePlan, editionLabel, savePlan, loadEditions, loadHidden, loadMethods, loadProfile, ownSubjectIds, readjustCards, redistribute,
+  saveSelection, studyWeekdays,
+} from './planner';
 
 type Kind = 'lesson' | 'questions' | 'mock' | 'review' | 'studied' | 'reserve';
 interface TemplateItem {
@@ -31,12 +41,12 @@ const levelFromTotal = (t: number) => (t >= 7 ? 'muito_alta' : t >= 4 ? 'alta' :
 /** Cronogramas disponíveis para quem está logado (vazio para quem não é administrador). */
 export async function listTemplates(ctx: Ctx) {
   await currentUserId(ctx);
-  const { data, error } = await ctx.sb.from('plan_templates').select('id, code, name, description, data').eq('active', true);
+  const { data, error } = await ctx.sb.from('plan_templates').select('id, code, name, description, exam_edition_id, data').eq('active', true);
   if (error) return []; // tabela ainda não criada (10_plan_templates.sql)
   return (data as any[]).map((t) => {
     const items = (t.data?.items ?? []) as TemplateItem[];
     return {
-      id: t.id, code: t.code, name: t.name, description: t.description,
+      id: t.id, code: t.code, name: t.name, description: t.description, examEditionId: t.exam_edition_id,
       startDate: t.data?.startDate, examDate: t.data?.examDate,
       lessons: items.filter((i) => i.kind === 'lesson').length,
       studied: items.filter((i) => i.kind === 'studied').length,
@@ -53,7 +63,7 @@ async function resolveSubjects(ctx: Ctx, slugs: string[]) {
   return ids;
 }
 
-export async function generateFromTemplate(ctx: Ctx, templateId: string): Promise<string> {
+export async function generateFromTemplate(ctx: Ctx, templateId: string, extras: { editionIds?: string[]; primaryEditionId?: string | null } = {}): Promise<string> {
   const userId = await currentUserId(ctx);
   const today = ctx.today();
   const t: any = await q(ctx.sb.from('plan_templates').select('id, code, name, description, exam_edition_id, data').eq('id', templateId).maybeSingle());
@@ -77,7 +87,9 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
   const [ed] = await loadEditions(ctx, [edition]);
   const examDate: ISODate = ed?.exam_date ?? data.examDate;
   if (examDate <= today) throw badRequest('A prova deste cronograma já passou.');
-  await saveSelection(ctx, userId, [edition], edition);
+  const extraIds = [...new Set(extras.editionIds ?? [])].filter((id) => id !== edition);
+  if (extraIds.length && (await loadEditions(ctx, extraIds)).length !== extraIds.length) throw badRequest('Uma das provas selecionadas não está disponível.');
+  await saveSelection(ctx, userId, [edition, ...extraIds], edition);
 
   // Ordem: o que tem data (na ordem do cronograma), depois as aulas de reserva e o que já foi estudado
   const dated = data.items.filter((i) => DATED.includes(i.kind) && i.date! < examDate).sort((a, b) => a.date!.localeCompare(b.date!));
@@ -134,7 +146,11 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
       algorithm_version: `template:${t.code}`, scheduler_version: 'template_v1',
       settings_snapshot: {
         profile, methods: methods.map((m) => ({ id: m.id, code: m.code, minutes: m.estimated_minutes })), studyWeekdays: studyWeekdays(profile),
-        template: { id: t.id, code: t.code, slots: lessonSlots, lessons: dated.filter((i) => i.kind === 'lesson').map((i) => ids.get(i.slug)) },
+        template: {
+          id: t.id, code: t.code, slots: lessonSlots, lessons: dated.filter((i) => i.kind === 'lesson').map((i) => ids.get(i.slug)),
+          // Posições do cronograma no ranking; as outras provas vêm depois
+          offset: ordered.length, extraEditions: [], extraPrimary: null,
+        },
         studiedReviews: STUDIED_REVIEWS_VERSION,
       },
       summary: {
@@ -151,7 +167,96 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
   });
   await scheduleStudiedReviews(ctx, userId, planId, data, ids, examDate, profile);
   await readjustCards(ctx, userId, planId);
+  if (extraIds.length) await applyExtras(ctx, userId, await activePlan(ctx, userId), extraIds, extras.primaryEditionId ?? null);
   return planId;
+}
+
+/**
+ * Outras provas junto com o cronograma pessoal. O cronograma fica como está
+ * (é o começo do planner); os assuntos das outras provas vêm depois dele no
+ * ranking, com as mesmas regras de qualquer prova, no tempo que sobra de cada
+ * dia e, depois do cronograma, no dia inteiro até a data de cada prova.
+ * Refeito sempre que as provas mudam; o que já foi estudado continua marcado.
+ */
+export async function applyExtras(ctx: Ctx, userId: string, plan: any, extraIds: string[], primaryId: string | null) {
+  const today = ctx.today();
+  const snap = plan.settings_snapshot ?? {};
+  const tpl = snap.template;
+  const tplEdition = plan.primary_exam_edition_id as string;
+  const own = await ownSubjectIds(ctx, userId);
+  const ps = (await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank')
+    .eq('study_plan_id', plan.id).range(a, b)) as any[]).filter((s) => !own.has(s.subject_id));
+  // Planner de cronograma criado antes das outras provas: todas as posições são dele
+  const offset: number = tpl.offset ?? Math.max(0, ...ps.map((s) => s.priority_rank));
+
+  // Tira as outras provas de antes (o que já foi feito continua registrado)
+  const old = ps.filter((s) => s.priority_rank > offset).map((s) => s.subject_id);
+  for (let i = 0; i < old.length; i += 40) {
+    const chunk = old.slice(i, i + 40);
+    await q(ctx.sb.from('study_schedule').delete().eq('study_plan_id', plan.id).eq('completed', false).in('subject_id', chunk));
+    await q(ctx.sb.from('study_plan_subjects').delete().eq('study_plan_id', plan.id).in('subject_id', chunk));
+  }
+  await q(ctx.sb.from('study_plan_exams').delete().eq('study_plan_id', plan.id).neq('exam_edition_id', tplEdition));
+  const tplExam: any = await q(ctx.sb.from('study_plan_exams').select('exam_date').eq('study_plan_id', plan.id).eq('exam_edition_id', tplEdition).maybeSingle());
+  const tplDate: ISODate = tplExam?.exam_date ?? plan.end_date;
+  const summary = plan.summary ?? {};
+  const baseExams = (summary.exams ?? []).filter((e: any) => e.editionId === tplEdition);
+  const baseWeights = (summary.weights ?? []).filter((w: any) => w.editionId === tplEdition);
+
+  const eds = extraIds.length ? await loadEditions(ctx, extraIds) : [];
+  if (!eds.length) {
+    const next = { ...snap, template: { ...tpl, offset, extraEditions: [], extraPrimary: null } };
+    await q(ctx.sb.from('study_plans').update({ end_date: tplDate, mode: 'single', settings_snapshot: next, summary: { ...summary, exams: baseExams, weights: baseWeights } }).eq('id', plan.id));
+    return;
+  }
+  const primary = eds.find((e) => e.edition_id === primaryId) ?? eds[0];
+  const histories = await loadExamHistories(ctx, [...new Set(eds.map((e) => e.exam_id))]);
+  const examInputs: ExamInput[] = eds.map((e) => {
+    const h = histories.get(e.exam_id)!;
+    return {
+      editionId: e.edition_id, label: editionLabel(e), examDate: e.exam_date, isPrimary: e.edition_id === primary.edition_id,
+      expectedTotalQuestions: e.total_questions ?? e.exam_total_questions ?? Math.round(h.stats.averageQuestionsPerEdition),
+      stats: h.stats,
+    };
+  });
+  const { weights, subjects: ranked } = rankSubjects(examInputs, today);
+  // Assunto que já está no planner (do cronograma ou do aluno) não entra de novo
+  const taken = new Set([...ps.filter((s) => s.priority_rank <= offset).map((s) => s.subject_id), ...own]);
+  const subjects = ranked.filter((s) => !taken.has(s.subjectId));
+  const factors = sizeFactors(subjects.map((s) => s.percentage));
+  const endDate = maxDate(tplDate, ...eds.map((e) => e.exam_date).filter((d): d is string => !!d && d > today))!;
+  const weightById = new Map(weights.map((w) => [w.editionId, w]));
+  const examDateFor = (s: (typeof subjects)[number]): ISODate => {
+    const dates = s.perExam
+      .filter((p) => p.percentage > 0 && (weightById.get(p.editionId)?.weight ?? 0) > 0)
+      .map((p) => eds.find((e) => e.edition_id === p.editionId)?.exam_date)
+      .filter((d): d is string => !!d && d > today)
+      .sort();
+    return dates[0] ?? endDate;
+  };
+
+  await q(ctx.sb.from('study_plan_exams').insert(examInputs.map((e) => ({
+    study_plan_id: plan.id, exam_edition_id: e.editionId, user_id: userId, is_primary: false,
+    weight: weightById.get(e.editionId)!.weight, exam_date: e.examDate, editions_analyzed: e.stats.editionsAnalyzed,
+  }))));
+  const rows = subjects.map((s, i) => ({
+    study_plan_id: plan.id, user_id: userId, subject_id: s.subjectId, historical_frequency: s.weighted, historical_percentage: s.percentage,
+    annual_average: s.annualAverage, years_present: s.editionsPresent, years_analyzed: s.editionsAnalyzed,
+    recent_frequency: s.recentPercentage, priority_score: s.historicalScore, priority_rank: offset + i + 1,
+    priority_level: s.level, estimated_questions: s.estimatedQuestions, size_factor: factors[i],
+    exam_date: examDateFor(s), scheduled: true, per_exam: s.perExam,
+  }));
+  for (let i = 0; i < rows.length; i += 200) await q(ctx.sb.from('study_plan_subjects').insert(rows.slice(i, i + 200)));
+
+  const next = { ...snap, template: { ...tpl, offset, extraEditions: eds.map((e) => e.edition_id), extraPrimary: primary.edition_id } };
+  const exams = [...baseExams, ...examInputs.map((e) => ({
+    editionId: e.editionId, label: e.label, examDate: e.examDate, editionsAnalyzed: e.stats.editionsAnalyzed,
+    years: e.stats.years, totalQuestions: e.stats.totalQuestions, sufficiency: e.stats.sufficiency,
+    message: sufficiencyMessage(e.stats.editionsAnalyzed), expectedTotalQuestions: e.expectedTotalQuestions,
+  }))];
+  await q(ctx.sb.from('study_plans').update({ end_date: endDate, mode: 'multi', settings_snapshot: next, summary: { ...summary, exams, weights: [...baseWeights, ...weights] } }).eq('id', plan.id));
+  await redistribute(ctx, userId, { ...plan, end_date: endDate, settings_snapshot: next }, today);
+  await readjustCards(ctx, userId, plan.id);
 }
 
 /** Versão da regra das revisões dos temas já estudados (planners antigos são corrigidos sozinhos). */

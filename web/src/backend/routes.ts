@@ -315,7 +315,11 @@ route('GET', '/api/planner/subjects/:id', async ({ ctx, params }) => {
   const n = subj.yearsAnalyzed;
   const pct = (subj.percentage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
   const tpl = (subj.perExam?.[0] as any)?.template;
-  const explanation = subj.own ? 'Assunto criado por você: não vem da análise das provas e não muda a base de assuntos de ninguém.' : tpl ? templateExplanation(subj, tpl, primary?.institution) : s.exams.length === 1
+  const planTpl = s.plan.settings_snapshot?.template;
+  const extras = planTpl ? s.exams.filter((e: any) => !e.is_primary).map((e: any) => e.institution) : [];
+  const explanation = subj.own ? 'Assunto criado por você: não vem da análise das provas e não muda a base de assuntos de ninguém.' : tpl ? templateExplanation(subj, tpl, primary?.institution)
+    : extras.length ? `${subj.name} vem ${extras.length === 1 ? `da prova ${extras[0]}` : `das provas ${extras.join(', ')}`} e entra depois do seu cronograma: está em #${subj.rank - (planTpl.offset ?? 0)} entre os assuntos ${extras.length === 1 ? 'dela' : 'delas'} porque representou ${pct}% das questões ${extras.length === 1 ? `das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'}` : 'em média ponderada'}.`
+    : s.exams.length === 1
     ? `${subj.name} está em #${subj.rank} porque representou ${pct}% das questões das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'} de ${primary?.institution ?? 'sua prova'}.`
     : `${subj.name} está em #${subj.rank} porque representou, em média ponderada, ${pct}% das questões das provas selecionadas (peso maior para a prova principal e para as provas mais próximas).`;
   const areaId = subj.own ? (await loadSubjectsInfo(ctx, [id])).get(id)?.area_id ?? null : null;
@@ -403,8 +407,8 @@ route('POST', '/api/me/reset', async ({ ctx }) => {
 // Cronogramas pessoais (só administradores)
 route('GET', '/api/templates', async ({ ctx }) => listTemplates(ctx));
 route('POST', '/api/planner/generate-template', async ({ ctx, body }) => {
-  const { templateId } = z.object({ templateId: uuid }).parse(body);
-  return { planId: await generateFromTemplate(ctx, templateId) };
+  const b = z.object({ templateId: uuid, editionIds: z.array(uuid).max(20).optional(), primaryEditionId: uuid.nullable().optional() }).parse(body);
+  return { planId: await generateFromTemplate(ctx, b.templateId, { editionIds: b.editionIds, primaryEditionId: b.primaryEditionId }) };
 });
 
 function templateExplanation(subj: any, t: any, inst = 'UNOESTE') {

@@ -89,10 +89,50 @@ describe('app off-line', () => {
     const p = await ok('GET', '/api/planner');
     expect(p.subjects).toHaveLength(107);
     expect(p.subjects.filter((x: any) => x.status === 'studied')).toHaveLength(27);
-    // Adicionar prova em Provas não mexe no cronograma pessoal: só avisa
+    // Outra prova junto: o cronograma fica igual (é o começo) e a prova vem depois dele no ranking
+    const lessons = (x: any) => Object.fromEntries(x.subjects.filter((s: any) => s.perExam[0]?.template).map((s: any) => [s.subjectId, s.nextScheduledDate]));
+    const before = lessons(p);
     const sc = (await ok('GET', '/api/exams')).find((e: any) => e.institution === 'Santa Casa Araçatuba');
-    expect(await ok('PUT', `/api/me/editions/${sc.edition_id}`, { selected: true })).toMatchObject({ planner: 'template', name: p.plan.name });
-    expect((await ok('GET', '/api/planner')).plan.id).toBe(p.plan.id);
+    expect(await ok('PUT', `/api/me/editions/${sc.edition_id}`, { selected: true })).toMatchObject({ planner: 'updated' });
+    expect(await ok('PUT', `/api/me/editions/${sc.edition_id}`, { examDate: '2027-01-15' })).toMatchObject({ planner: 'updated' });
+    let m = await ok('GET', '/api/planner');
+    expect(m.plan.id).toBe(p.plan.id);
+    expect(m.plan.name).toBe(p.plan.name);
+    expect(m.plan.end_date).toBe('2027-01-15');
+    expect(m.exams.map((e: any) => e.institution).sort()).toEqual(['Santa Casa Araçatuba', 'UNOESTE/HRPP']);
+    expect(lessons(m)).toEqual(before);
+    const extra = m.subjects.filter((s: any) => !s.perExam[0]?.template && !s.own);
+    expect(extra.length).toBeGreaterThan(100);
+    expect(Math.min(...extra.map((s: any) => s.rank))).toBe(108);
+    expect(extra.find((s: any) => s.rank === 108).perExam[0].editionId).toBe(sc.edition_id);
+    // Depois do cronograma, os dias ficam para a outra prova
+    expect(extra.some((s: any) => s.nextScheduledDate > '2026-12-05')).toBe(true);
+    // A outra prova só usa o tempo que as aulas do cronograma deixam livre
+    const hours = (await ok('GET', '/api/me/study-settings')).profile.daily_hours * 60;
+    const minutes = (list: any[]) => {
+      const by = new Map<string, number>();
+      for (const s of list) for (const c of s.checklist) if (c.scheduledDate && !c.done) by.set(c.scheduledDate, (by.get(c.scheduledDate) ?? 0) + (c.minutes ?? 0));
+      return by;
+    };
+    const tplMin = minutes(m.subjects.filter((s: any) => s.perExam[0]?.template));
+    for (const [d, mins] of minutes(extra)) expect(mins, d).toBeLessThanOrEqual(Math.max(0, hours - (tplMin.get(d) ?? 0)));
+    // Reorganizar e tirar a prova: o cronograma continua o mesmo
+    // (reorganizar traz as aulas atrasadas para hoje, como sempre; nada fica para trás)
+    await ok('POST', '/api/planner/replan');
+    m = await ok('GET', '/api/planner');
+    const replanned = lessons(m);
+    for (const d of Object.values(replanned)) if (d) expect(d >= today).toBe(true);
+    for (const s of m.subjects) for (const c of s.checklist) if (c.scheduledDate && !c.done) expect(c.scheduledDate >= today).toBe(true);
+    expect(await ok('PUT', `/api/me/editions/${sc.edition_id}`, { selected: false })).toMatchObject({ planner: 'updated' });
+    m = await ok('GET', '/api/planner');
+    expect(m.subjects).toHaveLength(107);
+    expect(m.plan.end_date).toBe('2026-12-05');
+    expect(lessons(m)).toEqual(replanned);
+    // Montar já com a outra prova
+    await ok('POST', '/api/planner/generate-template', { templateId: tpl.id, editionIds: [sc.edition_id] });
+    m = await ok('GET', '/api/planner');
+    expect(m.exams).toHaveLength(2);
+    expect((await ok('GET', '/api/exams')).filter((e: any) => e.selected).map((e: any) => e.institution).sort()).toEqual(['Santa Casa Araçatuba', 'UNOESTE/HRPP']);
     await ok('POST', '/api/me/reset');
     expect((await ok('GET', '/api/planner')).plan ?? null).toBeNull();
   });

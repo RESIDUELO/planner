@@ -77,7 +77,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 
   const generate = useMutation({
     mutationFn: async () => {
-      for (const e of tplId ? [] : chosen) {
+      for (const e of chosen) {
         if (!e.date_official && dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id], keepPlanner: true });
       }
       await api.put('/api/me/study-settings', {
@@ -88,7 +88,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
         },
         methods: methods.map((m) => ({ id: m.id, enabled: m.enabled, minutes: Number(m.minutes) })),
       });
-      if (tplId) return api.post('/api/planner/generate-template', { templateId: tplId });
+      if (tplId) return api.post('/api/planner/generate-template', { templateId: tplId, editionIds: chosen.map((e) => e.edition_id), primaryEditionId: primary });
       return api.post('/api/planner/generate', { editionIds: sel, primaryEditionId: primary, startDate: profile.start_date });
     },
     onSuccess: () => { qc.invalidateQueries(); onDone(); },
@@ -101,13 +101,15 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   });
 
   if (exams.isLoading || settings.isLoading || !profile || sel === null) return <Spinner />;
-  const available = (exams.data ?? []).filter((e) => e.days_left == null || e.days_left > 0);
+  const tpls = templates.data ?? [];
+  // Com o cronograma pessoal, a prova dele já vem nele: as outras são opcionais
+  const tplEdition = tpls.find((t: any) => t.id === tplId)?.examEditionId ?? null;
+  const available = (exams.data ?? []).filter((e) => (e.days_left == null || e.days_left > 0) && e.edition_id !== tplEdition);
   const chosen = available.filter((e) => sel.includes(e.edition_id));
   const dateOf = (e: any) => (e.date_official ? e.exam_date : dates[e.edition_id] ?? e.exam_date ?? '');
   const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const enabledMethods = methods.filter((m) => m.enabled);
-  const ready = (tplId ? true : chosen.length > 0 && !!primary && !missingDate) && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
-  const tpls = templates.data ?? [];
+  const ready = (tplId ? !missingDate : chosen.length > 0 && !!primary && !missingDate) && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
 
   const toggleExam = (id: string) => {
     const on = sel.includes(id);
@@ -154,10 +156,11 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
         </section>
       )}
 
-      <section className={clsx('animate-in', tpls.length ? '' : '-mt-4', tplId && 'pointer-events-none opacity-40')} aria-disabled={!!tplId}>
+      <section className={clsx('animate-in', tpls.length ? '' : '-mt-4')}>
         <div className="flex items-baseline gap-3">
-          <span className="font-display text-[28px]">{tpls.length ? 'Ou escolha uma prova' : 'Qual prova você vai fazer?'}</span>
+          <span className="font-display text-[28px]">{tplId ? 'Junto com o cronograma' : tpls.length ? 'Ou escolha uma prova' : 'Qual prova você vai fazer?'}</span>
         </div>
+        {tplId && <p className="mt-1 text-[14px] text-ink-2">Opcional. O cronograma vem primeiro, nas datas dele; os assuntos das provas marcadas aqui entram no tempo que sobra e, depois dele, até a data de cada prova.</p>}
         {available.length === 0 ? <p className="mt-4 text-[17px] text-ink-2">Ainda não há provas disponíveis.</p> : (
           <div className="mt-4 border-t border-line">
             {available.map((e) => {
