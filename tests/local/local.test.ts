@@ -89,6 +89,10 @@ describe('app off-line', () => {
     const p = await ok('GET', '/api/planner');
     expect(p.subjects).toHaveLength(107);
     expect(p.subjects.filter((x: any) => x.status === 'studied')).toHaveLength(27);
+    // Adicionar prova em Provas não mexe no cronograma pessoal: só avisa
+    const sc = (await ok('GET', '/api/exams')).find((e: any) => e.institution === 'Santa Casa Araçatuba');
+    expect(await ok('PUT', `/api/me/editions/${sc.edition_id}`, { selected: true })).toMatchObject({ planner: 'template', name: p.plan.name });
+    expect((await ok('GET', '/api/planner')).plan.id).toBe(p.plan.id);
     await ok('POST', '/api/me/reset');
     expect((await ok('GET', '/api/planner')).plan ?? null).toBeNull();
   });

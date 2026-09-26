@@ -78,7 +78,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const generate = useMutation({
     mutationFn: async () => {
       for (const e of tplId ? [] : chosen) {
-        if (!e.date_official && dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id] });
+        if (!e.date_official && dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id], keepPlanner: true });
       }
       await api.put('/api/me/study-settings', {
         profile: {

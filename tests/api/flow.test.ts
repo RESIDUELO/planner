@@ -315,6 +315,24 @@ describe('Multiprova (teste 4) e atualização de estatísticas (teste 25)', () 
     expect(p.subjects.find((s: any) => s.subjectId === ids.subject1).status).toBe('studied');
   });
 
+  it('mudar as provas em Provas refaz o planner, mantendo o que já foi estudado', async () => {
+    const put = (id: string, body: any) => student.ok('PUT', `/api/me/editions/${id}`, body);
+    expect(await put(ids.uel, { selected: false })).toMatchObject({ planner: 'updated' });
+    let p = await student.ok('GET', '/api/planner');
+    expect(p.exams.map((e: any) => e.exam_edition_id).sort()).toEqual([ids.famerp, ids.unoeste].sort());
+    expect(p.subjects[0].perExam).toHaveLength(2);
+    expect(p.subjects.find((s: any) => s.subjectId === ids.subject1).status).toBe('studied');
+    expect(await put(ids.unoeste, { isPrimary: true })).toMatchObject({ planner: 'updated' });
+    expect((await student.ok('GET', '/api/planner')).exams.find((e: any) => e.is_primary).exam_edition_id).toBe(ids.unoeste);
+    // Nada mudou: não refaz
+    expect(await put(ids.unoeste, { isPrimary: true })).toMatchObject({ planner: 'unchanged' });
+    expect(await put(ids.uel, { selected: true })).toMatchObject({ planner: 'updated' });
+    expect(await put(ids.famerp, { isPrimary: true })).toMatchObject({ planner: 'updated' });
+    p = await student.ok('GET', '/api/planner');
+    expect(p.exams).toHaveLength(3);
+    expect(p.exams.find((e: any) => e.is_primary).exam_edition_id).toBe(ids.famerp);
+  });
+
   it('adicionar questões (pelo administrador, via SQL) atualiza as estatísticas', async () => {
     const before = await student.ok('GET', `/api/exams/${ids.famerpExam}/history`);
     const top = before.subjects[0];

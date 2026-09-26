@@ -294,6 +294,16 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await page.getByRole('link', { name: 'Planner', exact: true }).click();
   await expect(page).toHaveURL(HOME);
 
+  // Adicionar prova em Provas refaz o planner com as duas provas
+  await page.goto('provas');
+  await page.getByTestId('exam-Santa Casa Araçatuba').locator('button').first().click();
+  await page.getByRole('button', { name: 'Adicionar à minha preparação' }).click();
+  await expect(page.getByTestId('planner-sync')).toContainText('Planner refeito a partir de hoje');
+  await page.goto('planner');
+  await page.getByRole('button', { name: 'Mais opções' }).first().click();
+  await expect(page.getByRole('menuitem', { name: 'Tabela combinada das provas' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
   // Zerar o perfil: volta ao início, como uma conta nova
   await page.goto('configuracoes');
   await page.getByRole('button', { name: 'Zerar meu perfil' }).click();

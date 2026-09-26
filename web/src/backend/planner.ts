@@ -395,6 +395,42 @@ export async function replan(ctx: Ctx): Promise<string> {
   });
 }
 
+/** O que aconteceu com o planner depois de mudar as provas em Provas. */
+export type PlanSync =
+  | { planner: 'updated' | 'unchanged' | 'none' | 'manual' }
+  | { planner: 'template'; name: string }
+  | { planner: 'failed'; message: string };
+
+/**
+ * Provas mudaram (adicionou, removeu, trocou a principal ou a data): o planner
+ * automático é refeito a partir de hoje com as provas escolhidas, mantendo o
+ * que já foi estudado. O cronograma pessoal e o planner montado à mão não mudam.
+ */
+export async function syncPlanToSelection(ctx: Ctx): Promise<PlanSync> {
+  const userId = await currentUserId(ctx);
+  const today = ctx.today();
+  const plan = await activePlan(ctx, userId);
+  if (!plan) return { planner: 'none' };
+  if (plan.settings_snapshot?.template) return { planner: 'template', name: plan.name };
+  if (plan.settings_snapshot?.manual) return { planner: 'manual' };
+  // Prova que já passou não entra (como na tela de montar o planner)
+  const sel = (await selectedEditions(ctx, userId)).filter((e) => !e.exam_date || e.exam_date > today);
+  if (!sel.length) return { planner: 'unchanged' };
+  const primary = sel.find((e) => e.is_primary) ?? sel[0];
+  const inPlan = await q<any[]>(ctx.sb.from('study_plan_exams').select('exam_edition_id, is_primary, exam_date').eq('study_plan_id', plan.id));
+  const key = (xs: { id: string; primary: boolean; date: string | null }[]) => xs.map((x) => `${x.id}|${x.primary}|${x.date ?? ''}`).sort().join(',');
+  const same = key(inPlan.map((e) => ({ id: e.exam_edition_id, primary: e.is_primary, date: e.exam_date })))
+    === key(sel.map((e) => ({ id: e.edition_id, primary: e.edition_id === primary.edition_id, date: e.exam_date })));
+  if (same) return { planner: 'unchanged' };
+  try {
+    await generatePlan(ctx, { editionIds: sel.map((e) => e.edition_id), primaryEditionId: primary.edition_id, startDate: today, targetDate: null });
+    return { planner: 'updated' };
+  } catch (e) {
+    if (e instanceof ApiError && e.status < 500) return { planner: 'failed', message: e.message };
+    throw e;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Estado do planner
 // ---------------------------------------------------------------------------

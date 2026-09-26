@@ -12,9 +12,17 @@ export function ExamsPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [historyOf, setHistoryOf] = useState<any | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const m = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: any }) => api.put(`/api/me/editions/${id}`, body),
-    onSuccess: () => { setErr(null); qc.invalidateQueries({ queryKey: ['exams'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['residencies'] }); },
+    mutationFn: ({ id, body }: { id: string; body: any }) => api.put<PlanSync>(`/api/me/editions/${id}`, body),
+    onSuccess: (r) => {
+      setErr(null);
+      // Planner refeito: tudo que depende dele recarrega
+      if (r?.planner === 'updated') qc.invalidateQueries();
+      else { qc.invalidateQueries({ queryKey: ['exams'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['residencies'] }); }
+      const text = syncText(r);
+      if (text !== undefined) setInfo(text);
+    },
     onError: (e) => setErr(errorMessage(e)),
   });
   if (q.isLoading) return <Spinner />;
@@ -27,6 +35,7 @@ export function ExamsPage() {
     <div className="mx-auto max-w-2xl">
       <Title>Provas</Title>
       {err && <Note tone="negative" className="-mt-8 mb-8">{err}</Note>}
+      {!err && info && <div data-testid="planner-sync" className="-mt-8 mb-8"><Note>{info}</Note></div>}
       {all.length === 0 ? (
         <Empty title="Nenhuma prova disponível">Ainda não há provas com análise de questões cadastrada.</Empty>
       ) : (
@@ -48,6 +57,19 @@ export function ExamsPage() {
       {historyOf && <HistorySheet exam={historyOf} onClose={() => setHistoryOf(null)} />}
     </div>
   );
+}
+
+type PlanSync = { ok: boolean; planner?: 'updated' | 'unchanged' | 'none' | 'manual' | 'template' | 'failed'; name?: string; message?: string };
+
+/** Aviso do que aconteceu com o planner (undefined: nada a dizer, mantém o aviso anterior). */
+function syncText(r: PlanSync | undefined): string | null | undefined {
+  switch (r?.planner) {
+    case 'updated': return 'Planner refeito a partir de hoje com as provas escolhidas. O que você já estudou continua marcado.';
+    case 'template': return `Seu planner é o cronograma "${r.name}" e não muda com as provas. Para montar um planner com as provas escolhidas, vá em Planner › Reconfigurar planner (ele substitui o cronograma).`;
+    case 'manual': return 'Seu planner foi montado à mão. Para o cronograma automático com estas provas, vá em Planner › Escolher prova para montar cronograma.';
+    case 'failed': return `O planner não foi refeito: ${r.message}`;
+    default: return undefined;
+  }
 }
 
 function ExamList({ exams, open, setOpen, update, showHistory }: {

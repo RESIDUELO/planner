@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { addSubjectToDay, ensurePlan, deleteOwnSubject, updateOwnSubject, generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
+import { addSubjectToDay, ensurePlan, syncPlanToSelection, deleteOwnSubject, updateOwnSubject, generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
 import { agendaView, createTask, deleteTask, plannerTasks, saveNote, updateTask } from './personal';
@@ -188,6 +188,8 @@ route('PUT', '/api/me/editions/:id', async ({ ctx, params, body }) => {
     registrationStart: isoDate.nullable().optional(),
     registrationEnd: isoDate.nullable().optional(),
     registrationFee: z.number().nonnegative().max(100000).nullable().optional(),
+    /** A tela de montar o planner gera o plano logo depois: não refaz antes. */
+    keepPlanner: z.boolean().optional(),
   }).parse(body);
   const detailKeys = ['examDate', 'registrationStart', 'registrationEnd', 'registrationFee'] as const;
   if (detailKeys.some((k) => b[k] !== undefined)) {
@@ -217,6 +219,8 @@ route('PUT', '/api/me/editions/:id', async ({ ctx, params, body }) => {
   if (b.status !== undefined || b.registrationNumber !== undefined || b.notes !== undefined) {
     await rpc(ctx, 'set_registration', { p_edition: id, p_status: b.status ?? null, p_number: b.registrationNumber ?? null, p_notes: b.notes ?? null });
   }
+  // Mudou a prova, a principal ou a data: o planner acompanha
+  if (!b.keepPlanner && (b.selected !== undefined || b.isPrimary !== undefined || b.examDate !== undefined)) return { ok: true, ...(await syncPlanToSelection(ctx)) };
   return { ok: true };
 });
 
