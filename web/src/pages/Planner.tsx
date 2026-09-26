@@ -312,6 +312,24 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
   const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });
   const check = useCheck();
   const reviewDone = useReviewDone();
+  const invalidate = useInvalidateStudy();
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const move = useMutation({
+    mutationFn: ({ d, to }: { d: Drag; to: string }) => (d.type === 'task'
+      ? api.post(`/api/planner/subjects/${d.subjectId}/move`, { from: d.from, to, methodIds: d.methodIds })
+      : api.post(`/api/reviews/${d.subjectId}/move`, { to })),
+    onMutate: () => setMoveError(null),
+    onSuccess: invalidate,
+    onError: (e) => setMoveError(errorMessage(e)),
+  });
+  const dnd: DnD = {
+    drag, over, setOver, today,
+    start: (d) => setDrag(d),
+    end: () => { setDrag(null); setOver(null); },
+    drop: (to) => { if (drag) move.mutate({ d: drag, to }); setDrag(null); setOver(null); },
+  };
   const isThisWeek = from === mondayOf(today);
   const late = isThisWeek ? (t.data?.newSubjects ?? []).filter((s: any) => s.overdue) : [];
   const [a, b] = [from, to].map((d) => d.split('-').map(Number));
@@ -327,6 +345,8 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
           <button onClick={() => setFrom(addDays(from, 7))} aria-label="Próxima semana" className="rounded-full p-1.5 hover:bg-fill hover:text-ink"><ChevronRight className="h-5 w-5" strokeWidth={1.5} /></button>
         </div>
       </div>
+      <p className="-mt-7 mb-10 hidden text-[12px] text-ink-3 md:block">Arraste uma aula ou uma revisão para outro dia.</p>
+      {moveError && <Note tone="negative" className="-mt-6 mb-8">{moveError}</Note>}
 
       {late.length > 0 && (
         <section className="mb-14 animate-in" aria-label="Atrasados">
@@ -338,7 +358,8 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
           <ul className="mt-2">
             {late.map((s: any) => (
               <TaskRow key={s.subjectId} item={{ subjectId: s.subjectId, name: s.name, area: s.area, done: false }} onOpen={onOpen}
-                onCheck={(done) => check.mutate({ subjectId: s.subjectId, methodIds: s.methods.map((m: any) => m.methodId), done })} />
+                onCheck={(done) => check.mutate({ subjectId: s.subjectId, methodIds: s.methods.map((m: any) => m.methodId), done })}
+                drag={dragProps(dnd, { type: 'task', subjectId: s.subjectId, from: s.oldestDate, methodIds: s.methods.map((m: any) => m.methodId), name: s.name })} />
             ))}
           </ul>
         </section>
@@ -349,7 +370,7 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
           {(week.data?.days ?? []).map((d: any) => (
             <DayBlock key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
               onCheck={(item, done) => check.mutate({ subjectId: item.subjectId, methodIds: item.methodIds, done })}
-              onReview={(id) => reviewDone.mutate(id)} busy={check.isPending || reviewDone.isPending} />
+              onReview={(id) => reviewDone.mutate(id)} busy={check.isPending || reviewDone.isPending || move.isPending} dnd={dnd} />
           ))}
         </div>
       )}
@@ -359,12 +380,48 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
   );
 }
 
+// ---------------------------------------------------------------- Arrastar entre dias
+type Drag = { type: 'task' | 'review'; subjectId: string; from: string; methodIds?: string[]; name: string };
+interface DnD {
+  drag: Drag | null; over: string | null; today: string;
+  setOver: (k: string | null) => void; start: (d: Drag) => void; end: () => void; drop: (to: string) => void;
+}
+interface DragProps { li: Record<string, any>; className: string }
+
+/** Linha arrastável (o "quadrado" inteiro). */
+function dragProps(dnd: DnD, d: Drag): DragProps {
+  const dragging = dnd.drag?.subjectId === d.subjectId && dnd.drag?.from === d.from && dnd.drag?.type === d.type;
+  return {
+    li: {
+      draggable: true,
+      'aria-roledescription': 'arrastável',
+      onDragStart: (e: React.DragEvent) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', d.name); dnd.start(d); },
+      onDragEnd: () => dnd.end(),
+    },
+    className: clsx('cursor-grab active:cursor-grabbing', dragging && 'opacity-40'),
+  };
+}
+
+/** Coluna que aceita a soltura: só do mesmo tipo (aula → Assuntos, revisão → Revisões), de hoje em diante. */
+function dropZone(dnd: DnD, date: string, type: Drag['type'], extra?: string) {
+  const key = `${date}|${type}`;
+  const ok = !!dnd.drag && dnd.drag.type === type && date >= dnd.today && date !== dnd.drag.from;
+  return {
+    'data-drop': ok ? 'on' : undefined,
+    onDragOver: (e: React.DragEvent) => { if (!ok) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dnd.over !== key) dnd.setOver(key); },
+    onDragLeave: (e: React.DragEvent) => { if (!(e.currentTarget as Node).contains(e.relatedTarget as Node)) dnd.setOver(null); },
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); if (ok) dnd.drop(date); },
+    className: clsx('-mx-3 rounded-[12px] px-3 pb-2 transition-colors duration-150', extra,
+      ok && 'outline-1 outline-dashed outline-ink-3', ok && dnd.over === key && 'bg-fill outline-ink'),
+  };
+}
+
 function ColumnHead({ children }: { children: string }) {
   return <div className="border-b border-ink/70 pb-1.5 text-[10.5px] font-medium tracking-[0.18em] text-ink-2 uppercase">{children}</div>;
 }
 
-function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy }: {
-  day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; onReview: (id: string) => void; questions?: any; busy?: boolean;
+function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd }: {
+  day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; onReview: (id: string) => void; questions?: any; busy?: boolean; dnd: DnD;
 }) {
   const isToday = day.date === today;
   const past = day.date < today;
@@ -388,23 +445,25 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy }: {
       </div>
 
       <div className="mt-4 grid gap-x-10 gap-y-7 sm:pl-12 md:grid-cols-2">
-        <div data-testid="col-subjects">
+        <div data-testid="col-subjects" {...dropZone(dnd, day.date, 'task')}>
           <ColumnHead>Assuntos</ColumnHead>
           <ul>
             {day.newSubjects.map((n: any) => (
               <TaskRow key={n.subjectId} item={{ ...n, done: n.done }} detail={!n.done && n.methodIds.length < n.totalActivities ? n.methods.join(' · ') : undefined}
-                pomodoro={isToday} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} disabled={busy} />
+                pomodoro={isToday} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} disabled={busy}
+                drag={n.done ? undefined : dragProps(dnd, { type: 'task', subjectId: n.subjectId, from: day.date, methodIds: n.methodIds, name: n.name })} />
             ))}
             {!day.newSubjects.length && <li className="py-3 text-[14px] text-ink-3">{past ? '—' : 'Livre'}</li>}
           </ul>
         </div>
-        <div data-testid="col-reviews" className={clsx(!reviews.length && 'hidden md:block')}>
+        <div data-testid="col-reviews" {...dropZone(dnd, day.date, 'review', clsx(!reviews.length && 'hidden md:block'))}>
           <ColumnHead>Revisões</ColumnHead>
           <ul>
             {reviews.map((r: any) => {
               const done = r.status === 'done';
+              const dp = done ? undefined : dragProps(dnd, { type: 'review', subjectId: r.subjectId, from: day.date, name: r.name });
               return (
-                <li key={`r${r.subjectId}`} className="flex items-center gap-4 border-b border-line/70 py-3 last:border-0" data-testid="review">
+                <li key={`r${r.subjectId}`} {...dp?.li} className={clsx('flex items-center gap-4 border-b border-line/70 py-3 last:border-0', dp?.className)} data-testid="review">
                   <button onClick={() => onOpen(r.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
                     <span className={clsx('block text-[16px] leading-snug', done && 'text-ink-3 line-through decoration-1')}>{r.name}</span>
                     {r.status === 'overdue' && <span className="text-[11px] text-today">atrasada</span>}
@@ -465,11 +524,11 @@ function WeekNotes({ week }: { week: string }) {
   );
 }
 
-export function TaskRow({ item, onOpen, onCheck, detail, pomodoro, disabled }: { item: { subjectId: string; name: string; area?: string; specialty?: string | null; done: boolean }; onOpen: (id: string) => void; onCheck: (done: boolean) => void; detail?: string; pomodoro?: boolean; disabled?: boolean }) {
+export function TaskRow({ item, onOpen, onCheck, detail, pomodoro, disabled, drag }: { item: { subjectId: string; name: string; area?: string; specialty?: string | null; done: boolean }; onOpen: (id: string) => void; onCheck: (done: boolean) => void; detail?: string; pomodoro?: boolean; disabled?: boolean; drag?: DragProps }) {
   const p = usePomodoro();
   const nav = useNavigate();
   return (
-    <li className="group flex items-center gap-4 border-b border-line/70 py-3 last:border-0" data-testid="task">
+    <li {...drag?.li} className={clsx('group flex items-center gap-4 border-b border-line/70 py-3 last:border-0', drag?.className)} data-testid="task">
       <button onClick={() => onOpen(item.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
         <Tint area={item.area} className={clsx('text-[10.5px] font-medium tracking-[0.14em] uppercase', item.done && 'opacity-50')}>{item.specialty || areaShort(item.area)}</Tint>
         <span className={clsx('mt-1 block text-[16px] leading-snug', item.done && 'text-ink-3 line-through decoration-1')}>{item.name}</span>

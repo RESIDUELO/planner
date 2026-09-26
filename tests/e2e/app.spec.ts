@@ -199,6 +199,20 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await circle.click();
   await expect(circle).toHaveAttribute('aria-checked', 'true');
 
+  // Arrastar: aula de segunda (próxima semana) para terça; aula não entra em Revisões
+  const wd = new Date(`${inDays(0)}T12:00:00Z`).getUTCDay();
+  const mon = ((8 - wd) % 7) || 7;
+  await page.getByRole('button', { name: 'Próxima semana' }).click();
+  const src = page.getByTestId(`day-${inDays(mon)}`).getByTestId('task').first();
+  await expect(src).toBeVisible();
+  const name = (await src.locator('button').first().locator('span').nth(1).textContent())!.trim();
+  await src.dragTo(page.getByTestId(`day-${inDays(mon + 1)}`).getByTestId('col-reviews'));
+  await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).toContainText(name);
+  const target = page.getByTestId(`day-${inDays(mon + 1)}`).getByTestId('col-subjects');
+  await src.dragTo(target);
+  await expect(target).toContainText(name);
+  await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).not.toContainText(name);
+
   // Zerar o perfil: volta ao início, como uma conta nova
   await page.goto('configuracoes');
   await page.getByRole('button', { name: 'Zerar meu perfil' }).click();

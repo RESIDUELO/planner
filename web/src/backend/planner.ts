@@ -309,7 +309,7 @@ export interface PlanSubjectView {
   checklist: { methodId: string; code: string; name: string; done: boolean; completedAt: string | null; scheduledDate: ISODate | null; minutes: number | null }[];
   progress: number;
   performance: { answered: number; correct: number; accuracy: number | null; lastQuestionAt: string | null };
-  card: null | { id: string; stability: number; difficulty: number; repetitions: number; lapses: number; lastReview: ISODate; nextReview: ISODate | null; retrievability: number; lastRating: Rating | null };
+  card: null | { id: string; stability: number; difficulty: number; repetitions: number; lapses: number; lastReview: ISODate; nextReview: ISODate | null; retrievability: number; lastRating: Rating | null; pinned: boolean };
   mastery: ReturnType<typeof estimateMastery>;
   dynamic: ReturnType<typeof dynamicPriority>;
   lastStudiedAt: string | null;
@@ -400,6 +400,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
       card: c ? {
         id: c.id, stability: Number(c.stability), difficulty: Number(c.difficulty), repetitions: c.repetitions, lapses: c.lapses,
         lastReview: toISODateBR(c.last_review_at), nextReview: c.next_review_at, retrievability: r!, lastRating: c.last_rating,
+        pinned: !!(c as any).pinned,
       } : null,
       mastery, dynamic,
       lastStudiedAt: [lastDone, c?.last_review_at ?? null].filter(Boolean).sort().pop() ?? null,
@@ -529,6 +530,7 @@ export async function rateReview(ctx: Ctx, subjectId: string, rating: Rating, ti
     interval_days: res.intervalDays, repetitions: res.state.repetitions, lapses: res.state.lapses,
     last_review_at: stamp(today), next_review_at: res.nextReview, last_rating: rating, algorithm_version: MEMORY_VERSION,
   }).eq('id', card.id));
+  if ((card as any).pinned) await ctx.sb.from('spaced_repetition_cards').update({ pinned: false }).eq('id', card.id);
   const last: any = await q(ctx.sb.from('review_logs').select('id').eq('spaced_repetition_card_id', card.id)
     .is('actual_next_review', null).order('reviewed_at', { ascending: false }).limit(1).maybeSingle());
   if (last) await q(ctx.sb.from('review_logs').update({ actual_next_review: today }).eq('id', last.id));
@@ -592,7 +594,7 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
 
   const progress = await selectAll((a, b) => ctx.sb.from('subject_method_progress').select('subject_id, study_method_id, completed_at').eq('user_id', userId).range(a, b)) as any[];
   const doneAt = new Map(progress.map((p) => [`${p.subject_id}|${p.study_method_id}`, toISODateBR(p.completed_at)]));
-  const rows = await selectAll((a, b) => ctx.sb.from('study_schedule').select('id, subject_id, study_method_id, scheduled_date, completed')
+  const rows = await selectAll((a, b) => ctx.sb.from('study_schedule').select('*')
     .eq('study_plan_id', plan.id).neq('activity_type', 'review').range(a, b)) as any[];
 
   // 1) Adiantadas: registradas no dia real da conclusão
@@ -613,7 +615,8 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
   if (tomorrow >= plan.end_date) return;
 
   // 2) Hoje e atrasadas ficam; o futuro é redistribuído
-  const kept = new Set(rows.filter((r) => !r.completed && r.scheduled_date <= today).map((r) => `${r.subject_id}|${r.study_method_id}`));
+  // (e as que foram arrastadas para um dia ficam nesse dia)
+  const kept = new Set(rows.filter((r) => !r.completed && (r.scheduled_date <= today || r.pinned)).map((r) => `${r.subject_id}|${r.study_method_id}`));
   const profile = await loadProfile(ctx, userId);
   const allMethods = await loadMethods(ctx, userId);
   const enabledIds = allMethods.filter((m) => m.enabled).map((m) => m.id);
@@ -648,8 +651,8 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
     examDates: planExams.map((e) => e.exam_date).filter(Boolean),
   });
 
-  await q(ctx.sb.from('study_schedule').delete().eq('study_plan_id', plan.id).eq('completed', false)
-    .gt('scheduled_date', today).neq('activity_type', 'review'));
+  const stale = rows.filter((r) => !r.completed && !r.pinned && r.scheduled_date > today).map((r) => r.id);
+  for (let i = 0; i < stale.length; i += 40) await q(ctx.sb.from('study_schedule').delete().in('id', stale.slice(i, i + 40)));
   if (schedule.activities.length) {
     await q(ctx.sb.from('study_schedule').insert(schedule.activities.map((a) => ({
       user_id: userId, study_plan_id: plan.id, subject_id: a.subjectId, study_method_id: a.methodId, scheduled_date: a.date,
@@ -678,9 +681,60 @@ export async function reviewPlan(ctx: Ctx, userId: string, subjects: PlanSubject
   const today = ctx.today();
   const profile = await loadProfile(ctx, userId);
   const items = subjects.filter((s) => s.card?.nextReview).map((s) => ({
-    id: s.subjectId, due: s.card!.nextReview!, score: s.dynamic.score, examDate: s.examDate,
+    id: s.subjectId, due: s.card!.nextReview!, score: s.dynamic.score, examDate: s.examDate, pinned: s.card!.pinned,
   }));
   return assignReviews(items, {
     today, perDay: profile.reviews_per_day, studyWeekdays: studyWeekdays(profile), doneToday: await reviewsDoneOn(ctx, userId, today),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Arrastar no planner
+// ---------------------------------------------------------------------------
+
+const MISSING_COLUMN = '42703';
+
+async function planForMove(ctx: Ctx, to: ISODate) {
+  const userId = await currentUserId(ctx);
+  const plan = await activePlan(ctx, userId);
+  if (!plan) throw badRequest('Nenhum planner ativo.');
+  if (to < ctx.today()) throw badRequest('Escolha hoje ou um dia futuro.');
+  if (to >= plan.end_date) throw badRequest('Esse dia é depois da prova.');
+  return { userId, plan };
+}
+
+/** Move as atividades pendentes de um assunto (de um dia) para outro dia e as fixa lá. */
+export async function moveTask(ctx: Ctx, subjectId: string, body: { from: ISODate; to: ISODate; methodIds?: string[] }) {
+  const { plan } = await planForMove(ctx, body.to);
+  const base = () => {
+    let u = ctx.sb.from('study_schedule').update({ scheduled_date: body.to, pinned: true } as any)
+      .eq('study_plan_id', plan.id).eq('subject_id', subjectId).eq('completed', false).neq('activity_type', 'review');
+    u = body.methodIds?.length ? u.in('study_method_id', body.methodIds) : u.eq('scheduled_date', body.from);
+    return u.select('id');
+  };
+  let { data, error } = await base();
+  if (error?.code === MISSING_COLUMN) {
+    // Sem a coluna "pinned" (11_manual_moves.sql ainda não rodado): move sem fixar
+    let u = ctx.sb.from('study_schedule').update({ scheduled_date: body.to })
+      .eq('study_plan_id', plan.id).eq('subject_id', subjectId).eq('completed', false).neq('activity_type', 'review');
+    u = body.methodIds?.length ? u.in('study_method_id', body.methodIds) : u.eq('scheduled_date', body.from);
+    ({ data, error } = await u.select('id'));
+  }
+  if (error) throw error;
+  if (!(data as any[])?.length) throw badRequest('Nada pendente para mover neste assunto.');
+  return { moved: (data as any[]).length };
+}
+
+/** Move a próxima revisão de um assunto para outro dia e a fixa lá. */
+export async function moveReview(ctx: Ctx, subjectId: string, to: ISODate) {
+  const { userId } = await planForMove(ctx, to);
+  let { data, error } = await ctx.sb.from('spaced_repetition_cards').update({ next_review_at: to, pinned: true } as any)
+    .eq('user_id', userId).eq('subject_id', subjectId).select('id');
+  if (error?.code === MISSING_COLUMN) {
+    ({ data, error } = await ctx.sb.from('spaced_repetition_cards').update({ next_review_at: to })
+      .eq('user_id', userId).eq('subject_id', subjectId).select('id'));
+  }
+  if (error) throw error;
+  if (!(data as any[])?.length) throw badRequest('Este assunto ainda não tem revisões.');
+  return { ok: true };
 }

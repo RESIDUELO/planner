@@ -548,4 +548,27 @@ describe('Cronograma pessoal (só administradores)', () => {
     expect(names(cal, '2026-10-03')).toEqual(['Questões — baralhos mais frágeis (03/10)']);
     expect(names(cal, '2026-10-10')).toEqual(['Simulado UNOESTE — R1 2022 completa (10/10)']);
   });
+
+  it('arrastar: aula vai para outro dia e fica lá; revisão também; dia passado não', async () => {
+    const p = await admin.ok('GET', '/api/planner');
+    const sang = p.subjects.find((x: any) => x.name === 'Sangramentos de Primeira Metade da Gestação');
+    await admin.ok('POST', `/api/planner/subjects/${sang.subjectId}/move`, { from: '2026-09-29', to: '2026-10-06' });
+    let cal = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-10');
+    expect(names(cal, '2026-10-06')).toContain('Sangramentos de Primeira Metade da Gestação');
+    expect(names(cal, '2026-09-29')).not.toContain('Sangramentos de Primeira Metade da Gestação');
+    // A fila anda (outra aula concluída) e a aula arrastada continua no dia escolhido
+    const pals = p.subjects.find((x: any) => x.name === 'PALS (Suporte Avançado de Vida em Pediatria)');
+    await admin.ok('POST', `/api/planner/subjects/${pals.subjectId}/complete`, { done: true });
+    cal = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-10');
+    expect(names(cal, '2026-10-06')).toContain('Sangramentos de Primeira Metade da Gestação');
+    // Revisão: de 28/09 para 30/09
+    const torax = p.subjects.find((x: any) => x.name === 'Trauma de tórax');
+    await admin.ok('POST', `/api/reviews/${torax.subjectId}/move`, { to: '2026-09-30' });
+    cal = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-10');
+    expect(day(cal, '2026-09-30').reviews.map((r: any) => r.name)).toContain('Trauma de tórax');
+    expect(day(cal, '2026-09-28').reviews.map((r: any) => r.name)).not.toContain('Trauma de tórax');
+    // Não dá para mover para antes de hoje nem para depois da prova
+    expect((await admin.req('POST', `/api/reviews/${torax.subjectId}/move`, { to: '2026-09-20' })).status).toBe(400);
+    expect((await admin.req('POST', `/api/planner/subjects/${sang.subjectId}/move`, { from: '2026-10-06', to: '2026-12-10' })).status).toBe(400);
+  });
 });

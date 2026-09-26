@@ -16,6 +16,8 @@ export interface QueueItem {
   /** Prioridade (maior primeiro no empate). */
   score: number;
   examDate: ISODate | null;
+  /** Movida à mão para um dia: fica nesse dia (entra antes das demais). */
+  pinned?: boolean;
 }
 
 export interface QueueOptions {
@@ -31,7 +33,13 @@ export function assignReviews(items: QueueItem[], o: QueueOptions): Map<string, 
   const weekdays = o.studyWeekdays.length ? o.studyWeekdays : [0, 1, 2, 3, 4, 5, 6];
   const used = new Map<ISODate, number>([[o.today, o.doneToday ?? 0]]);
   const out = new Map<string, ISODate>();
-  const sorted = [...items].sort((a, b) => a.due.localeCompare(b.due) || b.score - a.score || a.id.localeCompare(b.id));
+  // Fixadas primeiro, exatamente no dia escolhido (ocupam o limite desse dia)
+  for (const it of items.filter((x) => x.pinned)) {
+    const d = it.due > o.today ? it.due : o.today;
+    used.set(d, (used.get(d) ?? 0) + 1);
+    out.set(it.id, d);
+  }
+  const sorted = items.filter((x) => !x.pinned).sort((a, b) => a.due.localeCompare(b.due) || b.score - a.score || a.id.localeCompare(b.id));
   for (const it of sorted) {
     let d = it.due > o.today ? it.due : o.today;
     for (let guard = 0; guard < 2000; guard++) {

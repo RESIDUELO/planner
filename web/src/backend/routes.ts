@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
+import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
 
@@ -408,3 +408,13 @@ function templateExplanation(subj: any, t: any, inst = 'UNOESTE') {
   if (t.kind === 'reserve') return `Aula de reserva: para trocar um tema que você já domina ou se sobrar tempo.${caiu}`;
   return t.detail ?? '';
 }
+
+// Arrastar no planner: aula só para o lado das aulas, revisão só para o das revisões
+route('POST', '/api/planner/subjects/:id/move', async ({ ctx, params, body }) => {
+  const b = z.object({ from: isoDate, to: isoDate, methodIds: z.array(uuid).max(20).optional() }).parse(body);
+  return moveTask(ctx, uuid.parse(params.id), b);
+});
+route('POST', '/api/reviews/:subjectId/move', async ({ ctx, params, body }) => {
+  const { to } = z.object({ to: isoDate }).parse(body);
+  return moveReview(ctx, uuid.parse(params.subjectId), to);
+});
