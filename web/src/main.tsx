@@ -44,7 +44,17 @@ if (import.meta.env.PROD && !IS_LOCAL) {
 }
 
 const root = createRoot(document.getElementById('root')!);
-initSupabase().then((cfg) => {
+initSupabase().catch((e) => {
+  // App off-line: o banco do aparelho não abriu (mostra o motivo em vez de uma tela vazia)
+  root.render(
+    <div style={{ padding: '64px 24px', fontFamily: 'var(--font-sans)', color: 'var(--ink)' }}>
+      <p style={{ fontFamily: 'var(--font-display)', fontSize: 28 }}>Não foi possível abrir o planner.</p>
+      <p style={{ marginTop: 12, color: 'var(--ink-2)' }}>{String(e?.message ?? e)}</p>
+    </div>,
+  );
+  return undefined;
+}).then((cfg) => {
+  if (cfg === undefined) return;
   root.render(
     <StrictMode>
       {!cfg ? <SetupNeeded /> : (

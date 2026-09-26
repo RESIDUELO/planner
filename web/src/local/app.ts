@@ -1,6 +1,6 @@
 /**
  * Início do app off-line: abre o banco salvo no aparelho (IndexedDB) ou, na
- * primeira vez, carrega o banco pronto que vem dentro do app (local-db.tar.gz,
+ * primeira vez, carrega o banco pronto que vem dentro do app (local-db.pgdata, um tar.gz,
  * gerado por scripts/build-local-db.mjs com o schema, as provas e o cronograma).
  */
 import { PGlite } from '@electric-sql/pglite';
@@ -25,9 +25,11 @@ export async function initLocal(): Promise<SupabaseClient> {
   let db: PGlite;
   if (ready) db = await PGlite.create(DATA_DIR);
   else {
-    const res = await fetch(`${import.meta.env.BASE_URL}local-db.tar.gz`);
+    // Extensão neutra: o Android renomeia arquivos .gz dentro do APK
+    const res = await fetch(`${import.meta.env.BASE_URL}local-db.pgdata`);
     if (!res.ok) throw new Error('Banco inicial não encontrado no app.');
-    db = await PGlite.create(DATA_DIR, { loadDataDir: await res.blob() });
+    const tarball = new Blob([await res.arrayBuffer()], { type: 'application/x-gzip' });
+    db = await PGlite.create(DATA_DIR, { loadDataDir: tarball });
     try { localStorage.setItem(READY_KEY, LOCAL_DB_VERSION); } catch { /* ignore */ }
   }
   return createLocalSupabase(db);

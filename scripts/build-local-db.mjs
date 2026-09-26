@@ -1,6 +1,7 @@
 /**
  * Gera o banco pronto do app off-line: schema + provas + cronograma + usuário
- * local, compactado em <outDir>/local-db.tar.gz (carregado na 1ª abertura).
+ * local, compactado (tar.gz) em <outDir>/local-db.pgdata (carregado na 1ª abertura;
+ * extensão neutra porque o Android renomeia arquivos .gz dentro do APK).
  *
  * Uso: node scripts/build-local-db.mjs dist-app
  */
@@ -19,6 +20,6 @@ await db.exec('vacuum full');
 await db.exec('checkpoint');
 const dump = await db.dumpDataDir('gzip');
 const buf = Buffer.from(await dump.arrayBuffer());
-writeFileSync(resolve(outDir, 'local-db.tar.gz'), buf);
-console.log(`local-db.tar.gz: ${(buf.length / 1024 / 1024).toFixed(1)} MB (${files.join(', ')})`);
+writeFileSync(resolve(outDir, 'local-db.pgdata'), buf);
+console.log(`local-db.pgdata: ${(buf.length / 1024 / 1024).toFixed(1)} MB (${files.join(', ')})`);
 await db.close();
