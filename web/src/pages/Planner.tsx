@@ -338,26 +338,82 @@ function useDnd(): DnD {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'positive' | 'negative'; text: string } | null>(null);
+  const qc = useQueryClient();
   const move = useMutation({
     mutationFn: ({ d, to }: { d: Drag; to: string }) => (d.type === 'library'
       ? api.post(`/api/planner/subjects/${d.subjectId}/schedule`, { to })
       : d.type === 'task'
         ? api.post(`/api/planner/subjects/${d.subjectId}/move`, { from: d.from, to, methodIds: d.methodIds })
         : api.post(`/api/reviews/${d.subjectId}/move`, { to })),
-    onMutate: () => setMessage(null),
-    onSuccess: (_r, { d, to }) => {
-      invalidate();
+    // A tela muda na hora; o servidor confirma depois (e, se falhar, volta como estava)
+    onMutate: async ({ d, to }) => {
+      await qc.cancelQueries({ queryKey: ['week'] });
+      const before = qc.getQueriesData({ queryKey: ['week'] });
+      const planner: any = qc.getQueryData(['planner']);
+      qc.setQueriesData({ queryKey: ['week'] }, (old: any) => (old?.days ? { ...old, days: moveInWeek(old.days, d, to, planner) } : old));
       setMessage({ tone: 'positive', text: `✓ ${d.name} ${d.type === 'review' ? 'revisão movida para' : 'adicionado a'} ${WD[weekday(to)].toLowerCase()}, ${shortDate(to, false)}` });
       setTimeout(() => setMessage(null), 3500);
+      return { before };
     },
-    onError: (e) => setMessage({ tone: 'negative', text: errorMessage(e) }),
+    onError: (e, _v, c) => {
+      c?.before.forEach(([k, v]) => qc.setQueryData(k, v));
+      setMessage({ tone: 'negative', text: errorMessage(e) });
+    },
+    onSettled: invalidate,
   });
   return {
-    drag, over, setOver, today, message, busy: move.isPending,
+    drag, over, setOver, today, message, busy: false,
     start: (d) => setDrag(d),
     end: () => { setDrag(null); setOver(null); },
     drop: (to) => { if (drag) move.mutate({ d: drag, to }); setDrag(null); setOver(null); },
   };
+}
+
+/** Aplica o arrastar na semana já carregada, do mesmo jeito que o servidor fará. */
+function moveInWeek(days: any[], d: Drag, to: string, planner: any): any[] {
+  const out = days.map((x) => ({ ...x, newSubjects: [...x.newSubjects], reviews: [...x.reviews] }));
+  const dayOf = (date: string) => out.find((x) => x.date === date);
+  if (d.type === 'review') {
+    let item: any = null;
+    for (const x of out) {
+      const i = x.reviews.findIndex((r: any) => r.subjectId === d.subjectId && r.status !== 'done');
+      if (i >= 0 && !item) { item = x.reviews[i]; x.reviews.splice(i, 1); }
+    }
+    const target = dayOf(to);
+    if (target) target.reviews.push({ ...(item ?? { subjectId: d.subjectId, name: d.name }), status: 'scheduled' });
+    return out;
+  }
+  // Aulas: tira do(s) dia(s) de origem as atividades que mudam de dia
+  const methods: { id: string; name: string }[] = [];
+  let base: any = null;
+  const take = (x: any, ids?: string[]) => {
+    x.newSubjects = x.newSubjects.flatMap((n: any) => {
+      if (n.subjectId !== d.subjectId || n.done) return [n];
+      base ??= n;
+      const moving = n.methodIds.map((id: string, i: number) => ({ id, name: n.methods[i] })).filter((m: any) => !ids || ids.includes(m.id));
+      methods.push(...moving.filter((m: any) => !methods.some((y) => y.id === m.id)));
+      const keep = n.methodIds.map((id: string, i: number) => ({ id, name: n.methods[i] })).filter((m: any) => !moving.some((y: any) => y.id === m.id));
+      return keep.length ? [{ ...n, methodIds: keep.map((m: any) => m.id), methods: keep.map((m: any) => m.name) }] : [];
+    });
+  };
+  if (d.type === 'task') { const x = dayOf(d.from); if (x) take(x, d.methodIds); } else out.forEach((x) => take(x));
+  if (d.type === 'library') {
+    // Leva todas as atividades que faltam, mesmo as que estão fora desta semana
+    const s = planner?.subjects?.find((y: any) => y.subjectId === d.subjectId);
+    for (const c of s?.checklist ?? []) if (!c.done && !methods.some((m) => m.id === c.methodId)) methods.push({ id: c.methodId, name: c.name });
+    base ??= s && { subjectId: s.subjectId, name: s.name, area: s.area, rank: 999, studied: false, progress: s.progress, totalActivities: s.checklist.length };
+  }
+  const target = dayOf(to);
+  if (!target || !methods.length) return out;
+  const i = target.newSubjects.findIndex((n: any) => n.subjectId === d.subjectId && !n.done);
+  if (i >= 0) {
+    const n = target.newSubjects[i];
+    const add = methods.filter((m) => !n.methodIds.includes(m.id));
+    target.newSubjects[i] = { ...n, methodIds: [...n.methodIds, ...add.map((m) => m.id)], methods: [...n.methods, ...add.map((m) => m.name)] };
+  } else {
+    target.newSubjects.push({ ...(base ?? { subjectId: d.subjectId, name: d.name }), date: to, done: false, doneAt: null, methodIds: methods.map((m) => m.id), methods: methods.map((m) => m.name) });
+  }
+  return out;
 }
 
 /** Marca/desmarca as atividades daquele dia (ou o assunto inteiro). O servidor reorganiza a fila. */

@@ -239,7 +239,13 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await src.dragTo(page.getByTestId(`day-${inDays(mon + 1)}`).getByTestId('col-reviews'));
   await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).toContainText(name);
   const target = page.getByTestId(`day-${inDays(mon + 1)}`).getByTestId('col-subjects');
+  // A aula muda de dia na hora, mesmo com a internet lenta (o servidor confirma depois)
+  const slow = (r: any) => setTimeout(() => r.continue().catch(() => {}), 2500);
+  await page.route('**/rest/v1/**', slow);
   await src.dragTo(target);
+  await expect(target).toContainText(name, { timeout: 800 });
+  await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).not.toContainText(name, { timeout: 800 });
+  await page.unroute('**/rest/v1/**', slow);
   await expect(target).toContainText(name);
   await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).not.toContainText(name);
 
@@ -247,8 +253,11 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   const libItem = page.getByTestId('library-item').filter({ hasNotText: name }).nth(5);
   const libName = (await libItem.locator('button span').first().textContent())!.trim();
   const dropDay = page.getByTestId(`day-${inDays(mon)}`).getByTestId("col-subjects");
+  await page.route('**/rest/v1/**', slow);
   await libItem.dragTo(dropDay);
-  await expect(page.getByText(`✓ ${libName} adicionado a`, { exact: false })).toBeVisible();
+  await expect(page.getByText(`✓ ${libName} adicionado a`, { exact: false })).toBeVisible({ timeout: 800 });
+  await expect(dropDay).toContainText(libName, { timeout: 800 });
+  await page.unroute('**/rest/v1/**', slow);
   await expect(dropDay).toContainText(libName);
 
   // Excluir do planner: some da semana, continua nos assuntos
