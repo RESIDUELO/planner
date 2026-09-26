@@ -321,7 +321,7 @@ route('GET', '/api/planner/subjects/:id', async ({ ctx, params }) => {
     : extras.length ? `${subj.name} vem ${extras.length === 1 ? `da prova ${extras[0]}` : `das provas ${extras.join(', ')}`} e entra depois do seu cronograma: está em #${subj.rank - (planTpl.offset ?? 0)} entre os assuntos ${extras.length === 1 ? 'dela' : 'delas'} porque representou ${pct}% das questões ${extras.length === 1 ? `das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'}` : 'em média ponderada'}.`
     : s.exams.length === 1
     ? `${subj.name} está em #${subj.rank} porque representou ${pct}% das questões das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'} de ${primary?.institution ?? 'sua prova'}.`
-    : `${subj.name} está em #${subj.rank} porque representou, em média ponderada, ${pct}% das questões das provas selecionadas (peso maior para a prova principal e para as provas mais próximas).`;
+    : `${subj.name} está em #${subj.rank}: com várias provas, os assuntos de cada uma se intercalam na proporção do peso (maior para a prova principal e para as mais próximas). ${inExams(subj, s.exams)}`;
   const areaId = subj.own ? (await loadSubjectsInfo(ctx, [id])).get(id)?.area_id ?? null : null;
   return {
     subject: subj, areaId, explanation, examWeights: s.plan.summary.weights, exams: s.plan.summary.exams, subtopics: children,
@@ -410,6 +410,15 @@ route('POST', '/api/planner/generate-template', async ({ ctx, body }) => {
   const b = z.object({ templateId: uuid, editionIds: z.array(uuid).max(20).optional(), primaryEditionId: uuid.nullable().optional() }).parse(body);
   return { planId: await generateFromTemplate(ctx, b.templateId, { editionIds: b.editionIds, primaryEditionId: b.primaryEditionId }) };
 });
+
+/** "É o #3 da UNOESTE/HRPP (4,1% das questões) e o #12 da FAMERP (1,9%)." */
+function inExams(subj: any, exams: any[]) {
+  const parts = (subj.perExam ?? []).filter((p: any) => p.rank).map((p: any) => {
+    const inst = exams.find((e: any) => e.exam_edition_id === p.editionId)?.institution ?? 'prova';
+    return `o #${p.rank} da ${inst} (${(p.percentage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das questões)`;
+  });
+  return parts.length ? `É ${parts.join(' e ')}.` : '';
+}
 
 function templateExplanation(subj: any, t: any, inst = 'UNOESTE') {
   const br = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');

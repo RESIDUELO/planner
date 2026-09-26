@@ -37,6 +37,15 @@ describe('priority_v2', () => {
     expect(rankSubjects([a, b], '2026-09-25').subjects[0].subjectId).toBe('y');
   });
 
+  it('várias provas: os rankings se intercalam pelo peso, a prova com muitos assuntos não empurra a outra para o fim', () => {
+    const big = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`a${i}`, 40 - i]));
+    const a = exam('A', '2026-12-05', true, big);
+    const b = exam('B', '2027-01-15', false, { b0: 9, b1: 8, b2: 7 });
+    const ids = rankSubjects([a, b], '2026-09-26').subjects.map((s) => s.subjectId);
+    expect(ids.slice(0, 6)).toEqual(['a0', 'a1', 'b0', 'a2', 'a3', 'b1']);
+    expect(ids).toHaveLength(33);
+  });
+
   it('provas sem dados não influenciam', () => {
     const a = exam('A', '2026-11-10', false, {});
     const b = exam('B', '2026-11-10', true, { y: 3 });

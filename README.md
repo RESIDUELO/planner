@@ -86,7 +86,7 @@ Como o navegador fala direto com o banco, **todas** as regras de acesso vivem no
 
 **Prioridade (`priority_v1`).**
 - Ranking = fração histórica da prova, com desempate por presença e recência. Em prova única, o assunto que mais caiu é obrigatoriamente o #1.
-- Multiprova: média ponderada por prova, com peso = (2 se principal) × (0,5 + proximidade), onde proximidade = 1/(1+dias/60).
+- Multiprova: os rankings de cada prova são intercalados na proporção do peso = (2 se principal) × (0,5 + proximidade), onde proximidade = 1/(1+dias/60). Toda prova escolhida entra no planner desde o começo.
 - Score dinâmico: 40% histórico, 25% proximidade, 20% esquecimento, 15% desempenho.
 - Cada assunto tem a explicação de sua posição.
 

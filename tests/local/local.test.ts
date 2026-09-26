@@ -291,4 +291,28 @@ describe('Residências no app off-line', () => {
     const list = await ok('GET', '/api/residencies');
     expect(list.map((x: any) => [x.name, x.decision])).toEqual([['ENARE', 'no'], ['FAMEMA', 'maybe']]);
   });
+
+  it('duas provas: a que tem menos peso também entra desde o começo do planner', async () => {
+    const exams = await ok('GET', '/api/exams');
+    const un = exams.find((e: any) => e.institution === 'UNOESTE/HRPP');
+    const sc = exams.find((e: any) => e.institution === 'Santa Casa Araçatuba');
+    const st = await ok('GET', '/api/me/study-settings');
+    await ok('PUT', '/api/me/study-settings', {
+      profile: { ...st.profile, start_date: today, preferred_start_time: null, preferred_end_time: null },
+      methods: st.methods.map((m: any) => ({ id: m.id, enabled: ['video', 'flashcards'].includes(m.code), minutes: m.estimated_minutes })),
+    });
+    await ok('PUT', `/api/me/editions/${sc.edition_id}`, { examDate: '2027-01-15', keepPlanner: true });
+    await ok('POST', '/api/planner/generate', { editionIds: [un.edition_id, sc.edition_id], primaryEditionId: un.edition_id, startDate: today });
+    const p = await ok('GET', '/api/planner');
+    const fromSc = (s: any) => s.perExam.find((x: any) => x.editionId === sc.edition_id)?.rank != null;
+    const top = p.subjects.slice(0, 12);
+    // Principal pesa mais (mais assuntos dela), mas a outra aparece já no começo
+    expect(top.filter(fromSc).length).toBeGreaterThanOrEqual(3);
+    expect(top.filter((s: any) => !fromSc(s)).length).toBeGreaterThan(top.filter(fromSc).length);
+    expect(p.subjects[0].perExam.find((x: any) => x.editionId === un.edition_id).rank).toBe(1);
+    // E vai para o planner antes da prova principal
+    expect(p.subjects.some((s: any) => fromSc(s) && s.nextScheduledDate && s.nextScheduledDate < '2026-12-05')).toBe(true);
+    const d = await ok('GET', `/api/planner/subjects/${p.subjects.find(fromSc).subjectId}`);
+    expect(d.explanation).toContain('da Santa Casa Araçatuba');
+  });
 });

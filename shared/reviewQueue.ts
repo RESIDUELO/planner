@@ -46,7 +46,8 @@ export function assignReviews(items: QueueItem[], o: QueueOptions): Map<string, 
       if (weekdays.includes(weekday(d)) && (used.get(d) ?? 0) < perDay) break;
       d = addDays(d, 1);
     }
-    if (it.examDate && d >= it.examDate) {
+    // Não passa da véspera da prova (se a prova do assunto já passou, segue o limite do dia)
+    if (it.examDate && it.examDate > o.today && d >= it.examDate) {
       const last = addDays(it.examDate, -1);
       d = last > o.today ? last : o.today;
     }

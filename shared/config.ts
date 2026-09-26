@@ -7,7 +7,7 @@
  * versão os gerou.
  */
 
-export const PRIORITY_VERSION = 'priority_v2';
+export const PRIORITY_VERSION = 'priority_v3';
 export const MEMORY_VERSION = 'fsrs_v1';
 export const SCHEDULER_VERSION = 'scheduler_v2';
 

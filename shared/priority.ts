@@ -1,12 +1,13 @@
 /**
- * priority_v2 - ranking e prioridade dos assuntos.
+ * priority_v3 - ranking e prioridade dos assuntos.
  *
  * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE - em quantas
  *    provas o assunto caiu, contando a partir da primeira em que apareceu (um
  *    tema que cai todo ano desde 2023, ou o bloco de Saúde Mental desde 2024,
  *    vale o mesmo que um que cai desde 2021; sempre olhando no mínimo as 3
  *    últimas provas) -, depois a QUANTIDADE de questões nesse mesmo período e,
- *    por fim, a recência. Com várias provas, média ponderada pelo peso de cada uma.
+ *    por fim, a recência. Com várias provas, os rankings de cada uma são
+ *    intercalados na proporção do peso (principal e mais próxima pesam mais).
  *
  * 2) Score dinâmico (0–100), usado para "O que estudar hoje" e para a
  *    explicação de cada assunto:
@@ -115,6 +116,39 @@ export function levelForRank(rank: number, total: number): PriorityLevel {
   return 'baixa';
 }
 
+/**
+ * Várias provas: os rankings de cada uma são intercalados na proporção do
+ * peso (ex.: 2 assuntos da principal, 1 da outra, ...). Assim toda prova
+ * escolhida entra no planner desde o começo; uma prova com muitos assuntos
+ * não empurra as outras para o fim. Assunto comum a mais de uma prova entra
+ * uma vez só, na primeira vez em que aparece.
+ */
+function interleave<T extends { subjectId: string }>(exams: ExamInput[], wById: Map<string, ExamWeight>, relevant: T[]): T[] {
+  const byId = new Map(relevant.map((c) => [c.subjectId, c]));
+  const queues = exams
+    .map((e) => ({ w: wById.get(e.editionId)?.weight ?? 0, list: [...e.stats.subjects].sort(compareHistorical).map((s) => s.subjectId).filter((id) => byId.has(id)), i: 0, taken: 0 }))
+    .filter((q) => q.w > 0 && q.list.length)
+    .sort((a, b) => b.w - a.w);
+  if (queues.length < 2) return relevant;
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (;;) {
+    // A prova da vez é a que está mais atrás em relação ao peso dela
+    let next: (typeof queues)[number] | null = null;
+    for (const q of queues) {
+      while (q.i < q.list.length && seen.has(q.list[q.i])) q.i++;
+      if (q.i < q.list.length && (!next || (q.taken + 1) / q.w < (next.taken + 1) / next.w)) next = q;
+    }
+    if (!next) break;
+    const id = next.list[next.i++];
+    next.taken++;
+    seen.add(id);
+    out.push(byId.get(id)!);
+  }
+  for (const c of relevant) if (!seen.has(c.subjectId)) out.push(c);
+  return out;
+}
+
 export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: ExamWeight[]; subjects: RankedSubject[] } {
   const weights = examWeights(exams, today);
   const wById = new Map(weights.map((w) => [w.editionId, w]));
@@ -178,8 +212,9 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
   });
 
   // Só entram assuntos com peso nas provas consideradas
-  const relevant = combined.filter((c) => c.percentage > 0);
+  let relevant = combined.filter((c) => c.percentage > 0);
   relevant.sort(compareHistorical);
+  relevant = interleave(exams, wById, relevant);
   const maxPct = Math.max(...relevant.map((r) => r.activePercentage), 0) || 1;
   const maxRecent = Math.max(...relevant.map((r) => r.recentPercentage), 0) || 1;
 
