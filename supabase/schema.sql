@@ -1778,12 +1778,13 @@ create table if not exists public.residencies (
 create index if not exists residencies_user_idx on public.residencies (user_id);
 alter table public.residencies enable row level security;
 
-do $$ begin
-  if not exists (select 1 from pg_policies where tablename = 'residencies' and policyname = 'owner_all') then
-    create policy owner_all on public.residencies for all to authenticated
-      using (user_id = (select app.current_user_id())) with check (user_id = (select app.current_user_id()));
-  end if;
-end $$;
+-- Permissões refeitas a cada execução (rodar de novo corrige uma instalação incompleta)
+drop policy if exists owner_all on public.residencies;
+create policy owner_all on public.residencies for all to authenticated
+  using (user_id = (select app.current_user_id())) with check (user_id = (select app.current_user_id()));
 
 revoke all on public.residencies from anon;
 grant select, insert, update, delete on public.residencies to authenticated;
+
+-- Conferência: deve mostrar 1 linha (owner_all)
+select policyname, cmd from pg_policies where schemaname = 'public' and tablename = 'residencies';

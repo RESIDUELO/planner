@@ -5,7 +5,7 @@
  */
 import { z } from 'zod';
 import { defaultSteps, RANGE_KEYS, type Residency, type Step } from '../../../shared/residency';
-import { badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
+import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
 
 const COLS = 'id, name, city, edital_url, specialties, institutions, fee, reduction_requested, reduction_granted, paid, decision, enrolled, notes, steps, exam_edition_id, created_at';
 
@@ -85,6 +85,14 @@ function toRow(b: Patch) {
   return r;
 }
 
+/** O banco recusou gravar: quase sempre a tabela foi criada sem as permissões (SQL rodado pela metade). */
+function denied(e: unknown): never {
+  if (e instanceof ApiError && e.status === 403) {
+    throw new ApiError(403, 'O banco do site não deixou salvar a residência. No Supabase, rode de novo o arquivo supabase/parts/15_residencies.sql (ele refaz as permissões da tabela) e tente outra vez.', e.details);
+  }
+  throw e;
+}
+
 /** Data da prova em Provas: a oficial, quando cadastrada; senão, a informada pelo aluno. */
 async function examDates(ctx: Ctx, uid: string, ids: string[]) {
   const out = new Map<string, { date: string | null; official: boolean; institution: string; exam: string }>();
@@ -148,7 +156,7 @@ export async function createResidency(ctx: Ctx, body: unknown) {
   const b = createSchema.parse(body);
   const steps = b.steps ?? defaultSteps();
   checkSteps(steps);
-  const r: any = await q(ctx.sb.from('residencies').insert({ ...toRow({ ...b, steps }), user_id: uid }).select(COLS).single());
+  const r: any = await q(ctx.sb.from('residencies').insert({ ...toRow({ ...b, steps }), user_id: uid }).select(COLS).single()).catch(denied);
   const res = toResidency(r);
   await syncExam(ctx, uid, res, !!res.steps.find((s) => s.key === 'prova')?.date);
   return one(ctx, uid, res.id);
@@ -159,7 +167,7 @@ export async function updateResidency(ctx: Ctx, id: string, body: unknown) {
   const b = updateSchema.parse(body);
   const before = await one(ctx, uid, id);
   if (b.steps) checkSteps(b.steps);
-  const r: any = await q(ctx.sb.from('residencies').update({ ...toRow(b), updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', uid).select(COLS).single());
+  const r: any = await q(ctx.sb.from('residencies').update({ ...toRow(b), updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', uid).select(COLS).single()).catch(denied);
   const res = toResidency(r);
   const provaOf = (x: Residency) => x.steps.find((s) => s.key === 'prova')?.date ?? null;
   const linkedNow = b.examEditionId !== undefined && b.examEditionId !== before.examEditionId;
