@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(root, 'data/exams.json'), 'utf8'));
+// Mesmo tema com nomes diferentes entre provas: vira um assunto só
+const merges = JSON.parse(readFileSync(join(root, 'data/subject_merges.json'), 'utf8')).merges;
 mkdirSync(join(root, 'supabase/data'), { recursive: true });
 
 const norm = (s) => (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -26,6 +28,13 @@ const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, 
 export function buildExamSql(entry) {
   const doc = JSON.parse(readFileSync(join(root, 'data/import', entry.file), 'utf8'));
   const qs = doc.questions;
+  const into = new Map();
+  for (const m of merges) for (const f of m.from) if (f.exam === entry.id) into.set(`${f.area}|${f.specialty ?? ''}|${f.subject}`, m.into);
+  const merge = (c) => {
+    const t = c.subject && into.get(`${c.area}|${c.specialty ?? ''}|${c.subject}`);
+    if (t) Object.assign(c, { area: t.area, specialty: t.specialty ?? null, subject: t.subject });
+  };
+  for (const q of qs) { merge(q); (q.extra_subjects ?? []).forEach(merge); }
   const inst = entry.institution;
   const examRef = `(select e.id from public.exams e join public.institutions i on i.id = e.institution_id where i.abbreviation = ${lit(inst.abbreviation)} and e.name = ${lit(entry.exam.name)})`;
   const out = [];
@@ -127,6 +136,14 @@ on conflict (exam_edition_id, question_number) do nothing;
   }
   // Classificação
   const links = qs.filter((q) => q._slug).flatMap((q) => [[q, q._slug, true], ...q._extra.map((x) => [q, x, false])]);
+  // Reclassificação (ex.: assuntos juntados): tira as ligações que não valem mais
+  out.push(`delete from public.question_subjects qs
+using public.questions q, public.exam_editions ed, public.subjects s
+where qs.question_id = q.id and q.exam_edition_id = ed.id and ed.exam_id = ${examRef} and s.id = qs.subject_id
+  and (ed.year, q.question_number, s.slug) not in (values
+${links.map(([q, sl]) => `  (${q.year}, ${q.question_number}, ${lit(sl)})`).join(',\n')}
+);
+`);
   for (const part of chunk(links, 500)) {
     out.push(`insert into public.question_subjects (question_id, subject_id, relevance_weight, is_primary)
 select q.id, s.id, 1, v.prim

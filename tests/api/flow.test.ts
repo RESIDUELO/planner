@@ -461,6 +461,37 @@ describe('Santa Casa Araçatuba (anexo questão a questão, sem gabarito)', () =
     expect(bio).toMatchObject({ questions: 9, editionsPresent: 4 });
     expect(h.subjects.find((x: any) => x.name === 'UTI pediátrica - VM/fluidos/sepse')).toMatchObject({ questions: 14 });
   });
+
+  it('assuntos juntados com a UNOESTE: um assunto só, e rodar de novo tira a classificação antiga', async () => {
+    // Classificação antiga (antes de juntar) que ficou no banco
+    await dbQuery(`insert into medical_areas (name, slug) values ('Clínica Médica', 'clinica-medica') on conflict do nothing`);
+    await dbQuery(`insert into subjects (medical_area_id, name, slug) select id, 'Anemias', 'clinica-medica--anemias' from medical_areas where slug = 'clinica-medica' on conflict do nothing`);
+    await dbQuery(`insert into question_subjects (question_id, subject_id, relevance_weight, is_primary)
+      select q.id, s.id, 1, true from questions q join exam_editions ed on ed.id = q.exam_edition_id join exams e on e.id = ed.exam_id
+      join institutions i on i.id = e.institution_id, subjects s
+      where i.abbreviation = 'Santa Casa Araçatuba' and ed.year = 2020 and q.question_number = 5 and s.slug = 'clinica-medica--anemias' on conflict do nothing`);
+    await runDataFile('unoeste_r1');
+    await runDataFile('santa_casa_aracatuba_r1');
+    const links = await dbQuery(`select count(*)::int as n, count(distinct qs.question_id)::int as q from question_subjects qs join questions q on q.id = qs.question_id
+      join exam_editions ed on ed.id = q.exam_edition_id join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
+      where i.abbreviation = 'Santa Casa Araçatuba'`);
+    expect(links.rows[0]).toEqual({ n: 480, q: 480 });
+    // Anemias das duas provas no mesmo assunto; nome escolhido nos renomeados
+    const by = await dbQuery(`select s.name, array_agg(distinct i.abbreviation order by i.abbreviation) as provas from question_subjects qs
+      join subjects s on s.id = qs.subject_id join questions q on q.id = qs.question_id join exam_editions ed on ed.id = q.exam_edition_id
+      join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
+      where s.slug in ('clinica-medica--hematologia--anemias', 'clinica-medica--neurologia--morte-encefalica-na-clinica-e-pediatria')
+      group by s.name order by s.name`);
+    expect(by.rows).toEqual([
+      { name: 'Anemias', provas: ['Santa Casa Araçatuba', 'UNOESTE/HRPP'] },
+      { name: 'Morte encefálica na clínica e pediatria', provas: ['Santa Casa Araçatuba', 'UNOESTE/HRPP'] },
+    ]);
+    const list = await student.ok('GET', '/api/exams');
+    const s = list.find((e: any) => e.institution === 'Santa Casa Araçatuba');
+    const h = await student.ok('GET', `/api/exams/${s.exam_id}/history`);
+    expect(h.subjects.find((x: any) => x.name === 'Morte encefálica na clínica e pediatria')).toMatchObject({ questions: 6 });
+    expect(h.subjects.some((x: any) => x.name === 'Morte encefálica')).toBe(false);
+  });
 });
 
 describe('Desfazer questões e zerar o perfil', () => {

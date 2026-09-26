@@ -118,7 +118,7 @@ Como o navegador fala direto com o banco, **todas** as regras de acesso vivem no
 
 Provas já preparadas: **FAMERP** R1 (480 questões, 2021–2026), **HU-UEL** R1 (550, 2021–2026) e **UNOESTE/HRPP** R1 (500, 2022–2026). Os relatórios não trazem o enunciado das questões, só o resumo do que cada uma cobra.
 
-Cada instituição nomeia os assuntos de um jeito ("Saúde do Trabalhador" × "Saúde do trabalhador (CAT, NR, …)"). Para a prioridade combinada do modo multiprova cruzar melhor as provas, os nomes podem ser unificados num próximo arquivo de dados, sem apagar nada.
+Cada instituição nomeia os assuntos de um jeito ("Saúde do Trabalhador" × "Saúde do trabalhador (CAT, NR, …)"). Os que são o mesmo tema ficam listados em `data/subject_merges.json` (decididos pelo administrador): ao gerar o SQL, as questões dessas provas passam para um assunto só, que conta para as duas. Os arquivos de `data/import/` continuam como os relatórios, e rodar o SQL de novo tira do banco a classificação antiga.
 
 ## Testes
 

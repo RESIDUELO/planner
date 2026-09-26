@@ -1,0 +1,1136 @@
+{
+ "_comment": "Assuntos que são o mesmo tema em provas diferentes, só com nomes diferentes (decididos pelo administrador). Ao gerar o SQL (npm run data:sql), a classificação de cada questão listada em \"from\" passa a ser a de \"into\". Os arquivos de data/import continuam como os relatórios.",
+ "merges": [
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Hematologia",
+    "subject": "Anemias"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Anemias"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Nefrologia",
+    "subject": "Distúrbios do sódio"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Distúrbios do sódio"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Neurologia",
+    "subject": "Morte encefálica na clínica e pediatria"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Morte encefálica"
+    },
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Morte encefálica"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Clínica Médica",
+     "specialty": "Neurologia",
+     "subject": "Morte encefálica"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Pneumologia",
+    "subject": "DPOC"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "DPOC"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Pneumologia",
+    "subject": "Asma"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Asma"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Pneumologia",
+    "subject": "Pneumonia adquirida na comunidade"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Pneumonia adquirida na comunidade"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Pneumologia",
+    "subject": "TEP/TEV"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "TEV/TEP"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Clínica Médica",
+     "specialty": "Pneumologia",
+     "subject": "TEP"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Infectologia",
+    "subject": "Sífilis"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Sífilis"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Endocrinologia",
+    "subject": "Diabetes – tratamento"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Diabetes - tratamento"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Endocrinologia",
+    "subject": "Cetoacidose diabética"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Cetoacidose/emergências endócrinas"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Cardiologia",
+    "subject": "Valvopatias/anticoagulação/sopro"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Valvopatias/sopros"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Clínica Médica",
+     "specialty": "Cardiologia",
+     "subject": "Valvopatias/anticoagulação"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Gastroenterologia",
+    "subject": "H. pylori/doença ulcerosa"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Úlcera péptica/estômago"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Psiquiatria",
+    "subject": "Abstinência alcoólica"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Álcool - abstinência"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Pneumologia",
+    "subject": "Derrame pleural/US pulmonar"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Derrame pleural/US pulmonar"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Clínica Médica",
+     "specialty": "Pneumologia",
+     "subject": "Derrame pleural"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Nefrologia",
+    "subject": "Gasometria/distúrbios ácido-base"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Gasometria/ácido-base"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Clínica Médica",
+     "specialty": "Nefrologia",
+     "subject": "Distúrbios ácido-base"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Infectologia",
+    "subject": "Covid-19/SRAG"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "COVID-19"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Infectologia",
+    "subject": "HIV/infecções oportunistas/PrEP"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "HIV - diagnóstico/PrEP/outros"
+    },
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "HIV - infecções oportunistas"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Clínica Médica",
+     "specialty": "Infectologia",
+     "subject": "HIV"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Emergência clínica",
+    "subject": "Intoxicações/toxíndromes"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Toxicologia/acidentes"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Gastroenterologia",
+    "subject": "Cirrose – encefalopatia hepática"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Cirrose/ascite/hepatopatia"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Vias biliares",
+    "subject": "Icterícia"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Icterícia/vias biliares"
+    },
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Icterícia/vias biliares"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Anticoncepção"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Contracepção"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Climatério/terapia hormonal"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Climatério/terapia hormonal"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": "Ginecologia",
+     "subject": "Climatério"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "DIP"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "DIP/abscesso tubo-ovariano"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Diabetes gestacional"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Diabetes na gestação"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Síndromes hipertensivas na gestação"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Síndromes hipertensivas na gestação"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": "Obstetrícia",
+     "subject": "Síndromes hipertensivas"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Assistência ao parto"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Mecanismo/assistência ao parto"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Puerpério/lactação"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Puerpério/lactação"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": "Obstetrícia",
+     "subject": "Puerpério"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Prematuridade/RPMO"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Prematuridade/RPMO"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Sangramento uterino anormal"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Sangramento uterino/endométrio"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Fisiologia/ciclo menstrual"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Ciclo menstrual/fisiologia"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Amenorreia"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Amenorreia/endocrinologia ginecológica"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Rastreamento de câncer de colo"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Câncer do colo/rastreamento"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Vulvovaginites"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Vulvovaginites/IST"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Infecções na gestação"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Infecções no pré-natal (toxo/sífilis)"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Neonatologia",
+    "subject": "Reanimação neonatal"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Reanimação neonatal"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Neonatologia",
+    "subject": "Infecções congênitas"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Infecções congênitas (TORCH)"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Neonatologia",
+    "subject": "Sífilis congênita"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Sífilis"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Cardiologia pediátrica",
+    "subject": "Cardiopatias congênitas"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Cardiologia pediátrica/cardiopatias congênitas"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Emergência pediátrica",
+    "subject": "Anafilaxia"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Alergia - anafilaxia/urticária"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Violência/maus-tratos",
+    "subject": "Abuso sexual"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Violência/abuso sexual"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Cuidados paliativos",
+    "subject": "Cuidados paliativos"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Cuidados paliativos"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Pediatria",
+     "specialty": "Cuidados paliativos",
+     "subject": "Fim de vida"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Trauma",
+    "subject": "Avaliação primária (ATLS)"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Trauma - ATLS"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Aparelho digestivo – pâncreas",
+    "subject": "Pancreatite aguda"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Pâncreas - pancreatite"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Parede abdominal",
+    "subject": "Hérnia inguinal"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Hérnias da parede abdominal"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Abdome agudo",
+    "subject": "Obstrução intestinal/pseudo-obstrução"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Abdome agudo/obstrução intestinal"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Cirurgia vascular",
+    "subject": "Aneurisma de aorta"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Vascular - aorta"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Cabeça e pescoço",
+    "subject": "Câncer de tireoide"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Cabeça e pescoço/tireoide"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Aparelho digestivo – estômago",
+    "subject": "GIST/tumores neuroendócrinos"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "GIST/tumores neuroendócrinos"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Cirurgia",
+     "specialty": "Aparelho digestivo – estômago",
+     "subject": "GIST"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Nutrição cirúrgica",
+    "subject": "Metabolismo no trauma"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Água, eletrólitos e resposta ao trauma"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Técnica cirúrgica",
+    "subject": "Antissepsia/infecção cirúrgica (escovação, infecção de ferida, pé diabético)"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Antissepsia/infecção cirúrgica"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Cirurgia",
+     "specialty": "Técnica cirúrgica",
+     "subject": "Assepsia/antissepsia"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Medicina Preventiva e Social",
+    "specialty": "Atenção primária",
+    "subject": "Atributos da APS"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Medicina Preventiva e Social",
+     "specialty": null,
+     "subject": "Organização do cuidado/APS"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Medicina Preventiva e Social",
+    "specialty": "Promoção da saúde",
+    "subject": "Tabagismo"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Medicina Preventiva e Social",
+     "specialty": null,
+     "subject": "Tabagismo (modelo transteórico/Fagerström)"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Medicina Preventiva e Social",
+    "specialty": "Epidemiologia",
+    "subject": "Desenhos de estudo"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Medicina Preventiva e Social",
+     "specialty": null,
+     "subject": "Tipos de estudo"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Medicina Preventiva e Social",
+    "specialty": "Epidemiologia",
+    "subject": "Indicadores de saúde"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Medicina Preventiva e Social",
+     "specialty": null,
+     "subject": "Epidemiologia descritiva/indicadores"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Medicina Preventiva e Social",
+    "specialty": "Promoção da saúde",
+    "subject": "Obesidade/Vigitel"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Medicina Preventiva e Social",
+     "specialty": null,
+     "subject": "Obesidade/atividade física"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Medicina Preventiva e Social",
+    "specialty": "SUS – políticas",
+    "subject": "Saúde mental/CAPS/RAPS"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Medicina Preventiva e Social",
+     "specialty": null,
+     "subject": "Saúde mental/CAPS"
+    },
+    {
+     "exam": "unoeste_r1",
+     "area": "Medicina Preventiva e Social",
+     "specialty": "SUS – políticas",
+     "subject": "RAPS"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Nefrologia",
+    "subject": "Doença renal crônica"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Nefrologia - DRC/IRA"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Emergência clínica",
+    "subject": "PCR/ACLS"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "ECG/arritmias/PCR"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Ginecologia",
+    "subject": "Infertilidade"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Infertilidade/SOP"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Líquido amniótico"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Líquido amniótico/gemelaridade"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Sangramento 1ª metade – abortamento"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Abortamento/ectópica"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Obstetrícia",
+    "subject": "Hemorragia pós-parto"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Hemorragias obstétricas (DPP, rotura, HPP)"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Crescimento e desenvolvimento",
+    "subject": "Crescimento"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Puericultura - crescimento/desenvolvimento"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Infectologia pediátrica",
+    "subject": "Faringoamigdalite"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Infecções de vias aéreas (OMA/amigdalite/sinusite)"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Neonatologia",
+    "subject": "Hipoglicemia neonatal"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Neonatologia - hipoglicemia/icterícia/ECN/ROP"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Cirurgia",
+    "specialty": "Coloproctologia",
+    "subject": "Pólipos/câncer colorretal"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Cirurgia",
+     "specialty": null,
+     "subject": "Câncer colorretal/gástrico"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Clínica Médica",
+    "specialty": "Neurologia",
+    "subject": "AVC isquêmico"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Clínica Médica",
+     "specialty": null,
+     "subject": "Neuro - delirium/AVC/outros"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Pediatria",
+    "specialty": "Imunização",
+    "subject": "Calendário PNI"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Pediatria",
+     "specialty": null,
+     "subject": "Vacinação"
+    }
+   ]
+  },
+  {
+   "into": {
+    "area": "Ginecologia e Obstetrícia",
+    "specialty": "Mastologia",
+    "subject": "Nódulo mamário"
+   },
+   "from": [
+    {
+     "exam": "santa_casa_aracatuba_r1",
+     "area": "Ginecologia e Obstetrícia",
+     "specialty": null,
+     "subject": "Mastologia"
+    }
+   ]
+  }
+ ]
+}

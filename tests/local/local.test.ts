@@ -308,7 +308,9 @@ describe('Residências no app off-line', () => {
     const top = p.subjects.slice(0, 12);
     // Principal pesa mais (mais assuntos dela), mas a outra aparece já no começo
     expect(top.filter(fromSc).length).toBeGreaterThanOrEqual(3);
-    expect(top.filter((s: any) => !fromSc(s)).length).toBeGreaterThan(top.filter(fromSc).length);
+    // Assunto juntado (mesmo tema nas duas provas) conta para as duas
+    const fromUn = (s: any) => s.perExam.find((x: any) => x.editionId === un.edition_id)?.rank != null;
+    expect(top.some((s: any) => fromSc(s) && fromUn(s))).toBe(true);
     expect(p.subjects[0].perExam.find((x: any) => x.editionId === un.edition_id).rank).toBe(1);
     // E vai para o planner antes da prova principal
     expect(p.subjects.some((s: any) => fromSc(s) && s.nextScheduledDate && s.nextScheduledDate < '2026-12-05')).toBe(true);
