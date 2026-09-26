@@ -558,17 +558,19 @@ function SubjectList({ data, onOpen }: { data: any; onOpen: (id: string) => void
   const today = todayBR();
   const list = useMemo(() => {
     const l = data.subjects.filter((s: any) =>
-      (status === 'all' || (status === 'unscheduled' ? !s.scheduled : s.status === status)) &&
+      (status === 'all' || (status === 'hidden' ? s.hidden : status === 'unscheduled' ? !s.scheduled && !s.hidden : s.status === status && !s.hidden)) &&
       (area === 'all' || s.area === area) &&
       (!search || s.name.toLowerCase().includes(search.toLowerCase())));
     return sort === 'dynamic' ? [...l].sort((a: any, b: any) => b.dynamic.score - a.dynamic.score) : l;
   }, [data, search, status, area, sort]);
-  const studied = data.subjects.filter((s: any) => s.status === 'studied').length;
+  const visible = data.subjects.filter((s: any) => !s.hidden);
+  const studied = visible.filter((s: any) => s.status === 'studied').length;
+  const hiddenCount = data.subjects.length - visible.length;
   const filtered = status !== 'all' || area !== 'all' || sort !== 'rank';
 
   return (
     <>
-      <p className="mb-8 text-[15px] text-ink-2">{studied} de {data.subjects.length} concluídos · ordenados pelo que mais cai</p>
+      <p className="mb-8 text-[15px] text-ink-2">{studied} de {visible.length} concluídos · ordenados pelo que mais cai{hiddenCount > 0 && ` · ${hiddenCount} fora do planner`}</p>
       <div className="mb-6 flex items-center gap-3">
         <label className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-3" />
@@ -582,6 +584,7 @@ function SubjectList({ data, onOpen }: { data: any; onOpen: (id: string) => void
           { label: `${status === 'in_progress' ? '✓ ' : ''}Em andamento`, onClick: () => setStatus('in_progress') },
           { label: `${status === 'studied' ? '✓ ' : ''}Concluídos`, onClick: () => setStatus('studied') },
           { label: `${status === 'unscheduled' ? '✓ ' : ''}Fora do tempo disponível`, onClick: () => setStatus('unscheduled') },
+          { label: `${status === 'hidden' ? '✓ ' : ''}Fora do planner (excluídos)`, onClick: () => setStatus('hidden'), hidden: hiddenCount === 0 },
           ...areas.map((a) => ({ label: `${area === a ? '✓ ' : ''}${a}`, onClick: () => setArea(area === a ? 'all' : a) })),
         ]} />
       </div>
@@ -591,9 +594,9 @@ function SubjectList({ data, onOpen }: { data: any; onOpen: (id: string) => void
             <button onClick={() => onOpen(s.subjectId)} data-testid="subject-card" className="flex w-full items-center gap-4 py-4 text-left transition-opacity hover:opacity-70">
               <span className="tabular w-7 shrink-0 text-[14px] text-ink-3">{s.rank}</span>
               <span className="min-w-0 flex-1">
-                <span className={clsx('block truncate text-[17px]', !s.scheduled && 'text-ink-2', s.status === 'studied' && 'text-ink-3 line-through decoration-1')}>{s.name}</span>
+                <span className={clsx('block truncate text-[17px]', (!s.scheduled || s.hidden) && 'text-ink-3', s.status === 'studied' && !s.hidden && 'text-ink-3 line-through decoration-1')}>{s.name}</span>
                 <span className="block truncate text-[13px] text-ink-2">
-                  <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle dot-${tintFor(s.area)}`} />{areaShort(s.area)} · {pct(s.percentage)} da prova · {s.card?.nextReview
+                  <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle dot-${tintFor(s.area)}`} />{areaShort(s.area)} · {pct(s.percentage)} da prova · {s.hidden ? 'fora do planner' : s.card?.nextReview
                     ? (s.card.nextReview < today ? <span className="text-negative">revisão atrasada</span> : `revisão ${relativeDays(daysBetween(s.card.nextReview, today))}`)
                     : !s.scheduled ? 'fora do tempo disponível' : STATUS_LABEL[s.status].toLowerCase()}
                 </span>

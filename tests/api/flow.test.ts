@@ -571,4 +571,27 @@ describe('Cronograma pessoal (só administradores)', () => {
     expect((await admin.req('POST', `/api/reviews/${torax.subjectId}/move`, { to: '2026-09-20' })).status).toBe(400);
     expect((await admin.req('POST', `/api/planner/subjects/${sang.subjectId}/move`, { from: '2026-10-06', to: '2026-12-10' })).status).toBe(400);
   });
+
+  it('excluir do planner: some da semana, das revisões e das contas; volta quando pedir', async () => {
+    const p = await admin.ok('GET', '/api/planner');
+    const hs = p.subjects.find((x: any) => x.name === 'Hipertensão Arterial Sistêmica (HAS)');
+    const torax = p.subjects.find((x: any) => x.name === 'Trauma de tórax');
+    const before = await admin.ok('GET', '/api/performance');
+    await admin.ok('PUT', `/api/planner/subjects/${hs.subjectId}/hidden`, { hidden: true });
+    await admin.ok('PUT', `/api/planner/subjects/${torax.subjectId}/hidden`, { hidden: true });
+    const cal = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-11-25');
+    const all = cal.days.flatMap((x: any) => [...x.newSubjects, ...x.reviews]).map((x: any) => x.name);
+    expect(all).not.toContain('Hipertensão Arterial Sistêmica (HAS)');
+    expect(all).not.toContain('Trauma de tórax');
+    // Continua nos conteúdos, marcado; fora das contas
+    const after = await admin.ok('GET', '/api/planner');
+    expect(after.subjects.find((x: any) => x.subjectId === hs.subjectId).hidden).toBe(true);
+    const perf = await admin.ok('GET', '/api/performance');
+    expect(perf.subjects).toHaveLength(before.subjects.length - 2);
+    expect(perf.subjects.some((x: any) => x.subjectId === torax.subjectId)).toBe(false);
+    // Volta
+    await admin.ok('PUT', `/api/planner/subjects/${hs.subjectId}/hidden`, { hidden: false });
+    const back = await admin.ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-11-25');
+    expect(back.days.flatMap((x: any) => x.newSubjects).map((x: any) => x.name)).toContain('Hipertensão Arterial Sistêmica (HAS)');
+  });
 });

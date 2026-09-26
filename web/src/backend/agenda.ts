@@ -15,7 +15,9 @@ export async function todayView(ctx: Ctx) {
   let state = await loadPlanState(ctx, userId);
   if (!state) return null;
   if ((await readjustCards(ctx, userId, state.plan.id)) > 0) state = (await loadPlanState(ctx, userId))!;
-  const { plan, subjects } = state;
+  const { plan } = state;
+  // Assuntos tirados do planner não aparecem nem contam
+  const subjects = state.subjects.filter((s) => !s.hidden);
   const profile = await loadProfile(ctx, userId);
   const capacity = Math.round(profile.daily_hours * 60);
   const isStudyDay = studyWeekdays(profile).includes(weekday(today));
@@ -100,7 +102,9 @@ export async function calendarView(ctx: Ctx, from: ISODate, to: ISODate) {
   const today = ctx.today();
   const state = await loadPlanState(ctx, userId);
   if (!state) return null;
-  const { plan, subjects } = state;
+  const { plan } = state;
+  // Assuntos tirados do planner não aparecem nem contam
+  const subjects = state.subjects.filter((s) => !s.hidden);
   const days = new Map<ISODate, { date: ISODate; reviews: any[]; newSubjects: any[]; exams: string[] }>();
   for (const d of eachDay(from, to)) days.set(d, { date: d, reviews: [], newSubjects: [], exams: [] });
   const push = (date: ISODate, key: 'reviews' | 'newSubjects', v: any) => days.get(date)?.[key].push(v);
@@ -190,7 +194,8 @@ export async function dashboardView(ctx: Ctx) {
   const nextExam = next ? { label: editionLabel(next), date: next.exam_date, daysLeft: diffDays(next.exam_date!, today) } : null;
 
   if (!state) return { hasPlan: false, profileConfigured: profile.configured, selectedExams: selection.length, nextExam, questions };
-  const { subjects, exams, methods } = state;
+  const { exams, methods } = state;
+  const subjects = state.subjects.filter((s) => !s.hidden);
   const totalBlocks = subjects.length * methods.length;
   const doneBlocks = subjects.reduce((t, s) => t + s.checklist.filter((c) => c.done).length, 0);
   const studied = subjects.filter((s) => s.status === 'studied');
@@ -256,9 +261,10 @@ export async function performanceView(ctx: Ctx) {
   const ratings = [...counts.entries()].map(([rating, n]) => ({ rating, n }));
   const logs = (allLogs as any[]).slice(0, 50).map((l) => ({ ...l, name: l.subjects?.name ?? '—' }));
   if (!state) return { hasPlan: false, history, ratings, logs, subjects: [], areas: [] };
+  const visible = state.subjects.filter((s) => !s.hidden);
 
   const areas = new Map<string, { area: string; answered: number; correct: number; subjects: number; studied: number; percentage: number }>();
-  for (const s of state.subjects) {
+  for (const s of visible) {
     const a = areas.get(s.area) ?? { area: s.area, answered: 0, correct: 0, subjects: 0, studied: 0, percentage: 0 };
     a.answered += s.performance.answered;
     a.correct += s.performance.correct;
@@ -270,7 +276,7 @@ export async function performanceView(ctx: Ctx) {
   return {
     hasPlan: true, history, ratings, logs,
     areas: [...areas.values()].sort((a, b) => b.percentage - a.percentage),
-    subjects: state.subjects.map((s) => ({
+    subjects: visible.map((s) => ({
       subjectId: s.subjectId, name: s.name, area: s.area, rank: s.rank, status: s.status,
       answered: s.performance.answered, correct: s.performance.correct, accuracy: s.performance.accuracy,
       mastery: s.mastery.mastery, retrievability: s.card?.retrievability ?? null, nextReview: s.card?.nextReview ?? null,

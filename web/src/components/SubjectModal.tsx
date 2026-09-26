@@ -34,6 +34,14 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
     mutationFn: ({ methodId, done }: { methodId: string; done: boolean }) => api.post(`/api/planner/subjects/${subjectId}/methods/${methodId}`, { done }),
     onSuccess: (r: any) => { invalidate(); studiedMsg(r); }, onError,
   });
+  const hide = useMutation({
+    mutationFn: (hidden: boolean) => api.put(`/api/planner/subjects/${subjectId}/hidden`, { hidden }),
+    onSuccess: (_r: any, hidden: boolean) => {
+      invalidate();
+      setMsg({ tone: 'neutral', text: hidden ? 'Tirado do planner. Continua na lista de assuntos, fora das contas.' : 'De volta ao planner.' });
+    },
+    onError,
+  });
   const complete = useMutation({
     mutationFn: (done: boolean) => api.post(`/api/planner/subjects/${subjectId}/complete`, { done }),
     onSuccess: (r: any) => { invalidate(); studiedMsg(r); }, onError,
@@ -85,6 +93,13 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
             </p>
           </header>
 
+          {s.hidden && (
+            <div className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-[12px] bg-fill px-4 py-3 text-[14px]" role="status">
+              <span>Fora do planner: não aparece na semana nem nas revisões e não entra nas contas.</span>
+              <Button variant="plain" size="sm" loading={hide.isPending} onClick={() => hide.mutate(false)}>Mostrar no planner de novo</Button>
+            </div>
+          )}
+
           {tpl && <TemplateInfo t={tpl} />}
 
           <ul className="mt-8 border-t border-line" aria-label="Atividades">
@@ -106,6 +121,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
             <Button variant="plain" size="sm" loading={complete.isPending} onClick={() => complete.mutate(!studied)}>
               {studied ? 'Desmarcar assunto' : 'Marcar assunto como concluído'}
             </Button>
+            {!s.hidden && <Button variant="destructive" size="sm" loading={hide.isPending} onClick={() => hide.mutate(true)}>Excluir do planner</Button>}
           </div>
 
           {s.card?.nextReview && s.card.nextReview <= today && (

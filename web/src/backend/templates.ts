@@ -11,7 +11,7 @@ import { MEMORY_VERSION } from '../../../shared/config';
 import { review } from '../../../shared/memory';
 import { assignReviews } from '../../../shared/reviewQueue';
 import { badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
-import { activePlan, loadEditions, loadMethods, loadProfile, readjustCards, saveSelection, studyWeekdays } from './planner';
+import { activePlan, loadEditions, loadHidden, loadMethods, loadProfile, readjustCards, saveSelection, studyWeekdays } from './planner';
 
 type Kind = 'lesson' | 'questions' | 'mock' | 'review' | 'studied' | 'reserve';
 interface TemplateItem {
@@ -226,8 +226,9 @@ export async function reflowTemplate(ctx: Ctx, plan: any, opts: { includeOverdue
   const lessonOrder = new Map<string, number>((tpl.lessons as string[]).map((id, k) => [id, k]));
   const rows = await selectAll((a, b) => ctx.sb.from('study_schedule').select('*')
     .eq('study_plan_id', plan.id).neq('activity_type', 'review').range(a, b)) as any[];
-  // Aulas arrastadas para um dia ficam nesse dia
+  // Aulas arrastadas para um dia ficam nesse dia; aulas tiradas do planner saem da fila
   const pinned = new Set(rows.filter((r) => r.pinned && !r.completed).map((r) => r.subject_id));
+  for (const id of await loadHidden(ctx, plan.user_id)) pinned.add(id);
   const current = new Map<string, ISODate>();
   for (const r of rows) {
     if (r.completed || !lessonOrder.has(r.subject_id) || pinned.has(r.subject_id)) continue;

@@ -213,6 +213,13 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(target).toContainText(name);
   await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).not.toContainText(name);
 
+  // Excluir do planner: some da semana, continua nos assuntos
+  await target.getByTestId('task').filter({ hasText: name }).locator('button').first().click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Excluir do planner' }).click();
+  await expect(page.getByRole('dialog').getByText('Fora do planner:', { exact: false })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(target).not.toContainText(name);
+
   // Zerar o perfil: volta ao início, como uma conta nova
   await page.goto('configuracoes');
   await page.getByRole('button', { name: 'Zerar meu perfil' }).click();

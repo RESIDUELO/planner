@@ -105,6 +105,13 @@ export async function loadMethods(ctx: Ctx, userId: string): Promise<UserMethod[
 }
 
 /** Atividades escolhidas por assunto (sem escolha = métodos marcados em "Como você estuda?"). */
+/** Assuntos que o aluno tirou do planner (12_hidden_subjects.sql). Sem a tabela: nenhum. */
+export async function loadHidden(ctx: Ctx, userId: string): Promise<Set<string>> {
+  const { data, error } = await ctx.sb.from('hidden_subjects').select('subject_id').eq('user_id', userId);
+  if (error) return new Set();
+  return new Set((data as any[]).map((r) => r.subject_id));
+}
+
 export async function loadActivityChoices(ctx: Ctx, userId: string): Promise<Map<string, string[]>> {
   const rows = await selectAll((a, b) => ctx.sb.from('subject_activity_choices').select('subject_id, study_method_id').eq('user_id', userId).range(a, b));
   const out = new Map<string, string[]>();
@@ -155,6 +162,7 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
   const methods = allMethods.filter((m) => m.enabled);
   if (!methods.length) throw badRequest('Selecione pelo menos um método de estudo.');
   const choices = await loadActivityChoices(ctx, userId);
+  const hiddenIds = await loadHidden(ctx, userId);
 
   const startDate = maxDate(params.startDate, today)!;
   const futureDates = eds.map((e) => e.exam_date).filter((d): d is string => !!d && d > startDate);
@@ -204,7 +212,8 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
     studyWeekdays: studyWeekdays(profile),
     questionsPerDay: profile.questions_per_day,
     methods: allMethods.map((m) => ({ id: m.id, code: m.code, activityType: m.activity_type, minutes: m.estimated_minutes })),
-    subjects: subjects.map((s, i) => {
+    // Assuntos tirados do planner não ocupam tempo na agenda
+    subjects: subjects.map((s, i) => ({ s, i })).filter(({ s }) => !hiddenIds.has(s.subjectId)).map(({ s, i }) => {
       const card = cardBySubject.get(s.subjectId);
       return {
         subjectId: s.subjectId,
@@ -305,7 +314,7 @@ export interface PlanSubjectView {
   subjectId: string; name: string; area: string; specialty: string | null; rank: number; level: PriorityLevel; levelLabel: string;
   percentage: number; frequency: number; annualAverage: number; yearsPresent: number; yearsAnalyzed: number;
   recentPercentage: number; estimatedQuestions: number; sizeFactor: number; scheduled: boolean; examDate: ISODate | null;
-  perExam: any[]; status: SubjectStatus; customActivities: boolean;
+  perExam: any[]; status: SubjectStatus; customActivities: boolean; hidden: boolean;
   checklist: { methodId: string; code: string; name: string; done: boolean; completedAt: string | null; scheduledDate: ISODate | null; minutes: number | null }[];
   progress: number;
   performance: { answered: number; correct: number; accuracy: number | null; lastQuestionAt: string | null };
@@ -343,6 +352,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
 
   const enabled = methods.filter((m) => m.enabled);
   const choices = await loadActivityChoices(ctx, userId);
+  const hidden = await loadHidden(ctx, userId);
   const info = await loadSubjectsInfo(ctx, planSubjects.map((s: any) => s.subject_id));
   const perfBy = new Map(perf.map((p: any) => [p.subject_id, p]));
   const cardBy = new Map(cards.map((c) => [c.subject_id, c]));
@@ -394,7 +404,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
       percentage: num(s.historical_percentage), frequency: num(s.historical_frequency), annualAverage: num(s.annual_average),
       yearsPresent: s.years_present, yearsAnalyzed: s.years_analyzed, recentPercentage: num(s.recent_frequency),
       estimatedQuestions: num(s.estimated_questions), sizeFactor: num(s.size_factor), scheduled: s.scheduled, examDate: s.exam_date,
-      perExam: s.per_exam, status, checklist, customActivities: !!chosen,
+      perExam: s.per_exam, status, checklist, customActivities: !!chosen, hidden: hidden.has(s.subject_id),
       progress: checklist.length ? doneCount / checklist.length : 0,
       performance: { answered, correct, accuracy: answered ? correct / answered : null, lastQuestionAt: p?.last_question_at ?? null },
       card: c ? {
@@ -621,6 +631,7 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
   const allMethods = await loadMethods(ctx, userId);
   const enabledIds = allMethods.filter((m) => m.enabled).map((m) => m.id);
   const choices = await loadActivityChoices(ctx, userId);
+  const hiddenIds = await loadHidden(ctx, userId);
   const ps = await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank, historical_percentage, size_factor, exam_date, scheduled')
     .eq('study_plan_id', plan.id).range(a, b)) as any[];
   const cards = await selectAll<CardRow>((a, b) => ctx.sb.from('spaced_repetition_cards').select('*').eq('user_id', userId).range(a, b));
@@ -634,7 +645,7 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
     studyWeekdays: studyWeekdays(profile),
     questionsPerDay: profile.questions_per_day,
     methods: allMethods.map((m) => ({ id: m.id, code: m.code, activityType: m.activity_type, minutes: m.estimated_minutes })),
-    subjects: ps.map((s) => {
+    subjects: ps.filter((s) => !hiddenIds.has(s.subject_id)).map((s) => {
       const card = cardBy.get(s.subject_id);
       const methodIds = choices.get(s.subject_id) ?? enabledIds;
       return {
@@ -680,7 +691,7 @@ export async function reviewsDoneOn(ctx: Ctx, userId: string, day: ISODate) {
 export async function reviewPlan(ctx: Ctx, userId: string, subjects: PlanSubjectView[]) {
   const today = ctx.today();
   const profile = await loadProfile(ctx, userId);
-  const items = subjects.filter((s) => s.card?.nextReview).map((s) => ({
+  const items = subjects.filter((s) => s.card?.nextReview && !s.hidden).map((s) => ({
     id: s.subjectId, due: s.card!.nextReview!, score: s.dynamic.score, examDate: s.examDate, pinned: s.card!.pinned,
   }));
   return assignReviews(items, {
@@ -737,4 +748,18 @@ export async function moveReview(ctx: Ctx, subjectId: string, to: ISODate) {
   if (error) throw error;
   if (!(data as any[])?.length) throw badRequest('Este assunto ainda não tem revisões.');
   return { ok: true };
+}
+
+/** Tira (ou devolve) um assunto do planner. Continua nos conteúdos, fora de agenda, revisões e contas. */
+export async function setSubjectHidden(ctx: Ctx, subjectId: string, hidden: boolean) {
+  const userId = await currentUserId(ctx);
+  const { error } = hidden
+    ? await ctx.sb.from('hidden_subjects').upsert({ user_id: userId, subject_id: subjectId }, { onConflict: 'user_id,subject_id', ignoreDuplicates: true })
+    : await ctx.sb.from('hidden_subjects').delete().eq('user_id', userId).eq('subject_id', subjectId);
+  if (error) {
+    if (error.code === '42P01' || /hidden_subjects/.test(error.message ?? '')) throw badRequest('Falta rodar o arquivo supabase/parts/12_hidden_subjects.sql no SQL Editor.');
+    throw error;
+  }
+  await reflowSchedule(ctx, userId);
+  return { hidden };
 }

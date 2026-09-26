@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
+import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
 
@@ -287,7 +287,7 @@ route('GET', '/api/planner', async ({ ctx }) => {
   const t = ctx.today();
   const s = await loadPlanState(ctx, uid);
   if (!s) return { plan: null };
-  const overdueActivities = s.subjects.reduce((n, subj) => n + subj.checklist.filter((c) => !c.done && c.scheduledDate && c.scheduledDate < t).length, 0);
+  const overdueActivities = s.subjects.filter((x) => !x.hidden).reduce((n, subj) => n + subj.checklist.filter((c) => !c.done && c.scheduledDate && c.scheduledDate < t).length, 0);
   return { today: t, plan: s.plan, exams: s.exams, methods: s.methods, subjects: s.subjects, overdueActivities };
 });
 
@@ -417,4 +417,10 @@ route('POST', '/api/planner/subjects/:id/move', async ({ ctx, params, body }) =>
 route('POST', '/api/reviews/:subjectId/move', async ({ ctx, params, body }) => {
   const { to } = z.object({ to: isoDate }).parse(body);
   return moveReview(ctx, uuid.parse(params.subjectId), to);
+});
+
+// Tirar do planner / mostrar de novo (o assunto continua nos conteúdos)
+route('PUT', '/api/planner/subjects/:id/hidden', async ({ ctx, params, body }) => {
+  const { hidden } = z.object({ hidden: z.boolean() }).parse(body);
+  return setSubjectHidden(ctx, uuid.parse(params.id), hidden);
 });
