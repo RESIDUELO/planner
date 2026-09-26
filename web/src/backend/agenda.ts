@@ -274,7 +274,8 @@ export async function performanceView(ctx: Ctx) {
       subjectId: s.subjectId, name: s.name, area: s.area, rank: s.rank, status: s.status,
       answered: s.performance.answered, correct: s.performance.correct, accuracy: s.performance.accuracy,
       mastery: s.mastery.mastery, retrievability: s.card?.retrievability ?? null, nextReview: s.card?.nextReview ?? null,
-      estimatedQuestions: s.estimatedQuestions,
+      estimatedQuestions: s.estimatedQuestions, percentage: s.percentage,
     })),
+    examQuestions: (state.plan.summary?.exams?.[0]?.expectedTotalQuestions as number) ?? 100,
   };
 }

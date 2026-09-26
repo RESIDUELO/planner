@@ -149,8 +149,10 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await expect(dialog.getByRole('list', { name: 'Registros de questões' }).getByRole('listitem')).toHaveCount(1);
   await expect(dialog.getByText('Registro de questões excluído.')).toBeVisible();
   await expect(dialog.getByText('85%')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Domínio e memória' }).click();
-  await expect(dialog.getByText('82%')).toBeVisible();
+  // Quanto da prova: assunto concluído garante a fatia dele (6,3% = ~5 de 80 questões)
+  await dialog.getByRole('button', { name: 'Quanto da prova' }).click();
+  await expect(dialog.getByText('Assunto concluído: a fatia dele na prova conta como garantida.', { exact: false })).toBeVisible();
+  await expect(dialog.getByText('6,3%').first()).toBeVisible();
   await expect(dialog.getByText('Próxima revisão')).toBeVisible();
 });
 
@@ -172,6 +174,7 @@ test('TESTES 15, 17–19 — calendário e persistência após fechar o navegado
   await p2.goto('desempenho');
   await expect(p2.getByText('85%', { exact: true })).toBeVisible();
   await expect(p2.getByText('de acertos em 20 questões')).toBeVisible();
+  await expect(p2.getByText('Você já garantiu')).toBeVisible();
   await again.close();
 });
 

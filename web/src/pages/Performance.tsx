@@ -41,6 +41,7 @@ export function PerformancePage() {
   const withEnough = d.subjects.filter((s: any) => s.answered >= 5).sort((a: any, b: any) => a.accuracy - b.accuracy);
   const weakest = withEnough.length >= 2 ? withEnough[0] : null;
   const studied = d.subjects.filter((s: any) => s.status === 'studied').length;
+  const secured = Math.min(1, d.subjects.filter((s: any) => s.status === 'studied').reduce((t: number, s: any) => t + (s.percentage ?? 0), 0));
   const withQuestions = d.subjects.filter((s: any) => s.answered > 0);
   const reviews = d.ratings.reduce((t: number, r: any) => t + r.n, 0);
 
@@ -96,6 +97,15 @@ export function PerformancePage() {
         <p className="mt-3 text-[15px] text-ink-2">{studied} de {d.subjects.length} assuntos concluídos · {reviews} revisões feitas</p>
       </section>
 
+      <section className="mt-16 animate-in">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[17px] text-ink-2">Você já garantiu</p>
+          <p className="tabular font-display text-[34px] leading-none">{pct(secured)}</p>
+        </div>
+        <Progress className="mt-4" value={secured} />
+        <p className="mt-3 text-[15px] text-ink-2">da prova · ≈ {num1(secured * d.examQuestions)} de {d.examQuestions} questões, somando o quanto cada assunto concluído costuma cair</p>
+      </section>
+
       <div className="mt-16 border-t border-line">
         <Disclosure summary="Por grande área" className="border-b border-line">
           <div className="space-y-5">
@@ -117,7 +127,7 @@ export function PerformancePage() {
                   <button onClick={() => setOpen(s.subjectId)} className="flex w-full items-center gap-4 py-3 text-left transition-opacity hover:opacity-70">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px]">{s.name}</span>
-                      <span className="block text-[13px] text-ink-3">{s.correct}/{s.answered} · domínio {pct(s.mastery, 0)} · {num1(s.estimatedQuestions * s.mastery)} de {num1(s.estimatedQuestions)} questões</span>
+                      <span className="block text-[13px] text-ink-3">{s.correct}/{s.answered} · vale {pct(s.percentage)} da prova{s.status === 'studied' ? ' · garantido' : ''}</span>
                     </span>
                     <span className="tabular text-[17px]">{pct(s.accuracy, 0)}</span>
                   </button>

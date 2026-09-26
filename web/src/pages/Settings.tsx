@@ -134,7 +134,7 @@ export function SettingsPage() {
               <p><span className="text-ink">Ordem dos assuntos.</span> Primeiro a regularidade: os assuntos que caíram em todas as provas desde que apareceram (sempre olhando pelo menos as 3 últimas); depois a quantidade de questões. Com várias provas, a principal e a mais próxima pesam mais.</p>
               <p><span className="text-ink">Prioridade de hoje.</span> {algo.data && Object.entries(algo.data.priority.weights).map(([k, v]) => `${({ historical: 'histórico', proximity: 'proximidade da prova', forgetting: 'esquecimento', performance: 'desempenho' } as any)[k]} ${Math.round((v as number) * 100)}%`).join(', ')}.</p>
               <p><span className="text-ink">Revisões.</span> Modelo próprio inspirado no FSRS. Ficam mais frequentes conforme a prova se aproxima e nunca caem no dia da prova ou depois.</p>
-              <p><span className="text-ink">Questões potencialmente dominadas.</span> Questões esperadas de cada assunto × seu domínio estimado. É uma estimativa, não uma promessa.</p>
+              <p><span className="text-ink">Quanto da prova você garantiu.</span> Soma de quanto cada assunto concluído costuma cair na prova (por exemplo, um assunto que cai 2% = 2 de 100 questões).</p>
               <p><span className="text-ink">Base de dados.</span> Somente provas e questões cadastradas pela administração. Nada é buscado na internet.</p>
             </div>
           </Disclosure>

@@ -62,6 +62,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
   const d = q.data;
   const s = d?.subject;
   const tpl = s?.perExam?.[0]?.template;
+  const examQuestions: number = d?.exams?.[0]?.expectedTotalQuestions ?? 100;
   const today = todayBR();
   const busy = toggle.isPending || complete.isPending || activities.isPending;
   const doneCount = s?.checklist.filter((c: any) => c.done).length ?? 0;
@@ -198,17 +199,17 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
                   <p className="mt-5 text-[13px] text-ink-3">Esperadas na próxima prova: {num1(s.estimatedQuestions)} questões · média de {num1(s.annualAverage)} por edição.</p>
                 </Disclosure>
 
-                <Disclosure summary="Domínio e memória" className="border-b border-line">
+                <Disclosure summary="Quanto da prova" className="border-b border-line">
                   <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-[15px]">
-                    <div><dt className="text-ink-2">Domínio estimado</dt><dd className="tabular font-display text-[30px]">{pct(s.mastery.mastery, 0)}</dd></div>
-                    <div><dt className="text-ink-2">Questões dominadas</dt><dd className="tabular font-display text-[30px]">{num1(s.estimatedQuestions * s.mastery.mastery)} <span className="font-sans text-[14px] text-ink-3">de {num1(s.estimatedQuestions)}</span></dd></div>
+                    <div><dt className="text-ink-2">Vale na prova</dt><dd className="tabular font-display text-[30px]">{pct(s.percentage)} <span className="font-sans text-[14px] text-ink-3">≈ {num1(s.percentage * examQuestions)} questões</span></dd></div>
+                    <div><dt className="text-ink-2">Você garantiu</dt><dd className="tabular font-display text-[30px]">{studied ? pct(s.percentage) : '0%'}</dd></div>
                     {s.card && <>
                       <div><dt className="text-ink-2">Lembrança hoje</dt><dd className="tabular">{pct(s.card.retrievability, 0)}</dd></div>
                       <div><dt className="text-ink-2">Estabilidade</dt><dd className="tabular">{num1(s.card.stability)} dias</dd></div>
                       <div><dt className="text-ink-2">Último estudo</dt><dd>{s.lastStudiedAt ? relativeDays(-daysBetween(today, isoBR(s.lastStudiedAt))) : '—'}</dd></div>
                     </>}
                   </dl>
-                  <p className="mt-4 text-[13px] text-ink-3">Estimativa, não promessa: acerto suavizado ((acertos + {d.mastery.priorWeight}×50%) / (questões + {d.mastery.priorWeight})) × probabilidade atual de lembrar.</p>
+                  <p className="mt-4 text-[13px] text-ink-3">{studied ? 'Assunto concluído: a fatia dele na prova conta como garantida.' : 'Conclua o assunto para garantir a fatia dele na prova.'} Em média, caiu {pct(s.percentage)} das questões nas provas analisadas.</p>
                 </Disclosure>
 
                 <Disclosure summary="Prioridade de hoje" className="border-b border-line">
