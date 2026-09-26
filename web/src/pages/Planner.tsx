@@ -14,7 +14,8 @@ import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu,
 import { AgendaRow, TaskEditor } from '../components/Agenda';
 import { AddSubjectSheet } from '../components/AddSubject';
 import { longDate, usePlannerTasks, weekdayLong, type AgendaTask } from '../lib/agenda';
-import { FocusWidget, PerformanceStrip, SubjectLibrary } from '../components/Workspace';
+import { PerformanceStrip, SubjectLibrary } from '../components/Workspace';
+import { MonthCalendar, monthStart } from '../components/MonthCalendar';
 import { SubjectModal, useInvalidateStudy } from '../components/SubjectModal';
 import { addDays, weekday } from '../../../shared/dates';
 
@@ -280,6 +281,8 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   const exam = data.exams.find((e: any) => e.is_primary) ?? data.exams[0];
   const left = exam?.exam_date ? daysBetween(exam.exam_date, todayBR()) : null;
   const [adding, setAdding] = useState<string | null>(null);
+  // Dia escolhido no calendário ao lado: a semana (ou o dia) vai até ele
+  const [jump, setJump] = useState({ date: todayBR(), n: 0 });
   // Sem prova: planner montado à mão (a prova e o cronograma automático são opcionais)
   const noExam = !data.exams.length;
   const eyebrow: ReactNode = noExam
@@ -308,7 +311,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   return (
     <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-cols-[minmax(0,1fr)_300px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
       <section aria-label="Semana" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
-        <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} onAdd={setAdding} />
+        <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} onAdd={setAdding} jump={jump} />
       </section>
       <aside aria-label="Estudo" className="no-scrollbar min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-10 fit:space-y-0 fit:overflow-y-auto">
         <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} fit={desktop} />
@@ -318,7 +321,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
             Escolher prova para montar cronograma
           </button>
         )}
-        <FocusWidget />
+        <PlannerCalendar dnd={dnd} picked={jump.date} onPick={(date) => setJump({ date, n: jump.n + 1 })} />
         <PerformanceStrip />
       </aside>
 
@@ -327,6 +330,30 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       {sheet === 'multi' && <Sheet open onClose={() => setSheet(null)} wide title="Tabela combinada"><MultiTable data={data} onOpen={(id) => { setSheet(null); setOpen(id); }} /></Sheet>}
       {open && <SubjectModal subjectId={open} onClose={() => setOpen(null)} />}
       {adding && <AddSubjectSheet date={adding} data={data} onClose={() => setAdding(null)} />}
+    </div>
+  );
+}
+
+/** Calendário do mês (igual ao da Agenda): escolhe o dia e recebe aulas, revisões e assuntos arrastados. */
+function PlannerCalendar({ dnd, picked, onPick }: { dnd: DnD; picked: string; onPick: (d: string) => void }) {
+  const [month, setMonth] = useState(monthStart(picked));
+  useEffect(() => setMonth(monthStart(picked)), [picked]);
+  const cell = (d: string) => {
+    const ok = !!dnd.drag && d >= dnd.today && d !== dnd.drag.from;
+    const key = `cal|${d}`;
+    return {
+      props: {
+        'data-drop': ok ? 'on' : undefined,
+        onDragOver: (e: React.DragEvent) => { if (!ok) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dnd.over !== key) dnd.setOver(key); },
+        onDragLeave: (e: React.DragEvent) => { if (!(e.currentTarget as Node).contains(e.relatedTarget as Node)) dnd.setOver(null); },
+        onDrop: (e: React.DragEvent) => { e.preventDefault(); if (ok) dnd.drop(d); },
+      },
+      circle: ok && dnd.over === key ? 'bg-fill ring-1 ring-ink' : undefined,
+    };
+  };
+  return (
+    <div className="shrink-0 animate-in" data-testid="planner-calendar">
+      <MonthCalendar month={month} day={picked} today={dnd.today} onPick={onPick} onMonth={setMonth} cell={cell} />
     </div>
   );
 }
@@ -451,7 +478,7 @@ function useReviewDone() {
   });
 }
 
-function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, onAdd }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean; dnd: DnD; eyebrow: ReactNode; menu: ReactNode; desktop?: boolean; onAdd: (date: string) => void }) {
+function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, onAdd, jump }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean; dnd: DnD; eyebrow: ReactNode; menu: ReactNode; desktop?: boolean; onAdd: (date: string) => void; jump: { date: string; n: number } }) {
   const today = todayBR();
   // DIA | SEMANA: a mesma semana (mesmos dados), vista um dia por vez ou inteira
   const [mode, setModeState] = useState<ViewMode>(() => { try { return localStorage.getItem(VIEW_KEY) === 'dia' ? 'dia' : 'semana'; } catch { return 'semana'; } });
@@ -466,6 +493,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, o
     setModeState(m);
     try { localStorage.setItem(VIEW_KEY, m); } catch { /* ignore */ }
   };
+  useEffect(() => { if (jump.n) { setDay(jump.date); setFrom(mondayOf(jump.date)); } }, [jump.n]);
   const to = addDays(from, 6);
   const week = useQuery({ queryKey: ['week', from], queryFn: () => api.get(`/api/reviews/calendar?from=${from}&to=${to}`) });
   const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });

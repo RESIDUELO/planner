@@ -27,7 +27,7 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
     const m = await page.evaluate(() => {
       const d = document.documentElement;
       const rect = (sel: string) => document.querySelector(sel)?.getBoundingClientRect();
-      const regions = ['[aria-label="Semana"]', 'section[aria-label="Assuntos"]', 'section[aria-label="Foco"]', 'section[aria-label="Desempenho"]', 'header']
+      const regions = ['[aria-label="Semana"]', 'section[aria-label="Assuntos"]', 'section[aria-label="Calendário"]', 'section[aria-label="Desempenho"]', 'header']
         .map((s) => ({ s, r: rect(s) }));
       // Elementos que rolam por dentro (além da lista de Assuntos e das colunas-salvaguarda dos dias)
       const scrollers = [...document.querySelectorAll<HTMLElement>('body *')].filter((el) => {
@@ -45,7 +45,7 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
     // Sem rolagem vertical nem horizontal da página
     expect(m.scrollH, `${width}x${height} altura`).toBeLessThanOrEqual(m.innerH);
     expect(m.scrollW, `${width}x${height} largura`).toBeLessThanOrEqual(m.innerW);
-    // Cabeçalho, Semana, Assuntos, Foco e Desempenho visíveis de uma vez
+    // Cabeçalho, Semana, Assuntos, Calendário e Desempenho visíveis de uma vez
     for (const r of m.regions) {
       expect(r.top, `${width}x${height} ${r.s}`).toBeGreaterThanOrEqual(0);
       expect(r.bottom, `${width}x${height} ${r.s}`).toBeLessThanOrEqual(m.innerH + 0.5);

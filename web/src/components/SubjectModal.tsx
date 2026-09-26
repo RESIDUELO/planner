@@ -7,6 +7,7 @@ import { areaShort } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
 import { Advanced, Button, CheckCircle, Disclosure, Note, Sheet, Spinner, Tint } from './ui';
 import { ReviewButtons } from './ReviewButtons';
+import { weekdayLong } from '../lib/agenda';
 
 const RATING_LABEL: Record<string, string> = { again: 'Errei', hard: 'Difícil', good: 'Bom', easy: 'Fácil' };
 
@@ -78,6 +79,16 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
     onSuccess: () => { invalidate(); onClose(); }, onError,
   });
 
+  // Dia da aula (atividades que faltam) e da próxima revisão: dá para trocar aqui mesmo
+  const reschedule = useMutation({
+    mutationFn: ({ kind, to }: { kind: 'lesson' | 'review'; to: string }) => (kind === 'lesson'
+      ? api.post(`/api/planner/subjects/${subjectId}/schedule`, { to })
+      : api.post(`/api/reviews/${subjectId}/move`, { to })),
+    onMutate: () => setMsg(null),
+    onSuccess: (_r, { kind, to }) => { invalidate(); setMsg({ tone: 'positive', text: `${kind === 'lesson' ? 'Aula' : 'Revisão'} marcada para ${weekdayLong(to)}, ${shortDate(to, false)}.` }); },
+    onError,
+  });
+
   const d = q.data;
   const s = d?.subject;
   const tpl = s?.perExam?.[0]?.template;
@@ -120,6 +131,14 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
             <p className="mt-3 text-[14px] text-ink-2" data-testid="subject-status">
               {studied ? <span className="text-ink">✓ Concluído</span> : `${doneCount} de ${s.checklist.length} ${s.checklist.length === 1 ? 'atividade' : 'atividades'}`}
             </p>
+            {!s.hidden && (!studied || s.card?.nextReview) && (
+              <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3" data-testid="subject-dates">
+                {!studied && <DateField label="Aula" value={s.nextScheduledDate} min={today} disabled={reschedule.isPending}
+                  onChange={(to) => reschedule.mutate({ kind: 'lesson', to })} />}
+                {s.card?.nextReview && <DateField label="Próxima revisão" value={s.card.nextReview} min={today} disabled={reschedule.isPending}
+                  onChange={(to) => reschedule.mutate({ kind: 'review', to })} />}
+              </div>
+            )}
           </header>
 
           {s.hidden && (
@@ -174,8 +193,9 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
           {s.card && !(s.card.nextReview && s.card.nextReview <= today) && (
             <div className="mt-8">
               <p className="text-[14px] text-ink-2">
-                ↻ Próxima revisão: <span className="text-ink">{s.card.nextReview ? `${shortDate(s.card.nextReview, false)} (${relativeDays(daysBetween(s.card.nextReview, today))})` : 'nenhuma antes da prova'}</span>
-                {s.card.nextReview && !early && <> · <button className="text-ink underline underline-offset-4" onClick={() => setEarly(true)}>Adiantar revisão</button></>}
+                {s.card.nextReview
+                  ? !early && <button className="text-ink underline underline-offset-4" onClick={() => setEarly(true)}>↻ Adiantar revisão (fazer agora)</button>
+                  : '↻ Próxima revisão: nenhuma antes da prova'}
               </p>
               {early && <div className="mt-4 animate-in"><p className="mb-3 text-[15px]">Como foi lembrar deste assunto?</p><ReviewButtons subjectId={s.subjectId} onDone={(t) => { setEarly(false); setMsg({ tone: 'positive', text: t }); }} /></div>}
             </div>
@@ -322,5 +342,21 @@ function TemplateInfo({ t }: { t: any }) {
         <p className="mt-1 text-ink-2">Questões da UNOESTE: {[...byYear].map(([y, ns]) => `${y}: ${ns.map((n) => `Q${n}`).join(', ')}`).join(' · ')}</p>
       )}
     </section>
+  );
+}
+
+/** Data com o dia da semana; toque para trocar. */
+function DateField({ label, value, min, disabled, onChange }: { label: string; value: string | null; min: string; disabled?: boolean; onChange: (d: string) => void }) {
+  return (
+    <label className="relative block cursor-pointer">
+      <span className="block text-[10.5px] font-medium tracking-[0.18em] text-ink-2 uppercase">{label}</span>
+      <span className={clsx('mt-1 block border-b border-line pb-1 text-[17px] transition hover:border-ink', !value && 'text-ink-3', disabled && 'opacity-50')}>
+        {value ? <>{weekdayLong(value)}, {shortDate(value, false)}{value < min && <span className="ml-2 text-[12px] text-today">atrasada</span>}</> : 'sem dia · escolher'}
+      </span>
+      <input type="date" aria-label={`${label} - dia`} min={min} value={value ?? ''} disabled={disabled}
+        onChange={(e) => { if (e.target.value && e.target.value >= min && e.target.value !== value) onChange(e.target.value); }}
+        onClick={(e) => { try { (e.currentTarget as any).showPicker?.(); } catch { /* ignore */ } }}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+    </label>
   );
 }

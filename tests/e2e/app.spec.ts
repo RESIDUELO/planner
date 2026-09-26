@@ -125,9 +125,10 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Observações da semana' })).toHaveValue('Focar mais em cardiologia.');
 
-  // Workspace: semana, assuntos, foco e desempenho na mesma tela; sem barra de navegação
+  // Workspace: semana, assuntos, calendário e desempenho na mesma tela; sem barra de navegação
   await expect(page.getByRole('region', { name: 'Assuntos' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Foco' })).toBeVisible();
+  await expect(page.getByTestId('planner-calendar').getByRole('region', { name: 'Calendário' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Foco' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Provas' })).toHaveCount(0);
 
   // Pomodoro a partir da tarefa: abre o foco por cima, sem sair da página
@@ -259,6 +260,24 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(dropDay).toContainText(libName, { timeout: 800 });
   await page.unroute('**/rest/v1/**', slow);
   await expect(dropDay).toContainText(libName);
+
+  // Soltar no calendário ao lado: vai para aquele dia (o calendário só tem os números)
+  const cal = page.getByTestId('planner-calendar');
+  const calDay = inDays(mon + 9);
+  if (!(await cal.locator(`[data-date="${calDay}"]`).count())) await cal.getByRole('button', { name: 'Próximo mês' }).click();
+  const libItem2 = page.getByTestId('library-item').filter({ hasNotText: name }).filter({ hasNotText: libName }).nth(3);
+  const libName2 = (await libItem2.locator('button span').first().textContent())!.trim();
+  await libItem2.dragTo(cal.locator(`[data-date="${calDay}"]`));
+  await expect(page.getByText(`✓ ${libName2} adicionado a`, { exact: false })).toBeVisible();
+  await expect(cal).not.toContainText(libName2);
+  // Na folha do assunto aparece o dia da aula, e dá para trocar ali
+  await page.getByTestId('library-item').filter({ hasText: libName2 }).locator('button').first().click();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet.getByTestId('subject-dates')).toContainText(`${Number(calDay.slice(8))}`);
+  await sheet.getByLabel('Aula - dia').fill(inDays(mon + 1));
+  await expect(sheet.getByText('Aula marcada para', { exact: false })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(target).toContainText(libName2);
 
   // Excluir do planner: some da semana, continua nos assuntos
   await target.getByTestId('task').filter({ hasText: name }).getByTestId('task-name').click();

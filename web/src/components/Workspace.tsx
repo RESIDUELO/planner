@@ -7,14 +7,13 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { Maximize2, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { api } from '../lib/api';
 import { areaShort, tintFor } from '../lib/areas';
 import { int, pct, shortDate, todayBR } from '../lib/format';
-import { clock, usePomodoro } from '../lib/pomodoro';
 import { dragProps, type DnD } from '../pages/Planner';
 import { PerformancePage } from '../pages/Performance';
-import { Button, Sheet } from './ui';
+import { Sheet } from './ui';
 
 function AreaHead({ title, trailing }: { title: string; trailing?: React.ReactNode }) {
   return (
@@ -79,43 +78,9 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
   );
 }
 
-// ---------------------------------------------------------------- Foco
-export function FocusWidget() {
-  const p = usePomodoro();
-  const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });
-  const next = (t.data?.newSubjects ?? []).find((s: any) => !s.overflow) ?? t.data?.newSubjects?.[0];
-  const subject = p.subject ?? (next ? { id: next.subjectId, name: next.name, area: next.area } : null);
-  const active = p.phase !== 'idle';
-  const progress = active ? 1 - p.left / p.total : 0;
-
-  return (
-    <section aria-label="Foco" className={clsx('shrink-0 animate-in transition-all duration-300 ease-apple', active && 'rounded-[18px] border border-line bg-surface p-5')}>
-      <AreaHead title="Foco" trailing={
-        <button onClick={() => p.setExpanded(true)} aria-label="Abrir foco" className="rounded-full p-1 text-ink-2 hover:text-ink"><Maximize2 className="h-4 w-4" strokeWidth={1.5} /></button>
-      } />
-      <div className="mt-4 flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className={clsx('tabular font-display leading-none transition-all duration-300', active ? 'text-[64px]' : 'text-[52px]')} role="timer">{clock(p.left)}</p>
-          <p className="mt-2 truncate text-[13px] text-ink-2 fit:mt-1">{p.phase === 'break' ? 'Pausa' : subject?.name ?? 'Tempo de foco'}</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          {p.phase === 'idle' && <Button size="sm" onClick={() => p.start({ subject })}>Iniciar</Button>}
-          {active && (p.running ? <Button size="sm" onClick={p.pause}>Pausar</Button> : <Button size="sm" onClick={p.resume}>Continuar</Button>)}
-          {active && <button onClick={p.reset} className="text-[12px] text-ink-3 hover:text-ink">reiniciar</button>}
-        </div>
-      </div>
-      {active && <div className="mt-4 h-[3px] w-full overflow-hidden rounded-full bg-fill"><div className="h-full rounded-full bg-ink transition-[width] duration-300" style={{ width: `${progress * 100}%` }} /></div>}
-      <p className="mt-3 text-[11px] text-ink-3">{p.focusMin}/{p.breakMin} min · {p.done.n > 0 ? `${p.done.n} hoje · ` : ''}<button onClick={() => p.setExpanded(true)} className="underline underline-offset-4 hover:text-ink">trocar</button></p>
-    </section>
-  );
-}
-
 // ---------------------------------------------------------------- Desempenho
-const hours = (min: number) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`);
-
 export function PerformanceStrip() {
   const q = useQuery({ queryKey: ['performance'], queryFn: () => api.get('/api/performance') });
-  const p = usePomodoro();
   const [open, setOpen] = useState(false);
   const d = q.data;
   if (!d?.hasPlan) return null;
@@ -123,21 +88,23 @@ export function PerformanceStrip() {
   const correct = d.areas.reduce((t: number, a: any) => t + a.correct, 0);
   const studied = d.subjects.filter((s: any) => s.status === 'studied');
   const secured = Math.min(1, studied.reduce((t: number, s: any) => t + (s.percentage ?? 0), 0));
+  const total = d.subjects.filter((s: any) => !s.hidden).length;
   const stats = [
     { label: 'acertos', value: answered ? pct(correct / answered, 0) : '-' },
     { label: 'questões', value: int(answered) },
-    { label: 'de foco', value: hours(p.focusMinutesTotal ?? 0) },
-    { label: 'assuntos concluídos', value: String(studied.length) },
+    { label: 'assuntos concluídos', value: <>{studied.length}<span className="text-ink-3">/{total}</span></> },
   ];
   return (
     <section aria-label="Desempenho" className="shrink-0 animate-in">
       <AreaHead title="Desempenho" trailing={<button onClick={() => setOpen(true)} className="text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">detalhes</button>} />
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+      <p className="mt-4 flex items-baseline gap-2 text-[13px] text-ink-2" data-testid="secured">
+        <span className="tabular font-display text-[24px] leading-none text-ink">{pct(secured)}</span> da prova garantido
+      </p>
+      <dl className="mt-4 grid grid-cols-[auto_auto_1fr] gap-x-6">
         {stats.map((s) => (
-          <div key={s.label}><dd className="tabular font-display text-[26px] leading-none">{s.value}</dd><dt className="mt-1 text-[11px] text-ink-2">{s.label}</dt></div>
+          <div key={s.label} className="min-w-0"><dd className="tabular font-display text-[20px] leading-none">{s.value}</dd><dt className="mt-1 text-[11px] text-ink-2">{s.label}</dt></div>
         ))}
       </dl>
-      <p className="mt-4 text-[12px] text-ink-2"><span className="text-ink">{pct(secured)}</span> da prova garantidos</p>
       {open && <Sheet open onClose={() => setOpen(false)} wide title="Desempenho"><PerformancePage embedded /></Sheet>}
     </section>
   );
