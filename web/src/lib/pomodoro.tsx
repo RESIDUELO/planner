@@ -17,10 +17,12 @@ export interface PomodoroState {
   subject: { id: string; name: string; area?: string | null } | null;
   /** Pomodoros concluídos hoje. */
   done: { date: string; n: number };
+  /** Total de minutos de foco concluídos (neste aparelho). */
+  focusMinutesTotal: number;
 }
 
 const KEY = 'rp-pomodoro';
-const initial: PomodoroState = { phase: 'idle', focusMin: 25, breakMin: 5, endAt: null, pausedLeft: null, subject: null, done: { date: '', n: 0 } };
+const initial: PomodoroState = { phase: 'idle', focusMin: 25, breakMin: 5, endAt: null, pausedLeft: null, subject: null, done: { date: '', n: 0 }, focusMinutesTotal: 0 };
 
 function load(): PomodoroState {
   try {
@@ -57,6 +59,9 @@ interface Api extends PomodoroState {
   skip: () => void;
   setPreset: (focusMin: number, breakMin: number) => void;
   setSubject: (s: PomodoroState['subject']) => void;
+  /** Visualização focada aberta por cima da tela (sem trocar de página). */
+  expanded: boolean;
+  setExpanded: (v: boolean) => void;
 }
 
 const Ctx = createContext<Api | null>(null);
@@ -64,6 +69,7 @@ const Ctx = createContext<Api | null>(null);
 export function PomodoroProvider({ children }: { children: ReactNode }) {
   const [st, setSt] = useState<PomodoroState>(load);
   const [now, setNow] = useState(() => Date.now());
+  const [expanded, setExpanded] = useState(false);
   const stRef = useRef(st);
   stRef.current = st;
 
@@ -82,7 +88,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       if (s.phase === 'focus') {
         const today = todayBR();
         const n = s.done.date === today ? s.done.n + 1 : 1;
-        return { ...s, phase: 'break', endAt: Date.now() + s.breakMin * 60_000, pausedLeft: null, done: { date: today, n } };
+        return { ...s, phase: 'break', endAt: Date.now() + s.breakMin * 60_000, pausedLeft: null, done: { date: today, n }, focusMinutesTotal: (s.focusMinutesTotal ?? 0) + s.focusMin };
       }
       return { ...s, phase: 'idle', endAt: null, pausedLeft: null };
     });
@@ -96,7 +102,8 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const resume = useCallback(() => { setSt((s) => (s.pausedLeft != null ? { ...s, endAt: Date.now() + s.pausedLeft * 1000, pausedLeft: null } : s)); setNow(Date.now()); }, []);
   const reset = useCallback(() => setSt((s) => ({ ...s, phase: 'idle', endAt: null, pausedLeft: null })), []);
   const skip = useCallback(() => setSt((s) => (s.phase === 'focus'
-    ? { ...s, phase: 'break', endAt: Date.now() + s.breakMin * 60_000, pausedLeft: null }
+    ? { ...s, phase: 'break', endAt: Date.now() + s.breakMin * 60_000, pausedLeft: null,
+        focusMinutesTotal: (s.focusMinutesTotal ?? 0) + Math.max(0, Math.round((s.focusMin * 60 - (s.endAt ? (s.endAt - Date.now()) / 1000 : s.pausedLeft ?? s.focusMin * 60)) / 60)) }
     : { ...s, phase: 'idle', endAt: null, pausedLeft: null })), []);
   const setPreset = useCallback((focusMin: number, breakMin: number) => setSt((s) => ({ ...s, focusMin, breakMin, ...(s.phase === 'idle' ? {} : { phase: 'idle', endAt: null, pausedLeft: null }) })), []);
   const setSubject = useCallback((subject: PomodoroState['subject']) => setSt((s) => ({ ...s, subject })), []);
@@ -105,8 +112,8 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     const total = (st.phase === 'break' ? st.breakMin : st.focusMin) * 60;
     const left = st.endAt ? Math.max(0, Math.ceil((st.endAt - now) / 1000)) : st.pausedLeft ?? total;
     const done = st.done.date === todayBR() ? st.done : { date: todayBR(), n: 0 };
-    return { ...st, done, total, left, running: !!st.endAt, start, pause, resume, reset, skip, setPreset, setSubject };
-  }, [st, now, start, pause, resume, reset, skip, setPreset, setSubject]);
+    return { ...st, done, total, left, running: !!st.endAt, start, pause, resume, reset, skip, setPreset, setSubject, expanded, setExpanded };
+  }, [st, now, start, pause, resume, reset, skip, setPreset, setSubject, expanded]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

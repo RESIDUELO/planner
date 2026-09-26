@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
 import { dateTimeBR, daysBetween, isoBR, LEVEL_TEXT, minutes, num1, pct, relativeDays, shortDate, todayBR } from '../lib/format';
@@ -23,7 +22,6 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
   const q = useQuery({ queryKey: ['subject', subjectId], queryFn: () => api.get(`/api/planner/subjects/${subjectId}`) });
   const invalidate = useInvalidateStudy();
   const pomodoro = usePomodoro();
-  const nav = useNavigate();
   const [msg, setMsg] = useState<{ tone: 'positive' | 'negative' | 'neutral'; text: string; undoId?: string } | null>(null);
   const [practice, setPractice] = useState({ questions: '', correct: '' });
   const [early, setEarly] = useState(false);
@@ -115,7 +113,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
           </ul>
 
           <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <Button variant="secondary" onClick={() => { pomodoro.start({ subject: { id: s.subjectId, name: s.name, area: s.area } }); onClose(); nav('/foco'); }}>
+            <Button variant="secondary" onClick={() => { pomodoro.start({ subject: { id: s.subjectId, name: s.name, area: s.area } }); onClose(); pomodoro.setExpanded(true); }}>
               Iniciar Pomodoro
             </Button>
             <Button variant="plain" size="sm" loading={complete.isPending} onClick={() => complete.mutate(!studied)}>

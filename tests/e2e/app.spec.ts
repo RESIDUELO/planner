@@ -86,16 +86,23 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await expect(today).not.toContainText('min');
 
   // Adiantar: uma tarefa de outro dia concluída hoje aparece hoje, como feita
+  // (procura nesta semana e, se não houver mais dias de aula nela, na próxima)
   let future = null as null | { name: string };
-  for (let n = 1; n <= 4 && !future; n++) {
+  for (let n = 1; n <= 9 && !future; n++) {
+    if (!(await page.getByTestId(`day-${inDays(n)}`).count())) {
+      await page.getByRole('button', { name: 'Próxima semana' }).click();
+      await expect(page.getByTestId(`day-${inDays(n)}`)).toBeVisible();
+    }
     const t = page.getByTestId(`day-${inDays(n)}`).getByTestId('task').first();
     if (await t.count()) {
       const name = (await t.locator('button').first().locator('span').nth(1).textContent())!.trim();
       await t.getByRole('checkbox').click();
+      await expect(t.getByRole('checkbox')).toHaveCount(0, { timeout: 5000 }).catch(() => {});
       future = { name };
     }
   }
   expect(future).not.toBeNull();
+  if (await page.getByRole('button', { name: 'voltar para esta semana' }).count()) await page.getByRole('button', { name: 'voltar para esta semana' }).click();
   const moved = today.getByTestId('task').filter({ hasText: future!.name });
   await expect(moved.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
 
@@ -107,18 +114,28 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Observações da semana' })).toHaveValue('Focar mais em cardiologia.');
 
-  // Pomodoro a partir da tarefa, opcional e independente
-  await page.getByTestId(`day-${inDays(0)}`).getByRole('button', { name: 'Iniciar Pomodoro — Saúde do Trabalhador' }).click();
-  await expect(page).toHaveURL(/\/foco$/);
-  await expect(page.getByRole('timer')).toHaveText(/^2[45]:\d\d$/);
-  await expect(page.getByRole('button', { name: 'Saúde do Trabalhador' })).toBeVisible();
-  await page.getByRole('button', { name: 'Pausar' }).click();
-  await page.getByRole('tab', { name: '50/10' }).click();
-  await expect(page.getByRole('timer')).toHaveText('50:00');
-  await page.getByRole('tab', { name: '25/5' }).click();
-  await page.goto('planner');
+  // Workspace: semana, assuntos, foco e desempenho na mesma tela; sem barra de navegação
+  await expect(page.getByRole('region', { name: 'Assuntos' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Foco' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Provas' })).toHaveCount(0);
 
-  await page.getByRole('tab', { name: 'Assuntos' }).click();
+  // Pomodoro a partir da tarefa: abre o foco por cima, sem sair da página
+  await page.getByTestId(`day-${inDays(0)}`).getByRole('button', { name: 'Iniciar Pomodoro — Saúde do Trabalhador' }).click();
+  const focus = page.getByRole('dialog', { name: 'Foco' });
+  await expect(focus).toBeVisible();
+  await expect(page).toHaveURL(HOME);
+  await expect(focus.getByRole('timer')).toHaveText(/^2[45]:\d\d$/);
+  await expect(focus.getByRole('button', { name: 'Saúde do Trabalhador' })).toBeVisible();
+  await focus.getByRole('button', { name: 'Pausar' }).click();
+  await focus.getByRole('tab', { name: '50/10' }).click();
+  await expect(focus.getByRole('timer')).toHaveText('50:00');
+  await focus.getByRole('tab', { name: '25/5' }).click();
+  await page.keyboard.press('Escape');
+  await expect(focus).toHaveCount(0);
+
+  // Lista completa de assuntos pelo menu da semana
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  await page.getByRole('menuitem', { name: 'Todos os assuntos' }).click();
   const card = page.getByTestId('subject-card').first();
   await expect(card).toContainText('Saúde do Trabalhador');
   await card.click();
@@ -213,12 +230,28 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(target).toContainText(name);
   await expect(page.getByTestId(`day-${inDays(mon)}`).getByTestId('col-subjects')).not.toContainText(name);
 
+  // Arrastar da lista de Assuntos para um dia da semana
+  const libItem = page.getByTestId('library-item').filter({ hasNotText: name }).nth(8);
+  const libName = (await libItem.locator('button span').first().textContent())!.trim();
+  const dropDay = page.getByTestId(`day-${inDays(mon + 2)}`).getByTestId('col-subjects');
+  await libItem.dragTo(dropDay);
+  await expect(page.getByText(`✓ ${libName} adicionado a`, { exact: false })).toBeVisible();
+  await expect(dropDay).toContainText(libName);
+
   // Excluir do planner: some da semana, continua nos assuntos
   await target.getByTestId('task').filter({ hasText: name }).locator('button').first().click();
   await page.getByRole('dialog').getByRole('button', { name: 'Excluir do planner' }).click();
   await expect(page.getByRole('dialog').getByText('Fora do planner:', { exact: false })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(target).not.toContainText(name);
+
+  // Provas, Revisões e Configurações ficam no menu do perfil
+  await page.getByRole('button', { name: 'Perfil' }).click();
+  for (const item of ['Provas', 'Revisões', 'Configurações', 'Sair']) await expect(page.getByRole('menuitem', { name: item })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Revisões' }).click();
+  await expect(page).toHaveURL(/\/revisoes$/);
+  await page.getByRole('link', { name: '← Voltar ao planner' }).click();
+  await expect(page).toHaveURL(HOME);
 
   // Zerar o perfil: volta ao início, como uma conta nova
   await page.goto('configuracoes');

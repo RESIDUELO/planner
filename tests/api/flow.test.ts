@@ -348,9 +348,11 @@ describe('Planner dinâmico: fila de estudo, fila de revisões e observações',
     await student.ok('POST', `/api/planner/subjects/${x}/complete`, { done: true });
     const after = await student.ok('GET', `/api/reviews/calendar?from=${from}&to=${to}`);
     // Registrada hoje, concluída; não continua no dia original
-    const today = after.days.find((d: any) => d.date === TODAY);
-    expect(today.newSubjects.find((n: any) => n.subjectId === x)).toMatchObject({ done: true });
-    expect(after.days.find((d: any) => d.date === xDate).newSubjects.some((n: any) => n.subjectId === x)).toBe(false);
+    // (a conclusão é registrada com o relógio real; nos testes "hoje" é simulado)
+    const realToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const doneDay = after.days.find((d: any) => d.newSubjects.some((n: any) => n.subjectId === x && n.done));
+    expect([TODAY, realToday]).toContain(doneDay.date);
+    if (xDate !== doneDay.date) expect(after.days.find((d: any) => d.date === xDate).newSubjects.some((n: any) => n.subjectId === x)).toBe(false);
     // O próximo da fila não fica para depois (ocupa o espaço liberado)
     expect(pendingByDate(after).get(y)! <= yDate).toBe(true);
     // O que estava planejado para hoje continua hoje

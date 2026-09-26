@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
+import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
 
@@ -423,4 +423,10 @@ route('POST', '/api/reviews/:subjectId/move', async ({ ctx, params, body }) => {
 route('PUT', '/api/planner/subjects/:id/hidden', async ({ ctx, params, body }) => {
   const { hidden } = z.object({ hidden: z.boolean() }).parse(body);
   return setSubjectHidden(ctx, uuid.parse(params.id), hidden);
+});
+
+// Arrastar da lista de assuntos para um dia da semana
+route('POST', '/api/planner/subjects/:id/schedule', async ({ ctx, params, body }) => {
+  const { to } = z.object({ to: isoDate }).parse(body);
+  return scheduleSubjectOn(ctx, uuid.parse(params.id), to);
 });

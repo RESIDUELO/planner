@@ -179,7 +179,7 @@ export function Sheet({ open, onClose, title, children, wide, footer }: { open: 
 }
 
 // ---------------------------------------------------------------- Menu "⋯"
-export function Menu({ items, label = 'Mais opções', trigger }: { items: { label: string; onClick: () => void; destructive?: boolean; hidden?: boolean }[]; label?: string; trigger?: ReactNode }) {
+export function Menu({ items, label = 'Mais opções', trigger }: { items: { label: string; onClick: () => void; destructive?: boolean; hidden?: boolean; divider?: boolean }[]; label?: string; trigger?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -198,7 +198,7 @@ export function Menu({ items, label = 'Mais opções', trigger }: { items: { lab
         <div role="menu" className="absolute right-0 z-40 mt-2 min-w-56 overflow-hidden rounded-[14px] border border-line bg-canvas py-1 animate-fade">
           {items.filter((i) => !i.hidden).map((i) => (
             <button key={i.label} role="menuitem" onClick={() => { setOpen(false); i.onClick(); }}
-              className={clsx('block w-full px-4 py-2.5 text-left text-[15px] transition hover:bg-fill', i.destructive ? 'text-negative' : 'text-ink')}>
+              className={clsx('block w-full px-4 py-2.5 text-left text-[15px] transition hover:bg-fill', i.destructive ? 'text-negative' : 'text-ink', i.divider && 'mt-1 border-t border-line pt-3')}>
               {i.label}
             </button>
           ))}

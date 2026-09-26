@@ -9,7 +9,7 @@ import { addDays } from '../../../shared/dates';
 
 const RATING: Record<string, string> = { again: 'Errei', hard: 'Difícil', good: 'Bom', easy: 'Fácil' };
 
-export function PerformancePage() {
+export function PerformancePage({ embedded = false }: { embedded?: boolean }) {
   const q = useQuery({ queryKey: ['performance'], queryFn: () => api.get('/api/performance') });
   const [open, setOpen] = useState<string | null>(null);
   const qc = useQueryClient();
@@ -20,7 +20,7 @@ export function PerformancePage() {
   if (q.isLoading) return <Spinner />;
   const d = q.data;
   if (!d.hasPlan) return (
-    <div className="mx-auto max-w-2xl"><Title>Desempenho</Title><Empty title="Ainda sem dados" action={<Link to="/planner"><Button>Montar planner</Button></Link>}>Registre questões nos assuntos para acompanhar seu desempenho.</Empty></div>
+    <div className="mx-auto max-w-2xl">{!embedded && <Title>Desempenho</Title>}<Empty title="Ainda sem dados" action={<Link to="/planner"><Button>Montar planner</Button></Link>}>Registre questões nos assuntos para acompanhar seu desempenho.</Empty></div>
   );
 
   const answered = d.areas.reduce((t: number, a: any) => t + a.answered, 0);
@@ -46,8 +46,8 @@ export function PerformancePage() {
   const reviews = d.ratings.reduce((t: number, r: any) => t + r.n, 0);
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Title>Desempenho</Title>
+    <div className={embedded ? '' : 'mx-auto max-w-2xl'}>
+      {!embedded && <Title>Desempenho</Title>}
 
       <section className="animate-in">
         {acc == null ? (

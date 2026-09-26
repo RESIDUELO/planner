@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { ChevronLeft, ChevronRight, Search, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -8,7 +8,8 @@ import { api, errorMessage } from '../lib/api';
 import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/format';
 import { areaShort, tintFor } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
-import { Advanced, Button, CheckButton, CheckCircle, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
+import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
+import { FocusWidget, PerformanceStrip, SubjectLibrary } from '../components/Workspace';
 import { SubjectModal, useInvalidateStudy } from '../components/SubjectModal';
 import { addDays, weekday } from '../../../shared/dates';
 
@@ -251,39 +252,72 @@ const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', '
 const mondayOf = (d: string) => addDays(d, -((weekday(d) + 6) % 7));
 
 function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => void }) {
-  const [tab, setTab] = useState<'week' | 'subjects' | 'multi'>('week');
   const [open, setOpen] = useState<string | null>(null);
-  const [about, setAbout] = useState(false);
+  const [sheet, setSheet] = useState<null | 'about' | 'subjects' | 'multi'>(null);
   const qc = useQueryClient();
   const replan = useMutation({ mutationFn: () => api.post('/api/planner/replan'), onSuccess: () => qc.invalidateQueries() });
   const exam = data.exams.find((e: any) => e.is_primary) ?? data.exams[0];
   const left = exam?.exam_date ? daysBetween(exam.exam_date, todayBR()) : null;
+  const eyebrow = data.plan.summary?.template
+    ? `${data.plan.name} · ${shortDate(exam?.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}`
+    : exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : data.plan.name.replace(/^Planner /, '');
+  const dnd = useDnd();
+  const menu = (
+    <Menu items={[
+      { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate() },
+      { label: 'Todos os assuntos', onClick: () => setSheet('subjects') },
+      { label: 'Tabela combinada das provas', onClick: () => setSheet('multi'), hidden: data.exams.length < 2 },
+      { label: 'Reconfigurar planner', onClick: onReconfigure },
+      { label: 'Sobre este plano', onClick: () => setSheet('about') },
+    ]} />
+  );
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <Title eyebrow={data.plan.summary?.template ? `${data.plan.name} · ${shortDate(exam?.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : data.plan.name.replace(/^Planner /, '')}
-        trailing={<Menu items={[
-          { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate() },
-          { label: 'Reconfigurar planner', onClick: onReconfigure },
-          { label: 'Sobre este plano', onClick: () => setAbout(true) },
-        ]} />}>
-        Planner
-      </Title>
+    <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_360px] xl:gap-16">
+      <section aria-label="Semana" className="min-w-0">
+        <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} />
+      </section>
+      <aside aria-label="Estudo" className="min-w-0 space-y-12 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
+        <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} />
+        <FocusWidget />
+        <PerformanceStrip />
+      </aside>
 
-      <Segmented className="-mt-4 mb-12" value={tab} onChange={setTab} options={[
-        { value: 'week', label: 'Semana' },
-        { value: 'subjects', label: 'Assuntos' },
-        ...(data.exams.length > 1 ? [{ value: 'multi' as const, label: 'Combinado' }] : []),
-      ]} />
-
-      {tab === 'week' && <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} />}
-      {tab === 'subjects' && <SubjectList data={data} onOpen={setOpen} />}
-      {tab === 'multi' && <MultiTable data={data} onOpen={setOpen} />}
-
-      {about && <AboutPlan data={data} onClose={() => setAbout(false)} />}
+      {sheet === 'about' && <AboutPlan data={data} onClose={() => setSheet(null)} />}
+      {sheet === 'subjects' && <Sheet open onClose={() => setSheet(null)} wide title="Assuntos"><SubjectList data={data} onOpen={(id) => { setSheet(null); setOpen(id); }} /></Sheet>}
+      {sheet === 'multi' && <Sheet open onClose={() => setSheet(null)} wide title="Tabela combinada"><MultiTable data={data} onOpen={(id) => { setSheet(null); setOpen(id); }} /></Sheet>}
       {open && <SubjectModal subjectId={open} onClose={() => setOpen(null)} />}
     </div>
   );
+}
+
+/** Estado do arrastar, compartilhado entre a semana e a lista de assuntos. */
+function useDnd(): DnD {
+  const today = todayBR();
+  const invalidate = useInvalidateStudy();
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ tone: 'positive' | 'negative'; text: string } | null>(null);
+  const move = useMutation({
+    mutationFn: ({ d, to }: { d: Drag; to: string }) => (d.type === 'library'
+      ? api.post(`/api/planner/subjects/${d.subjectId}/schedule`, { to })
+      : d.type === 'task'
+        ? api.post(`/api/planner/subjects/${d.subjectId}/move`, { from: d.from, to, methodIds: d.methodIds })
+        : api.post(`/api/reviews/${d.subjectId}/move`, { to })),
+    onMutate: () => setMessage(null),
+    onSuccess: (_r, { d, to }) => {
+      invalidate();
+      setMessage({ tone: 'positive', text: `✓ ${d.name} ${d.type === 'review' ? 'revisão movida para' : 'adicionado a'} ${WD[weekday(to)].toLowerCase()}, ${shortDate(to, false)}` });
+      setTimeout(() => setMessage(null), 3500);
+    },
+    onError: (e) => setMessage({ tone: 'negative', text: errorMessage(e) }),
+  });
+  return {
+    drag, over, setOver, today, message, busy: move.isPending,
+    start: (d) => setDrag(d),
+    end: () => { setDrag(null); setOver(null); },
+    drop: (to) => { if (drag) move.mutate({ d: drag, to }); setDrag(null); setOver(null); },
+  };
 }
 
 /** Marca/desmarca as atividades daquele dia (ou o assunto inteiro). O servidor reorganiza a fila. */
@@ -304,7 +338,7 @@ function useReviewDone() {
   return useMutation({ mutationFn: (subjectId: string) => api.post(`/api/reviews/${subjectId}`, { rating: 'good' }), onSettled: invalidate });
 }
 
-function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean }) {
+function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean; dnd: DnD; eyebrow: string; menu: ReactNode }) {
   const today = todayBR();
   const [from, setFrom] = useState(mondayOf(today));
   const to = addDays(from, 6);
@@ -312,41 +346,36 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
   const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });
   const check = useCheck();
   const reviewDone = useReviewDone();
-  const invalidate = useInvalidateStudy();
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const [over, setOver] = useState<string | null>(null);
-  const [moveError, setMoveError] = useState<string | null>(null);
-  const move = useMutation({
-    mutationFn: ({ d, to }: { d: Drag; to: string }) => (d.type === 'task'
-      ? api.post(`/api/planner/subjects/${d.subjectId}/move`, { from: d.from, to, methodIds: d.methodIds })
-      : api.post(`/api/reviews/${d.subjectId}/move`, { to })),
-    onMutate: () => setMoveError(null),
-    onSuccess: invalidate,
-    onError: (e) => setMoveError(errorMessage(e)),
-  });
-  const dnd: DnD = {
-    drag, over, setOver, today,
-    start: (d) => setDrag(d),
-    end: () => { setDrag(null); setOver(null); },
-    drop: (to) => { if (drag) move.mutate({ d: drag, to }); setDrag(null); setOver(null); },
-  };
   const isThisWeek = from === mondayOf(today);
   const late = isThisWeek ? (t.data?.newSubjects ?? []).filter((s: any) => s.overdue) : [];
   const [a, b] = [from, to].map((d) => d.split('-').map(Number));
-  const range = a[1] === b[1] ? `${a[2]} – ${b[2]} ${MONTHS[b[1] - 1]}` : `${a[2]} ${MONTHS[a[1] - 1]} – ${b[2]} ${MONTHS[b[1] - 1]}`;
+  const range = a[1] === b[1] ? `${a[2]} — ${b[2]} ${MONTHS[b[1] - 1]}` : `${a[2]} ${MONTHS[a[1] - 1]} — ${b[2]} ${MONTHS[b[1] - 1]}`;
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
-        <p className="font-display text-[26px]">{range}</p>
-        <div className="flex items-center gap-1 text-ink-2">
-          {!isThisWeek && <button onClick={() => setFrom(mondayOf(today))} className="mr-2 text-[13px] underline underline-offset-4 hover:text-ink">Esta semana</button>}
-          <button onClick={() => setFrom(addDays(from, -7))} aria-label="Semana anterior" className="rounded-full p-1.5 hover:bg-fill hover:text-ink"><ChevronLeft className="h-5 w-5" strokeWidth={1.5} /></button>
-          <button onClick={() => setFrom(addDays(from, 7))} aria-label="Próxima semana" className="rounded-full p-1.5 hover:bg-fill hover:text-ink"><ChevronRight className="h-5 w-5" strokeWidth={1.5} /></button>
-        </div>
+      <div className="flex items-start justify-between gap-4">
+        <Eyebrow>{eyebrow}</Eyebrow>
+        <div className="-mt-2">{menu}</div>
       </div>
-      <p className="-mt-7 mb-10 hidden text-[12px] text-ink-3 md:block">Arraste uma aula ou uma revisão para outro dia.</p>
-      {moveError && <Note tone="negative" className="-mt-6 mb-8">{moveError}</Note>}
+      <div className="mt-3 mb-10 flex items-center justify-between gap-3">
+        <button onClick={() => setFrom(addDays(from, -7))} aria-label="Semana anterior"
+          className="flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-[13px] text-ink-2 transition hover:text-ink">
+          <ChevronLeft className="h-5 w-5" strokeWidth={1.5} /><span className="hidden sm:inline">semana anterior</span>
+        </button>
+        <div className="text-center">
+          <h1 className="font-display text-[40px] leading-none sm:text-[52px]">{range}</h1>
+          {!isThisWeek && <button onClick={() => setFrom(mondayOf(today))} className="mt-2 text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">voltar para esta semana</button>}
+        </div>
+        <button onClick={() => setFrom(addDays(from, 7))} aria-label="Próxima semana"
+          className="flex items-center gap-1.5 rounded-full py-1.5 pl-2 text-[13px] text-ink-2 transition hover:text-ink">
+          <span className="hidden sm:inline">semana seguinte</span><ChevronRight className="h-5 w-5" strokeWidth={1.5} />
+        </button>
+      </div>
+      <div className="-mt-6 mb-8 min-h-5 text-center text-[13px]" aria-live="polite">
+        {dnd.message
+          ? <span className={dnd.message.tone === 'positive' ? 'text-ink' : 'text-negative'}>{dnd.message.text}</span>
+          : <span className="hidden text-ink-3 md:inline">Arraste aulas, revisões ou assuntos da lista para qualquer dia.</span>}
+      </div>
 
       {late.length > 0 && (
         <section className="mb-14 animate-in" aria-label="Atrasados">
@@ -370,7 +399,7 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
           {(week.data?.days ?? []).map((d: any) => (
             <DayBlock key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
               onCheck={(item, done) => check.mutate({ subjectId: item.subjectId, methodIds: item.methodIds, done })}
-              onReview={(id) => reviewDone.mutate(id)} busy={check.isPending || reviewDone.isPending || move.isPending} dnd={dnd} />
+              onReview={(id) => reviewDone.mutate(id)} busy={check.isPending || reviewDone.isPending || dnd.busy} dnd={dnd} />
           ))}
         </div>
       )}
@@ -381,15 +410,16 @@ function WeekView({ onOpen, onReplan, replanning }: { onOpen: (id: string) => vo
 }
 
 // ---------------------------------------------------------------- Arrastar entre dias
-type Drag = { type: 'task' | 'review'; subjectId: string; from: string; methodIds?: string[]; name: string };
-interface DnD {
-  drag: Drag | null; over: string | null; today: string;
+export type Drag = { type: 'task' | 'review' | 'library'; subjectId: string; from: string; methodIds?: string[]; name: string };
+export interface DnD {
+  drag: Drag | null; over: string | null; today: string; busy: boolean;
+  message: { tone: 'positive' | 'negative'; text: string } | null;
   setOver: (k: string | null) => void; start: (d: Drag) => void; end: () => void; drop: (to: string) => void;
 }
 interface DragProps { li: Record<string, any>; className: string }
 
 /** Linha arrastável (o "quadrado" inteiro). */
-function dragProps(dnd: DnD, d: Drag): DragProps {
+export function dragProps(dnd: DnD, d: Drag): DragProps {
   const dragging = dnd.drag?.subjectId === d.subjectId && dnd.drag?.from === d.from && dnd.drag?.type === d.type;
   return {
     li: {
@@ -403,9 +433,11 @@ function dragProps(dnd: DnD, d: Drag): DragProps {
 }
 
 /** Coluna que aceita a soltura: só do mesmo tipo (aula → Assuntos, revisão → Revisões), de hoje em diante. */
-function dropZone(dnd: DnD, date: string, type: Drag['type'], extra?: string) {
+function dropZone(dnd: DnD, date: string, type: 'task' | 'review', extra?: string) {
   const key = `${date}|${type}`;
-  const ok = !!dnd.drag && dnd.drag.type === type && date >= dnd.today && date !== dnd.drag.from;
+  // Aula (ou assunto da lista) só entra em Assuntos; revisão só em Revisões
+  const kind = dnd.drag?.type === 'library' ? 'task' : dnd.drag?.type;
+  const ok = !!dnd.drag && kind === type && date >= dnd.today && date !== dnd.drag.from;
   return {
     'data-drop': ok ? 'on' : undefined,
     onDragOver: (e: React.DragEvent) => { if (!ok) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dnd.over !== key) dnd.setOver(key); },
@@ -526,7 +558,6 @@ function WeekNotes({ week }: { week: string }) {
 
 export function TaskRow({ item, onOpen, onCheck, detail, pomodoro, disabled, drag }: { item: { subjectId: string; name: string; area?: string; specialty?: string | null; done: boolean }; onOpen: (id: string) => void; onCheck: (done: boolean) => void; detail?: string; pomodoro?: boolean; disabled?: boolean; drag?: DragProps }) {
   const p = usePomodoro();
-  const nav = useNavigate();
   return (
     <li {...drag?.li} className={clsx('group flex items-center gap-4 border-b border-line/70 py-3 last:border-0', drag?.className)} data-testid="task">
       <button onClick={() => onOpen(item.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
@@ -535,7 +566,7 @@ export function TaskRow({ item, onOpen, onCheck, detail, pomodoro, disabled, dra
         {detail && <span className="block text-[12px] text-ink-3">{detail}</span>}
       </button>
       {!item.done && (
-        <button onClick={() => { p.start({ subject: { id: item.subjectId, name: item.name, area: item.area } }); nav('/foco'); }}
+        <button onClick={() => { p.start({ subject: { id: item.subjectId, name: item.name, area: item.area } }); p.setExpanded(true); }}
           aria-label={`Iniciar Pomodoro — ${item.name}`} title="Iniciar Pomodoro"
           className={clsx('flex items-center gap-1.5 rounded-full text-[12px] text-ink-3 transition hover:text-ink', !pomodoro && 'opacity-0 group-hover:opacity-100 focus:opacity-100')}>
           <Timer className="h-4 w-4" strokeWidth={1.5} />

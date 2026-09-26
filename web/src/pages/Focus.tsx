@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import { api } from '../lib/api';
@@ -11,8 +12,32 @@ const PRESETS = [
   { id: '50', label: '50/10', focus: 50, rest: 10 },
 ];
 
-/** Foco: um timer grande, calmo. Independente do planner, mas pode seguir um assunto. */
+/** Página /foco (mantida para links antigos). */
 export function FocusPage() {
+  return <FocusPanel />;
+}
+
+/** Visualização focada por cima do workspace, sem trocar de página. */
+export function FocusOverlay() {
+  const p = usePomodoro();
+  useEffect(() => {
+    if (!p.expanded) return;
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && p.setExpanded(false);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [p.expanded]);
+  if (!p.expanded) return null;
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Foco" className="fixed inset-0 z-50 overflow-y-auto bg-canvas animate-fade">
+      <button onClick={() => p.setExpanded(false)} aria-label="Fechar foco"
+        className="absolute top-5 right-5 rounded-full p-2 text-ink-2 transition hover:bg-fill hover:text-ink"><X className="h-5 w-5" /></button>
+      <div className="px-5 pt-16 pb-16 sm:pt-20"><FocusPanel /></div>
+    </div>
+  );
+}
+
+/** Foco: um timer grande, calmo. Independente do planner, mas pode seguir um assunto. */
+export function FocusPanel() {
   const p = usePomodoro();
   const [custom, setCustom] = useState(!PRESETS.some((x) => x.focus === p.focusMin && x.rest === p.breakMin));
   const [open, setOpen] = useState<string | null>(null);

@@ -777,3 +777,31 @@ export async function setSubjectHidden(ctx: Ctx, subjectId: string, hidden: bool
   await reflowSchedule(ctx, userId);
   return { hidden };
 }
+
+/**
+ * Coloca um assunto num dia (arrastar da lista de assuntos para a semana):
+ * todas as atividades ainda não feitas dele vão, juntas, para esse dia e
+ * ficam fixadas lá.
+ */
+export async function scheduleSubjectOn(ctx: Ctx, subjectId: string, to: ISODate) {
+  const { userId, plan } = await planForMove(ctx, to);
+  const ps = await planSubjectRow(ctx, userId, subjectId);
+  if (!ps) throw badRequest('Assunto não pertence ao planner ativo.');
+  const chosen = await activitiesFor(ctx, userId, subjectId);
+  const doneRows = await q(ctx.sb.from('subject_method_progress').select('study_method_id').eq('user_id', userId).eq('subject_id', subjectId)) as any[];
+  const done = new Set(doneRows.map((r) => r.study_method_id));
+  const pending = chosen.filter((m) => !done.has(m));
+  if (!pending.length) throw badRequest('Este assunto já está concluído.');
+  const methods = new Map((await loadMethods(ctx, userId)).map((m) => [m.id, m]));
+  await q(ctx.sb.from('study_schedule').delete().eq('study_plan_id', plan.id).eq('subject_id', subjectId).eq('completed', false).neq('activity_type', 'review'));
+  const rank = (await q(ctx.sb.from('study_plan_subjects').select('priority_rank').eq('study_plan_id', plan.id).eq('subject_id', subjectId).maybeSingle()) as any)?.priority_rank ?? 999;
+  const rows = pending.map((m) => ({
+    user_id: userId, study_plan_id: plan.id, subject_id: subjectId, study_method_id: m, scheduled_date: to,
+    activity_type: methods.get(m)?.activity_type ?? 'video', estimated_minutes: methods.get(m)?.estimated_minutes ?? 30, priority: rank,
+  }));
+  let { error } = await ctx.sb.from('study_schedule').insert(rows.map((r) => ({ ...r, pinned: true })) as any);
+  if (error?.code === MISSING_COLUMN) ({ error } = await ctx.sb.from('study_schedule').insert(rows));
+  if (error) throw error;
+  await q(ctx.sb.from('study_plan_subjects').update({ scheduled: true }).eq('study_plan_id', plan.id).eq('subject_id', subjectId));
+  return { scheduled: rows.length };
+}
