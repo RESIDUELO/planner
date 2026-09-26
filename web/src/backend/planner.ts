@@ -932,7 +932,7 @@ async function planForMove(ctx: Ctx, to: ISODate) {
 
 /** Move as atividades pendentes de um assunto (de um dia) para outro dia e as fixa lá. */
 export async function moveTask(ctx: Ctx, subjectId: string, body: { from: ISODate; to: ISODate; methodIds?: string[] }) {
-  const { plan } = await planForMove(ctx, body.to);
+  const { userId, plan } = await planForMove(ctx, body.to);
   const base = () => {
     let u = ctx.sb.from('study_schedule').update({ scheduled_date: body.to, pinned: true } as any)
       .eq('study_plan_id', plan.id).eq('subject_id', subjectId).eq('completed', false).neq('activity_type', 'review');
@@ -949,6 +949,8 @@ export async function moveTask(ctx: Ctx, subjectId: string, body: { from: ISODat
   }
   if (error) throw error;
   if (!(data as any[])?.length) throw badRequest('Nada pendente para mover neste assunto.');
+  // O resto se reorganiza em volta do que foi movido (que fica no dia escolhido)
+  await reflowSchedule(ctx, userId);
   return { moved: (data as any[]).length };
 }
 
@@ -983,7 +985,7 @@ export async function setSubjectHidden(ctx: Ctx, subjectId: string, hidden: bool
 /**
  * Coloca um assunto num dia (arrastar da lista de assuntos para a semana):
  * todas as atividades ainda não feitas dele vão, juntas, para esse dia e
- * ficam fixadas lá.
+ * ficam fixadas lá; o resto se reorganiza em volta.
  */
 export async function scheduleSubjectOn(ctx: Ctx, subjectId: string, to: ISODate) {
   const { userId, plan } = await planForMove(ctx, to);
@@ -1005,5 +1007,6 @@ export async function scheduleSubjectOn(ctx: Ctx, subjectId: string, to: ISODate
   if (error?.code === MISSING_COLUMN) ({ error } = await ctx.sb.from('study_schedule').insert(rows));
   if (error) throw error;
   await q(ctx.sb.from('study_plan_subjects').update({ scheduled: true }).eq('study_plan_id', plan.id).eq('subject_id', subjectId));
+  await reflowSchedule(ctx, userId);
   return { scheduled: rows.length };
 }

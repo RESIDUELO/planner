@@ -116,6 +116,23 @@ describe('app off-line', () => {
     };
     const tplMin = minutes(m.subjects.filter((s: any) => s.perExam[0]?.template));
     for (const [d, mins] of minutes(extra)) expect(mins, d).toBeLessThanOrEqual(Math.max(0, hours - (tplMin.get(d) ?? 0)));
+    // Mover uma aula: ela fica no dia escolhido e as seguintes andam para ocupar o espaço
+    const fut = m.subjects.filter((s: any) => s.perExam[0]?.template?.kind === 'lesson' && s.nextScheduledDate > today)
+      .sort((x: any, y: any) => x.nextScheduledDate.localeCompare(y.nextScheduledDate));
+    const [l1, l2, l3] = fut;
+    const target = fut[5].nextScheduledDate;
+    await ok('POST', `/api/planner/subjects/${l1.subjectId}/move`, { from: l1.nextScheduledDate, to: target });
+    m = await ok('GET', '/api/planner');
+    const at = (id: string) => m.subjects.find((s: any) => s.subjectId === id).nextScheduledDate;
+    expect(at(l1.subjectId)).toBe(target);
+    expect(at(l2.subjectId)).toBe(l1.nextScheduledDate);
+    expect(at(l3.subjectId)).toBe(l2.nextScheduledDate);
+    // A outra prova se reorganiza em volta, sem passar das horas do dia
+    const tplMin2 = minutes(m.subjects.filter((s: any) => s.perExam[0]?.template));
+    for (const [d, mins] of minutes(m.subjects.filter((s: any) => !s.perExam[0]?.template && !s.own))) {
+      if (d > today) expect(mins, d).toBeLessThanOrEqual(Math.max(0, hours - (tplMin2.get(d) ?? 0)));
+    }
+
     // Reorganizar e tirar a prova: o cronograma continua o mesmo
     // (reorganizar traz as aulas atrasadas para hoje, como sempre; nada fica para trás)
     await ok('POST', '/api/planner/replan');
