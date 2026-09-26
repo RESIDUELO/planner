@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mesmas cores do app (papel creme, tinta grafite) -->
+    <color name="rp_canvas">#F1EEE8</color>
+    <color name="rp_ink">#1C1B19</color>
+    <color name="rp_ink2">#6F6A62</color>
+    <color name="rp_ink3">#A29C92</color>
+    <color name="rp_line">#D8D3C9</color>
+    <color name="rp_today">#E5484D</color>
+</resources>

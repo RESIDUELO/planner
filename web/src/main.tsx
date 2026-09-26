@@ -9,6 +9,7 @@ import { App } from './App';
 import { SetupNeeded } from './pages/SetupNeeded';
 import { initTheme } from './lib/theme';
 import { initZoom } from './lib/zoom';
+import { IS_LOCAL } from './lib/platform';
 import './index.css';
 
 initTheme();
@@ -37,7 +38,7 @@ async function checkForNewVersion() {
     location.reload();
   } catch { /* sem rede: segue com a versão atual */ }
 }
-if (import.meta.env.PROD) {
+if (import.meta.env.PROD && !IS_LOCAL) {
   checkForNewVersion();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForNewVersion(); });
 }

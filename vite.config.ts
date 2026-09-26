@@ -21,10 +21,22 @@ function spaFallback(): Plugin {
   };
 }
 
+/** App off-line: as fontes vêm no próprio app (sem Google Fonts). */
+function offlineHtml(): Plugin {
+  return {
+    name: 'offline-html',
+    transformIndexHtml: (html) => html.replace(/\s*<link[^>]+fonts\.(googleapis|gstatic)\.com[^>]*>/g, ''),
+  };
+}
+
+// VITE_LOCAL=1 → build do app Android (banco no aparelho, sem login), em dist-app/
+const APP = process.env.VITE_LOCAL === '1';
+
 export default defineConfig({
   root: 'web',
-  base: process.env.VITE_BASE ?? '/',
-  plugins: [react(), tailwindcss(), spaFallback()],
+  base: APP ? '/' : process.env.VITE_BASE ?? '/',
+  plugins: [react(), tailwindcss(), APP ? offlineHtml() : spaFallback()],
   server: { port: 5173 },
-  build: { outDir: '../dist', emptyOutDir: true },
+  optimizeDeps: { exclude: ['@electric-sql/pglite'] },
+  build: { outDir: APP ? '../dist-app' : '../dist', emptyOutDir: true },
 });

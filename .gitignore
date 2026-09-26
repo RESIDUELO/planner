@@ -8,3 +8,4 @@ playwright-report/
 __pycache__/
 .local-supabase/
 web/public/config.local.json
+dist-app/

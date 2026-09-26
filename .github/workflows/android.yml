@@ -1,0 +1,66 @@
+# Gera o APK do app Android (off-line, com o widget "Hoje") e publica em
+# https://github.com/<dono>/<repo>/releases/tag/app-android
+name: Gerar APK Android
+
+on:
+  push:
+    branches: [claude/confident-bell-0pj7j0]
+    paths:
+      - 'web/**'
+      - 'shared/**'
+      - 'android/**'
+      - 'supabase/**'
+      - 'scripts/build-local-db.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.ts'
+      - 'vite.config.ts'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Teste do modo off-line
+        run: npx vitest run tests/local
+      - name: Build do app (banco no aparelho)
+        run: npm run build:app
+      - run: npx cap sync android
+      - name: APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk ../residencia-planner.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: residencia-planner-apk
+          path: residencia-planner.apk
+      - name: Publicar para baixar no celular
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view app-android >/dev/null 2>&1; then
+            gh release create app-android --target "$GITHUB_SHA" --title "App Android" \
+              --notes "APK do Residência Planner (off-line, com o widget Hoje). Baixe residencia-planner.apk no celular e instale."
+          fi
+          gh release upload app-android residencia-planner.apk --clobber
+          gh release edit app-android --notes "APK do Residência Planner (off-line, com o widget Hoje). Versão 1.0.${GITHUB_RUN_NUMBER}, gerada em $(date -u +'%d/%m/%Y %H:%M') UTC. Baixe residencia-planner.apk no celular e instale."

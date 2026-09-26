@@ -1,10 +1,15 @@
+import { lazy, Suspense } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { useAuth } from '../lib/auth';
+import { IS_LOCAL } from '../lib/platform';
 import { clock, usePomodoro } from '../lib/pomodoro';
 import { FocusOverlay } from '../pages/Focus';
 import { Logo, LogoMark } from './Logo';
 import { Menu } from './ui';
+
+// Só no app Android: mantém o widget da tela inicial em dia
+const WidgetSync = IS_LOCAL ? lazy(() => import('../local/widget').then((m) => ({ default: m.WidgetSync }))) : null;
 
 function initials(name?: string) {
   const p = (name ?? '').trim().split(/\s+/).filter(Boolean);
@@ -38,7 +43,7 @@ export function Layout() {
       { label: 'Provas', onClick: () => nav('/provas') },
       { label: 'Revisões', onClick: () => nav('/revisoes') },
       { label: 'Configurações', onClick: () => nav('/configuracoes') },
-      { label: 'Sair', onClick: async () => { await logout(); nav('/login'); }, destructive: true, divider: true },
+      { label: 'Sair', onClick: async () => { await logout(); nav('/login'); }, destructive: true, divider: true, hidden: IS_LOCAL },
     ]} />
   );
 
@@ -64,6 +69,7 @@ export function Layout() {
         <Outlet />
       </main>
       <FocusOverlay />
+      {WidgetSync && <Suspense fallback={null}><WidgetSync /></Suspense>}
     </div>
   );
 }

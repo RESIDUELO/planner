@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_today_label">Hoje</string>
+    <string name="widget_today_description">Assuntos e revisões de hoje. Toque para abrir o planner.</string>
+</resources>

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { IS_LOCAL } from '../lib/platform';
 import { getTheme, setTheme, type ThemePref } from '../lib/theme';
 import { Button, Disclosure, Note, Segmented, Sheet, Title } from '../components/ui';
 import { REVIEW_OPTIONS } from './Planner';
@@ -99,7 +100,7 @@ export function SettingsPage() {
               <input id="rp-name" className="min-w-0 flex-1 bg-transparent py-1.5 text-right text-[17px] text-ink-2 outline-none focus:text-ink"
                 value={name} onChange={(e) => setName(e.target.value)} onBlur={(e) => e.currentTarget.form?.requestSubmit()} />
             </form>
-            <Item label="E-mail" value={user?.email} />
+            {!IS_LOCAL && <Item label="E-mail" value={user?.email} />}
           </Group>
         )}
         {msg && <Note tone={msg.tone} className="-mt-8">{msg.text}</Note>}
