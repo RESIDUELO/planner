@@ -92,4 +92,47 @@ describe('app off-line', () => {
     await ok('POST', '/api/me/reset');
     expect((await ok('GET', '/api/planner')).plan ?? null).toBeNull();
   });
+  it('agenda: tarefas do dia, lembretes, gerais, anotação e "Mostrar no Planner"', async () => {
+    const day = await ok('POST', '/api/agenda/tasks', { kind: 'day', title: 'Enviar documento', date: '2026-09-29' });
+    expect(day).toMatchObject({ kind: 'day', done: false, showInPlanner: false, checklist: [] });
+    await ok('POST', '/api/agenda/tasks', { kind: 'reminder', title: 'Dentista', date: '2026-09-29', time: '14:30' });
+    const gen = await ok('POST', '/api/agenda/tasks', { kind: 'general', title: 'Inscrição FAMERP', date: '2026-10-15', priority: 3,
+      checklist: [{ text: 'Separar documentos', done: false }, { text: 'Conferir edital', done: false }] });
+    await ok('POST', '/api/agenda/tasks', { kind: 'general', title: 'Comprar jaleco' });
+    await expect(ok('POST', '/api/agenda/tasks', { kind: 'day', title: 'Sem dia' })).rejects.toThrow(/dia/);
+    await ok('PUT', '/api/agenda/notes/2026-09-29', { content: 'Antes do internato.' });
+
+    let a = await ok('GET', '/api/agenda?from=2026-09-28&to=2026-10-04');
+    expect(a.tasks.map((t: any) => t.title)).toEqual(['Dentista', 'Enviar documento']);
+    expect(a.tasks[0].time).toBe('14:30');
+    expect(a.general.map((t: any) => t.title).sort()).toEqual(['Comprar jaleco', 'Inscrição FAMERP']);
+    expect(a.notes).toEqual({ '2026-09-29': 'Antes do internato.' });
+
+    // Não entra no planner até a pessoa pedir; depois é a mesma tarefa nos dois lugares
+    expect(await ok('GET', '/api/agenda/planner?from=2026-09-28&to=2026-10-04')).toEqual([]);
+    await ok('PATCH', `/api/agenda/tasks/${day.id}`, { showInPlanner: true });
+    await ok('PATCH', `/api/agenda/tasks/${gen.id}`, { showInPlanner: true, checklist: [{ text: 'Separar documentos', done: true }, { text: 'Conferir edital', done: false }] });
+    let p = await ok('GET', '/api/agenda/planner?from=2026-09-28&to=2026-10-04');
+    expect(p.map((t: any) => t.id)).toEqual([day.id]);
+    await ok('PATCH', `/api/agenda/tasks/${day.id}`, { done: true });
+    p = await ok('GET', '/api/agenda/planner?from=2026-09-28&to=2026-10-04');
+    a = await ok('GET', '/api/agenda?from=2026-09-28&to=2026-10-04');
+    expect(p[0]).toMatchObject({ id: day.id, done: true });
+    expect(a.tasks.find((t: any) => t.id === day.id).done).toBe(true);
+    // Prazo da tarefa geral aparece no dia do prazo (na agenda e, se pedido, no planner)
+    p = await ok('GET', '/api/agenda/planner?from=2026-10-12&to=2026-10-18');
+    expect(p[0]).toMatchObject({ id: gen.id, kind: 'general', priority: 3 });
+    expect(p[0].checklist[0].done).toBe(true);
+
+    // O planner de estudos não muda: nenhuma tarefa vira assunto ou revisão
+    const week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
+    const names = (week?.days ?? []).flatMap((d: any) => [...d.newSubjects, ...d.reviews].map((x: any) => x.name));
+    expect(names).not.toContain('Enviar documento');
+
+    await ok('PUT', '/api/agenda/notes/2026-09-29', { content: '  ' });
+    await ok('DELETE', `/api/agenda/tasks/${gen.id}`);
+    a = await ok('GET', '/api/agenda?from=2026-09-28&to=2026-10-31');
+    expect(a.notes).toEqual({});
+    expect(a.general.map((t: any) => t.title)).toEqual(['Comprar jaleco']);
+  });
 });

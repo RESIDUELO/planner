@@ -325,3 +325,21 @@ export function Advanced({ children, className, label = 'Opções avançadas' }:
     </div>
   );
 }
+
+/** Quadradinho de papelaria: tarefas da agenda (o círculo fica para o estudo). */
+export function CheckSquare({ on, size = 'md', className }: { on: boolean; size?: 'sm' | 'md'; className?: string }) {
+  return (
+    <span className={clsx('flex shrink-0 items-center justify-center rounded-[5px] border transition-all duration-200 ease-apple',
+      size === 'sm' ? 'h-4 w-4' : 'h-[19px] w-[19px]', on ? 'border-ink bg-ink text-canvas' : 'border-ink-3 text-transparent', className)}>
+      <Check className={size === 'sm' ? 'h-2.5 w-2.5' : 'h-3 w-3'} strokeWidth={2.75} />
+    </span>
+  );
+}
+export function SquareButton({ on, onChange, label, disabled, size }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; size?: 'sm' | 'md' }) {
+  return (
+    <button type="button" role="checkbox" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}
+      className="-m-2 shrink-0 rounded-md p-2 transition-opacity hover:opacity-70 disabled:opacity-40">
+      <CheckSquare on={on} size={size} />
+    </button>
+  );
+}

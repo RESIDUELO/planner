@@ -12,6 +12,7 @@ import { loadExamHistories, loadSubjectsInfo } from './history';
 import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
+import { agendaView, createTask, deleteTask, plannerTasks, saveNote, updateTask } from './personal';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
 interface Route { method: string; re: RegExp; keys: string[]; handler: Handler }
@@ -429,4 +430,15 @@ route('PUT', '/api/planner/subjects/:id/hidden', async ({ ctx, params, body }) =
 route('POST', '/api/planner/subjects/:id/schedule', async ({ ctx, params, body }) => {
   const { to } = z.object({ to: isoDate }).parse(body);
   return scheduleSubjectOn(ctx, uuid.parse(params.id), to);
+});
+
+// Agenda: organização pessoal, independente do planner de estudos
+route('GET', '/api/agenda', async ({ ctx, query }) => agendaView(ctx, isoDate.parse(query.get('from')), isoDate.parse(query.get('to'))));
+route('GET', '/api/agenda/planner', async ({ ctx, query }) => plannerTasks(ctx, isoDate.parse(query.get('from')), isoDate.parse(query.get('to'))));
+route('POST', '/api/agenda/tasks', async ({ ctx, body }) => createTask(ctx, body));
+route('PATCH', '/api/agenda/tasks/:id', async ({ ctx, params, body }) => updateTask(ctx, uuid.parse(params.id), body));
+route('DELETE', '/api/agenda/tasks/:id', async ({ ctx, params }) => deleteTask(ctx, uuid.parse(params.id)));
+route('PUT', '/api/agenda/notes/:date', async ({ ctx, params, body }) => {
+  const { content } = z.object({ content: z.string().max(5000) }).parse(body);
+  return saveNote(ctx, isoDate.parse(params.date), content);
 });

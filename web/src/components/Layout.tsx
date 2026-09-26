@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { useAuth } from '../lib/auth';
 import { IS_LOCAL } from '../lib/platform';
@@ -29,12 +29,25 @@ function FocusChip() {
   );
 }
 
+/** PLANNER | AGENDA: as duas áreas principais, separadas. */
+function Tabs() {
+  const tab = ({ isActive }: { isActive: boolean }) => clsx('relative py-1 text-[12px] font-medium tracking-[0.2em] uppercase transition-colors',
+    isActive ? 'text-ink after:absolute after:inset-x-0 after:-bottom-px after:h-px after:bg-ink' : 'text-ink-3 hover:text-ink');
+  return (
+    <nav aria-label="Áreas" className="flex items-center gap-4 sm:gap-5">
+      <NavLink to="/planner" className={tab}>Planner</NavLink>
+      <span className="h-3 w-px bg-line" aria-hidden />
+      <NavLink to="/agenda" className={tab}>Agenda</NavLink>
+    </nav>
+  );
+}
+
 /** Uma tela principal de estudo; o resto (provas, revisões, configurações) fica no menu do perfil. */
 export function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
-  const home = loc.pathname === '/planner';
+  const home = loc.pathname === '/planner' || loc.pathname === '/agenda';
   const profile = (
     <Menu label="Perfil" trigger={
       <span className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-[13px] font-medium text-ink hover:border-ink">{initials(user?.isGuest ? 'Visitante' : user?.name)}</span>
@@ -51,13 +64,13 @@ export function Layout() {
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md">
-        <div className={clsx('mx-auto flex h-16 items-center', width, 'justify-between gap-6 px-5 sm:px-8')}>
-          <Link to="/planner" className="flex shrink-0 items-center transition-opacity hover:opacity-70" aria-label="Planner">
-            <span className="hidden sm:flex"><Logo /></span>
-            <span className="flex sm:hidden"><LogoMark /></span>
+        <div className={clsx('relative mx-auto flex h-16 items-center', width, 'justify-between gap-4 px-5 sm:px-8')}>
+          <Link to="/planner" className="flex shrink-0 items-center transition-opacity hover:opacity-70" aria-label="Início">
+            <span className="hidden lg:flex"><Logo /></span>
+            <span className="flex lg:hidden"><LogoMark /></span>
           </Link>
+          <div className="md:absolute md:left-1/2 md:-translate-x-1/2"><Tabs /></div>
           <div className="flex items-center gap-3">
-            {!home && <Link to="/planner" className="text-[14px] text-ink-2 underline-offset-4 hover:text-ink hover:underline">← Voltar ao planner</Link>}
             <FocusChip />
             {profile}
           </div>

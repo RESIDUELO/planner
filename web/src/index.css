@@ -172,6 +172,7 @@ input[type="date"].field, input[type="time"].field { min-height: 42px; }
 .notebook-text::placeholder { color: var(--ink-3); }
 .notebook-text:focus-visible { outline: none; }
 .notebook:focus-within { border-color: color-mix(in srgb, var(--ink) 25%, transparent); }
+.notebook-sm .notebook-text { min-height: 160px; }
 @media (max-width: 480px) { .notebook { padding-left: 44px; } .notebook::before { left: 30px; } .notebook::after { left: 9px; } }
 }
 

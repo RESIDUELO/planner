@@ -10,7 +10,9 @@ import { areaShort, tintFor } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
 import { useWide } from '../lib/zoom';
 import { IS_LOCAL } from '../lib/platform';
-import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
+import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
+import { AgendaRow, TaskEditor } from '../components/Agenda';
+import { longDate, usePlannerTasks, weekdayLong, type AgendaTask } from '../lib/agenda';
 import { FocusWidget, PerformanceStrip, SubjectLibrary } from '../components/Workspace';
 import { SubjectModal, useInvalidateStudy } from '../components/SubjectModal';
 import { addDays, weekday } from '../../../shared/dates';
@@ -366,14 +368,30 @@ function useReviewDone() {
 
 function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean; dnd: DnD; eyebrow: string; menu: ReactNode; desktop?: boolean }) {
   const today = todayBR();
-  const [from, setFrom] = useState(mondayOf(today));
+  // DIA | SEMANA: a mesma semana (mesmos dados), vista um dia por vez ou inteira
+  const [mode, setModeState] = useState<ViewMode>(() => { try { return localStorage.getItem(VIEW_KEY) === 'dia' ? 'dia' : 'semana'; } catch { return 'semana'; } });
+  const [weekFrom, setFrom] = useState(mondayOf(today));
+  const [day, setDay] = useState(today);
+  const single = mode === 'dia';
+  const from = single ? mondayOf(day) : weekFrom;
+  const setMode = (m: ViewMode) => {
+    if (m === mode) return;
+    if (m === 'dia') setDay(weekFrom === mondayOf(today) ? today : weekFrom);
+    else setFrom(mondayOf(day));
+    setModeState(m);
+    try { localStorage.setItem(VIEW_KEY, m); } catch { /* ignore */ }
+  };
   const to = addDays(from, 6);
   const week = useQuery({ queryKey: ['week', from], queryFn: () => api.get(`/api/reviews/calendar?from=${from}&to=${to}`) });
   const t = useQuery({ queryKey: ['today'], queryFn: () => api.get('/api/planner/today') });
+  // Tarefas da agenda com "Mostrar no Planner" (continuam sendo da agenda)
+  const agenda = usePlannerTasks(from);
+  const [task, setTask] = useState<AgendaTask | null>(null);
+  const agendaOn = (d: string) => (agenda.data ?? []).filter((x) => x.date === d);
   const check = useCheck();
   const reviewDone = useReviewDone();
   const isThisWeek = from === mondayOf(today);
-  const late = isThisWeek ? (t.data?.newSubjects ?? []).filter((s: any) => s.overdue) : [];
+  const late = (single ? day === today : isThisWeek) ? (t.data?.newSubjects ?? []).filter((s: any) => s.overdue) : [];
   const [a, b] = [from, to].map((d) => d.split('-').map(Number));
   const range = a[1] === b[1] ? `${a[2]} — ${b[2]} ${MONTHS[b[1] - 1]}` : `${a[2]} ${MONTHS[a[1] - 1]} — ${b[2]} ${MONTHS[b[1] - 1]}`;
 
@@ -387,27 +405,35 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
     if (!desktop || !el || week.isLoading) return;
     const t = el.querySelector<HTMLElement>(`[data-testid="day-${today}"]`);
     // Abre em hoje (se não houver atrasados para mostrar no topo)
-    el.scrollTop = isThisWeek && t && !late.length ? Math.max(0, t.offsetTop - 8) : 0;
-  }, [desktop, from, week.isLoading]);
+    el.scrollTop = !single && isThisWeek && t && !late.length ? Math.max(0, t.offsetTop - 8) : 0;
+  }, [desktop, from, week.isLoading, single, day]);
+  const shown = (week.data?.days ?? []).filter((d: any) => !single || d.date === day);
 
   return (
     <div className={clsx(desktop && 'flex min-h-0 flex-1 flex-col')}>
       <div className="flex items-start justify-between gap-4">
-        <Eyebrow>{eyebrow}</Eyebrow>
-        <div className="-mt-2">{menu}</div>
+        <Eyebrow className="min-w-0 truncate">{eyebrow}</Eyebrow>
+        <div className="-mt-2 flex shrink-0 items-center gap-4">
+          <Segmented value={mode} onChange={setMode} className="[&>button]:py-0 [&>button]:text-[12px] [&>button]:font-medium [&>button]:tracking-[0.16em] [&>button]:uppercase"
+            options={[{ value: 'dia', label: 'Dia' }, { value: 'semana', label: 'Semana' }]} />
+          {menu}
+        </div>
       </div>
       <div className={clsx('mt-3 flex items-center justify-between gap-3', desktop ? 'mb-10 shrink-0' : 'mb-10')}>
-        <button onClick={() => setFrom(addDays(from, -7))} aria-label="Semana anterior"
+        <button onClick={() => (single ? setDay(addDays(day, -1)) : setFrom(addDays(from, -7)))} aria-label={single ? 'Dia anterior' : 'Semana anterior'}
           className="flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-[13px] text-ink-2 transition hover:text-ink">
-          <ChevronLeft className="h-5 w-5" strokeWidth={1.5} /><span className="hidden sm:inline">semana anterior</span>
+          <ChevronLeft className="h-5 w-5" strokeWidth={1.5} /><span className="hidden sm:inline">{single ? 'dia anterior' : 'semana anterior'}</span>
         </button>
         <div className="text-center">
-          <h1 className="font-display text-[40px] leading-none sm:text-[52px]">{range}</h1>
-          {!isThisWeek && <button onClick={() => setFrom(mondayOf(today))} className="mt-2 text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">voltar para esta semana</button>}
+          {single && <div className={clsx('mb-2 text-[11px] font-medium tracking-[0.16em] uppercase', day === today ? 'text-today' : 'text-ink-2')}>{weekdayLong(day)}{day === today && ' · hoje'}</div>}
+          <h1 className="font-display text-[40px] leading-none sm:text-[52px]">{single ? longDate(day) : range}</h1>
+          {single
+            ? day !== today && <button onClick={() => setDay(today)} className="mt-2 text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">voltar para hoje</button>
+            : !isThisWeek && <button onClick={() => setFrom(mondayOf(today))} className="mt-2 text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">voltar para esta semana</button>}
         </div>
-        <button onClick={() => setFrom(addDays(from, 7))} aria-label="Próxima semana"
+        <button onClick={() => (single ? setDay(addDays(day, 1)) : setFrom(addDays(from, 7)))} aria-label={single ? 'Próximo dia' : 'Próxima semana'}
           className="flex items-center gap-1.5 rounded-full py-1.5 pl-2 text-[13px] text-ink-2 transition hover:text-ink">
-          <span className="hidden sm:inline">semana seguinte</span><ChevronRight className="h-5 w-5" strokeWidth={1.5} />
+          <span className="hidden sm:inline">{single ? 'dia seguinte' : 'semana seguinte'}</span><ChevronRight className="h-5 w-5" strokeWidth={1.5} />
         </button>
       </div>
       <div className={clsx('-mt-6 min-h-5 text-center text-[13px]', desktop ? 'mb-5 shrink-0' : 'mb-8')} aria-live="polite">
@@ -436,18 +462,23 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
 
       {week.isLoading ? <Spinner /> : (
         <div>
-          {(week.data?.days ?? []).map((d: any) => (
+          {shown.map((d: any) => (
             <DayBlock key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
-              onCheck={onCheck} onReview={(id) => reviewDone.mutate(id)} busy={busy} dnd={dnd} />
+              onCheck={onCheck} onReview={(id) => reviewDone.mutate(id)} busy={busy} dnd={dnd}
+              agenda={agendaOn(d.date)} onTask={setTask} detailed={single} />
           ))}
         </div>
       )}
 
       <WeekNotes week={from} />
       </div>
+      {task && <TaskEditor key={task.id} task={task} onClose={() => setTask(null)} />}
     </div>
   );
 }
+
+type ViewMode = 'dia' | 'semana';
+const VIEW_KEY = 'rp-planner-view';
 
 // ---------------------------------------------------------------- Arrastar entre dias
 export type Drag = { type: 'task' | 'review' | 'library'; subjectId: string; from: string; methodIds?: string[]; name: string };
@@ -492,14 +523,17 @@ function ColumnHead({ children }: { children: string }) {
   return <div className="border-b border-ink/70 pb-1.5 text-[10.5px] font-medium tracking-[0.18em] text-ink-2 uppercase">{children}</div>;
 }
 
-function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd }: {
+function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd, agenda = [], onTask, detailed }: {
   day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; onReview: (id: string) => void; questions?: any; busy?: boolean; dnd: DnD;
+  agenda?: AgendaTask[]; onTask: (t: AgendaTask) => void; detailed?: boolean;
 }) {
   const isToday = day.date === today;
   const past = day.date < today;
   const reviews = (day.reviews as any[]).filter((r, i, arr) => arr.findIndex((x) => x.subjectId === r.subjectId) === i);
-  const empty = !day.newSubjects.length && !reviews.length && !day.exams.length;
-  if (past && empty) return (
+  const empty = !day.newSubjects.length && !reviews.length && !day.exams.length && !agenda.length;
+  const count = (done: number, total: number, one: string, many: string) => (total ? `${done} de ${total} ${total === 1 ? one : many}` : `sem ${many}`);
+  const tasks = agenda.filter((a) => a.kind !== 'reminder');
+  if (past && empty && !detailed) return (
     <section data-testid={`day-${day.date}`} className="mb-5 flex items-baseline gap-3 text-ink-3 animate-in">
       <span className="w-9 text-[11px] font-medium tracking-[0.16em] uppercase">{WD[weekday(day.date)]}</span>
       <span className="tabular font-display text-[22px] leading-none">{Number(day.date.slice(8))}</span>
@@ -508,6 +542,15 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd 
   );
   return (
     <section data-testid={`day-${day.date}`} aria-label={isToday ? 'Hoje' : undefined} className="mb-14 animate-in">
+      {detailed ? (
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-[13px] text-ink-2 sm:pl-12">
+          {day.exams.map((e: string) => <span key={e} className="tint tint-rose text-[13px] font-medium">Prova · {e}</span>)}
+          <span>{count(day.newSubjects.filter((n: any) => n.done).length, day.newSubjects.length, 'assunto', 'assuntos')}</span>
+          <span className="text-line">·</span>
+          <span>{count(reviews.filter((r) => r.status === 'done').length, reviews.length, 'revisão', 'revisões')}</span>
+          {tasks.length > 0 && <><span className="text-line">·</span><span>{count(tasks.filter((a) => a.done).length, tasks.length, 'tarefa', 'tarefas')}</span></>}
+        </div>
+      ) : (
       <div className="flex items-baseline gap-3">
         <span className={clsx('w-9 text-[11px] font-medium tracking-[0.16em] uppercase', isToday ? 'text-today' : 'text-ink-2')}>{WD[weekday(day.date)]}</span>
         <span className={clsx('tabular font-display text-[40px] leading-none', isToday ? 'text-today' : past ? 'text-ink-3' : 'text-ink')}>{Number(day.date.slice(8))}</span>
@@ -515,14 +558,15 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd 
         <span className="flex-1" />
         {isToday && <span className="text-[11px] tracking-[0.16em] text-today uppercase">hoje</span>}
       </div>
+      )}
 
       <div className="mt-4 grid gap-x-10 gap-y-7 sm:pl-12 md:grid-cols-2">
         <div data-testid="col-subjects" {...dropZone(dnd, day.date, 'task')}>
           <ColumnHead>Assuntos</ColumnHead>
           <ul>
             {day.newSubjects.map((n: any) => (
-              <TaskRow key={n.subjectId} item={{ ...n, done: n.done }} detail={!n.done && n.methodIds.length < n.totalActivities ? n.methods.join(' · ') : undefined}
-                pomodoro={isToday} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} disabled={busy}
+              <TaskRow key={n.subjectId} item={{ ...n, done: n.done }} detail={detailed || (!n.done && n.methodIds.length < n.totalActivities) ? n.methods.join(' · ') : undefined}
+                pomodoro={isToday || detailed} onOpen={onOpen} onCheck={(done) => onCheck(n, done)} disabled={busy}
                 drag={n.done ? undefined : dragProps(dnd, { type: 'task', subjectId: n.subjectId, from: day.date, methodIds: n.methodIds, name: n.name })} />
             ))}
             {!day.newSubjects.length && <li className="py-3 text-[14px] text-ink-3">{past ? '—' : 'Livre'}</li>}
@@ -548,6 +592,15 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd 
           </ul>
         </div>
       </div>
+
+      {agenda.length > 0 && (
+        <div className="mt-7 sm:pl-12" data-testid="planner-agenda">
+          <div className="flex items-baseline justify-between border-b border-ink/70 pb-1.5 text-[10.5px] font-medium tracking-[0.18em] text-ink-2 uppercase">
+            Tarefas<span className="text-[10px] font-normal tracking-[0.12em] text-ink-3 normal-case italic">da agenda</span>
+          </div>
+          <ul className="md:columns-2 md:gap-x-10">{agenda.map((a) => <AgendaRow key={a.id} task={a} onOpen={onTask} inPlanner className="break-inside-avoid" />)}</ul>
+        </div>
+      )}
 
       {questions?.perDay > 0 && questions.suggestions.length > 0 && (
         <p className="mt-4 text-[13px] text-ink-2 sm:pl-12">

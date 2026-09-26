@@ -251,7 +251,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   for (const item of ['Provas', 'Revisões', 'Configurações', 'Sair']) await expect(page.getByRole('menuitem', { name: item })).toBeVisible();
   await page.getByRole('menuitem', { name: 'Revisões' }).click();
   await expect(page).toHaveURL(/\/revisoes$/);
-  await page.getByRole('link', { name: '← Voltar ao planner' }).click();
+  await page.getByRole('link', { name: 'Planner', exact: true }).click();
   await expect(page).toHaveURL(HOME);
 
   // Zerar o perfil: volta ao início, como uma conta nova
@@ -261,4 +261,56 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(page).toHaveURL(HOME);
   await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
   await expect(page.getByLabel(/Selecionar FAMERP/)).not.toBeChecked();
+});
+
+test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Planner tem Dia | Semana', async ({ page }) => {
+  await page.goto('login');
+  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
+  await expect(page).toHaveURL(HOME);
+  await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
+  await page.getByRole('button', { name: 'Criar meu planner' }).click();
+  await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
+
+  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
+  await expect(page).toHaveURL(/\/agenda$/);
+  await page.getByTestId('add-day-task').click();
+  await page.keyboard.type('Enviar documentação da residência');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('add-general').click();
+  await page.keyboard.type('Comprar jaleco novo');
+  await page.keyboard.press('Enter');
+  const row = page.getByRole('group', { name: 'Tarefas do dia' }).getByTestId('agenda-task');
+  await expect(row).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Tarefas a fazer' }).getByTestId('agenda-task')).toHaveCount(1);
+
+  // Sem a opção, não aparece no Planner
+  await page.getByRole('link', { name: 'Planner', exact: true }).click();
+  await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
+  await expect(page.getByTestId('planner-agenda')).toHaveCount(0);
+
+  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
+  await row.getByRole('button', { name: 'Enviar documentação da residência' }).click();
+  await page.locator('label', { hasText: 'Mostrar no Planner' }).click();
+  await page.getByRole('button', { name: 'Salvar' }).click();
+
+  await page.getByRole('link', { name: 'Planner', exact: true }).click();
+  const inPlanner = page.getByTestId(`day-${inDays(0)}`).getByTestId('planner-agenda');
+  await expect(inPlanner).toContainText('Enviar documentação da residência');
+  await expect(page.getByTestId(`day-${inDays(0)}`).getByTestId('task-name')).not.toContainText(['Enviar documentação da residência']);
+  await inPlanner.getByRole('checkbox').click();
+  await expect(inPlanner.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+
+  // Dia | Semana
+  await page.getByRole('tab', { name: 'Dia' }).click();
+  await expect(page.getByTestId(/^day-/)).toHaveCount(1);
+  await page.getByRole('button', { name: 'Próximo dia' }).click();
+  await expect(page.getByTestId(`day-${inDays(1)}`)).toBeVisible();
+  await page.getByRole('button', { name: 'voltar para hoje' }).click();
+  await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
+  await page.getByRole('tab', { name: 'Semana' }).click();
+  await expect(page.getByTestId(/^day-/)).toHaveCount(7);
+
+  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
+  await expect(row.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
 });

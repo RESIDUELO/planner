@@ -6,6 +6,8 @@
 import { PGlite } from '@electric-sql/pglite';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createLocalSupabase } from './client';
+// Migrações: partes do schema criadas depois do banco pronto de versões anteriores do app
+import agendaSql from '../../../supabase/parts/13_agenda.sql?raw';
 // Fontes dentro do app (sem internet não há Google Fonts)
 import '@fontsource/tinos/latin-400.css';
 import '@fontsource/tinos/latin-400-italic.css';
@@ -16,17 +18,27 @@ import '@fontsource/patrick-hand/latin-400.css';
 
 const DATA_DIR = 'idb://residencia-planner';
 const READY_KEY = 'rp-local-db';
-/** Versão do banco pronto; ao mudar o schema, o app precisará migrar os dados. */
-export const LOCAL_DB_VERSION = '1';
+/** Versão do schema local; quem instalou uma versão anterior recebe as migrações que faltam. */
+export const LOCAL_DB_VERSION = '2';
+const MIGRATIONS: Record<string, string> = { '2': agendaSql };
 
 /** Cliente local e `flush` (grava no disco o que mudou; o app chama uma vez ao fim de cada ação). */
 export async function initLocal(): Promise<{ client: SupabaseClient; flush: () => Promise<void> }> {
-  let ready = false;
-  try { ready = localStorage.getItem(READY_KEY) != null; } catch { /* sem armazenamento */ }
+  let stored: string | null = null;
+  try { stored = localStorage.getItem(READY_KEY); } catch { /* sem armazenamento */ }
+  const ready = stored != null;
   let db: PGlite;
   // Grava no IndexedDB em segundo plano, sem esperar a cada consulta (bem mais rápido no celular)
   const opts = { relaxedDurability: true };
-  if (ready) db = await PGlite.create(DATA_DIR, opts);
+  if (ready) {
+    db = await PGlite.create(DATA_DIR, opts);
+    const pending = Object.keys(MIGRATIONS).filter((v) => Number(v) > Number(stored)).sort((a, b) => Number(a) - Number(b));
+    for (const v of pending) await db.exec(MIGRATIONS[v]);
+    if (pending.length) {
+      await (db as any).fs?.syncToFs?.(false);
+      try { localStorage.setItem(READY_KEY, LOCAL_DB_VERSION); } catch { /* ignore */ }
+    }
+  }
   else {
     // Extensão neutra: o Android renomeia arquivos .gz dentro do APK
     const res = await fetch(`${import.meta.env.BASE_URL}local-db.pgdata`);

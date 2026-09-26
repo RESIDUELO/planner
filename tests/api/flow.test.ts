@@ -629,3 +629,31 @@ describe('Atividades do mesmo assunto no mesmo dia', () => {
     expect((await byDates()).every((x) => x.n === 1)).toBe(true);
   });
 });
+
+describe('Agenda (organização pessoal, fora do planner de estudos)', () => {
+  it('tarefa com "Mostrar no Planner" é a mesma linha nos dois lugares e não mexe no estudo', async () => {
+    student.today = TODAY;
+    const before = await student.ok('GET', '/api/reviews/calendar?from=2026-10-26&to=2026-11-01');
+    const t = await student.ok('POST', '/api/agenda/tasks', { kind: 'day', title: 'Enviar documentação da residência', date: '2026-10-27', showInPlanner: true });
+    const inPlanner = await student.ok('GET', '/api/agenda/planner?from=2026-10-26&to=2026-11-01');
+    expect(inPlanner.map((x: any) => x.id)).toEqual([t.id]);
+    await student.ok('PATCH', `/api/agenda/tasks/${t.id}`, { done: true });
+    const agenda = await student.ok('GET', '/api/agenda?from=2026-10-26&to=2026-11-01');
+    expect(agenda.tasks.find((x: any) => x.id === t.id).done).toBe(true);
+    const after = await student.ok('GET', '/api/reviews/calendar?from=2026-10-26&to=2026-11-01');
+    expect(after.days).toEqual(before.days);
+  });
+
+  it('cada pessoa só vê a própria agenda (RLS)', async () => {
+    const token = await other.accessToken();
+    expect((await rest(token, 'GET', '/agenda_tasks')).body).toEqual([]);
+    expect((await rest(token, 'PATCH', '/agenda_tasks?id=not.is.null', { done: false })).body).toEqual([]);
+    const mine = await other.ok('GET', '/api/agenda?from=2026-10-26&to=2026-11-01');
+    expect(mine.tasks).toEqual([]);
+    const theirs = await student.ok('GET', '/api/agenda?from=2026-10-26&to=2026-11-01');
+    const id = theirs.tasks[0].id;
+    expect((await other.req('PATCH', `/api/agenda/tasks/${id}`, { done: false })).status).toBe(404);
+    expect((await other.req('DELETE', `/api/agenda/tasks/${id}`)).status).toBe(200);
+    expect((await student.ok('GET', '/api/agenda?from=2026-10-26&to=2026-11-01')).tasks).toHaveLength(1);
+  });
+});
