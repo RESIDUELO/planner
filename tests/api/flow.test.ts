@@ -595,3 +595,35 @@ describe('Cronograma pessoal (só administradores)', () => {
     expect(back.days.flatMap((x: any) => x.newSubjects).map((x: any) => x.name)).toContain('Hipertensão Arterial Sistêmica (HAS)');
   });
 });
+
+describe('Atividades do mesmo assunto no mesmo dia', () => {
+  it('planner antigo com o assunto dividido em dias é reorganizado sozinho', async () => {
+    const g = new Client();
+    g.today = '2026-09-28';
+    await g.ok('POST', '/api/auth/guest');
+    const s = await g.ok('GET', '/api/me/study-settings');
+    await g.ok('PUT', '/api/me/study-settings', {
+      profile: { ...s.profile, preferred_start_time: null, preferred_end_time: null },
+      methods: s.methods.map((m: any) => ({ id: m.id, enabled: ['video', 'flashcards', 'questions'].includes(m.code), minutes: m.estimated_minutes })),
+    });
+    await g.ok('POST', '/api/planner/generate', { editionIds: [ids.famerp], primaryEditionId: ids.famerp, startDate: '2026-09-28' });
+    const byDates = async () => {
+      const r = await dbQuery(`select subject_id, count(distinct scheduled_date)::int as n from study_schedule s
+        join study_plans p on p.id = s.study_plan_id and p.status = 'active'
+        where p.user_id = (select user_id from study_plans where id = s.study_plan_id) and s.scheduled_date > '2026-09-28' and not s.completed
+          and p.id = (select id from study_plans where name like 'Planner FAMERP%' and status = 'active' order by created_at desc limit 1)
+        group by 1`);
+      return r.rows as { subject_id: string; n: number }[];
+    };
+    expect((await byDates()).every((x) => x.n === 1)).toBe(true);
+    // Simula a regra antiga: questões de um assunto num dia depois da aula
+    const planId = (await dbQuery(`select id from study_plans where name like 'Planner FAMERP%' and status = 'active' order by created_at desc limit 1`)).rows[0].id;
+    await dbQuery(`update study_schedule set scheduled_date = scheduled_date + 1 where id = (
+      select s.id from study_schedule s join study_methods m on m.id = s.study_method_id
+      where s.study_plan_id = $1 and m.code = 'questions' and s.scheduled_date > '2026-09-29' order by s.scheduled_date limit 1)`, [planId]);
+    await dbQuery(`update study_plans set scheduler_version = 'scheduler_v1' where id = $1`, [planId]);
+    expect((await byDates()).some((x) => x.n > 1)).toBe(true);
+    await g.ok('GET', '/api/planner');
+    expect((await byDates()).every((x) => x.n === 1)).toBe(true);
+  });
+});

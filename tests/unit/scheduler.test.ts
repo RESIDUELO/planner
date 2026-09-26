@@ -29,6 +29,25 @@ describe('scheduler_v1', () => {
     for (const d of out.days) expect(d.newStudy + d.questions).toBeLessThanOrEqual(d.capacity);
   });
 
+  it('por padrão, aula, flashcards e questões do mesmo assunto ficam no mesmo dia', () => {
+    const out = buildSchedule(input());
+    const dates = new Map<string, Set<string>>();
+    for (const a of out.activities) {
+      if (!dates.has(a.subjectId)) dates.set(a.subjectId, new Set());
+      dates.get(a.subjectId)!.add(a.date);
+    }
+    expect(dates.size).toBeGreaterThan(10);
+    for (const [, ds] of dates) expect(ds.size).toBe(1);
+  });
+
+  it('assunto maior que um dia de estudo ocupa um dia inteiro, sem se dividir', () => {
+    const out = buildSchedule(input({ dailyMinutes: 90, questionsPerDay: 0 }));
+    const s1 = out.activities.filter((a) => a.subjectId === 's1');
+    expect(s1).toHaveLength(3);
+    expect(new Set(s1.map((a) => a.date)).size).toBe(1);
+    for (const d of out.days) expect(d.newStudy).toBeLessThanOrEqual(d.capacity);
+  });
+
   it('agenda na ordem do ranking e só em dias de estudo', () => {
     const out = buildSchedule(input());
     const firstDate = new Map<string, string>();

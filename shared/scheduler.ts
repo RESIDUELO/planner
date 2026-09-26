@@ -216,7 +216,31 @@ export function buildSchedule(input: SchedulerInput): SchedulerOutput {
     let c = cursor;
     const used = new Map<number, number>();
     let ok = true;
-    for (const b of blocks) {
+    // Padrão: o assunto inteiro (aula, flashcards, questões…) no MESMO dia.
+    // Assunto maior que um dia de estudo ocupa um dia livre inteiro (o tempo
+    // estimado de cada atividade é encolhido para caber); só se nem assim
+    // couber é que as atividades se dividem.
+    let together = false;
+    for (let k = cursor; k < finalPhaseStart; k++) {
+      const d = days[k];
+      const dayOpen = d.capacity - d.reviews - d.questions;
+      const free = dayOpen - d.newStudy;
+      let mins = blocks.map((b) => Math.min(b.minutes, Math.max(SCHEDULER.minBlockMinutes, dayOpen)));
+      const total = mins.reduce((t, m) => t + m, 0);
+      if (total > dayOpen && d.newStudy === 0 && blocks.length * SCHEDULER.minBlockMinutes <= dayOpen) {
+        const f = dayOpen / total;
+        mins = mins.map((m) => Math.max(SCHEDULER.minBlockMinutes, Math.floor(m * f)));
+        while (mins.reduce((t, m) => t + m, 0) > dayOpen) { const j = mins.indexOf(Math.max(...mins)); mins[j]--; }
+      }
+      if (mins.reduce((t, m) => t + m, 0) <= free) {
+        blocks.forEach((b, j) => tentative.push({ subjectId: s.subjectId, methodId: b.m.id, activityType: b.m.activityType, date: d.date, minutes: mins[j], priority: s.rank }));
+        used.set(k, mins.reduce((t, m) => t + m, 0));
+        c = k;
+        together = true;
+        break;
+      }
+    }
+    for (const b of together ? [] : blocks) {
       let placed = false;
       while (c < finalPhaseStart) {
         const d = days[c];

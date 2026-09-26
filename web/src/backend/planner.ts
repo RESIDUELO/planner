@@ -332,6 +332,12 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
   const plan = await activePlan(ctx, userId);
   if (!plan) return null;
   await ensureStudiedReviews(ctx, userId, plan);
+  // Planner feito com a regra antiga (atividades do mesmo assunto em dias diferentes): reorganiza uma vez
+  if (!plan.settings_snapshot?.template && plan.scheduler_version !== SCHEDULER_VERSION) {
+    await reflowSchedule(ctx, userId);
+    await q(ctx.sb.from('study_plans').update({ scheduler_version: SCHEDULER_VERSION }).eq('id', plan.id));
+    plan.scheduler_version = SCHEDULER_VERSION;
+  }
 
   const planExams = await q(ctx.sb.from('study_plan_exams').select('*').eq('study_plan_id', plan.id));
   const catalog = await q(ctx.sb.from('exam_catalog').select('edition_id, year, total_questions, exam_name, exam_total_questions, institution, exam_id')
@@ -623,6 +629,14 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
   // Cronograma pessoal: a fila anda nos dias de aula do próprio cronograma
   if (plan.settings_snapshot?.template) return reflowTemplate(ctx, plan);
   if (tomorrow >= plan.end_date) return;
+
+  // 1b) Assunto começado hoje: o resto dele (se estava em outro dia) vem para hoje também
+  const startedToday = new Set(rows.filter((r) => r.scheduled_date === today && !r.pinned).map((r) => r.subject_id));
+  const join = rows.filter((r) => !r.completed && !r.pinned && r.scheduled_date > today && startedToday.has(r.subject_id));
+  for (const r of join) r.scheduled_date = today;
+  for (let i = 0; i < join.length; i += 40) {
+    await q(ctx.sb.from('study_schedule').update({ scheduled_date: today }).in('id', join.slice(i, i + 40).map((r) => r.id)));
+  }
 
   // 2) Hoje e atrasadas ficam; o futuro é redistribuído
   // (e as que foram arrastadas para um dia ficam nesse dia)
