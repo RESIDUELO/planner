@@ -9,6 +9,7 @@ import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/forma
 import { areaShort, tintFor } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
 import { DESKTOP, useMedia } from '../lib/media';
+import { IS_LOCAL } from '../lib/platform';
 import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
 import { FocusWidget, PerformanceStrip, SubjectLibrary } from '../components/Workspace';
 import { SubjectModal, useInvalidateStudy } from '../components/SubjectModal';
@@ -126,7 +127,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
               </label>
             ))}
           </div>
-          <p className="mt-3 text-[13px] text-ink-3">Visível só para administradores. Segue as datas do seu cronograma; o que você já estudou entra como concluído.</p>
+          <p className="mt-3 text-[13px] text-ink-3">{IS_LOCAL ? '' : 'Visível só para administradores. '}Segue as datas do seu cronograma; o que você já estudou entra como concluído.</p>
         </section>
       )}
 
