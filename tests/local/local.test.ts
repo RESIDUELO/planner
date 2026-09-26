@@ -135,4 +135,78 @@ describe('app off-line', () => {
     expect(a.notes).toEqual({});
     expect(a.general.map((t: any) => t.title)).toEqual(['Comprar jaleco']);
   });
+  it('planner sem prova: vazio, montado à mão, e assuntos próprios sobrevivem ao cronograma automático', async () => {
+    today = '2026-09-28';
+    await ok('POST', '/api/me/reset');
+    expect((await ok('GET', '/api/planner')).plan ?? null).toBeNull();
+    const areas = await ok('GET', '/api/areas');
+    const outros = areas.find((a: any) => a.other);
+    const cardio = areas.find((a: any) => /Clínica/.test(a.name));
+    expect(outros && cardio).toBeTruthy();
+
+    // Primeiro "+": cria o planner vazio e o assunto do próprio aluno
+    const { subjectId: brugada } = await ok('POST', '/api/planner/days/2026-09-30/subjects', { name: 'Síndrome de Brugada', areaId: cardio.id });
+    const { subjectId: ecg } = await ok('POST', '/api/planner/days/2026-09-29/subjects', { name: 'Revisar ECG' });
+    await expect(ok('POST', '/api/planner/days/2026-09-27/subjects', { name: 'Ontem' })).rejects.toThrow(/hoje ou um dia futuro/);
+    let p = await ok('GET', '/api/planner');
+    expect(p.plan.settings_snapshot.manual).toBe(true);
+    expect(p.exams).toEqual([]);
+    expect(p.subjects.map((x: any) => [x.name, x.own, x.area])).toEqual([['Síndrome de Brugada', true, 'Clínica Médica'], ['Revisar ECG', true, 'Outros']]);
+    let week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
+    const on = (w: any, d: string) => w.days.find((x: any) => x.date === d).newSubjects.map((n: any) => n.name);
+    expect(on(week, '2026-09-30')).toEqual(['Síndrome de Brugada']);
+    expect(on(week, '2026-09-29')).toEqual(['Revisar ECG']);
+
+    // Funciona como qualquer assunto: mover, concluir, revisar, editar
+    await ok('POST', `/api/planner/subjects/${brugada}/move`, { from: '2026-09-30', to: '2026-10-01' });
+    week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
+    expect(on(week, '2026-10-01')).toEqual(['Síndrome de Brugada']);
+    const done = await ok('POST', `/api/planner/subjects/${ecg}/complete`, { done: true });
+    expect(done).toMatchObject({ studied: true, cardCreated: true });
+    const detail = await ok('GET', `/api/planner/subjects/${ecg}`);
+    expect(detail.subject.card.nextReview).toBeTruthy();
+    expect(detail.explanation).toMatch(/criado por você/);
+    await ok('PATCH', `/api/subjects/${ecg}`, { name: 'ECG — revisão' });
+    // Não entra na base global de assuntos da prova
+    const exams = await ok('GET', '/api/exams');
+    const famerp = exams.find((e: any) => e.institution === 'FAMERP');
+
+    // Escolhe uma prova depois: o cronograma automático é gerado e os assuntos próprios continuam nos mesmos dias
+    const st = await ok('GET', '/api/me/study-settings');
+    await ok('PUT', '/api/me/study-settings', {
+      profile: { ...st.profile, preferred_start_time: null, preferred_end_time: null },
+      methods: st.methods.map((m: any) => ({ id: m.id, enabled: m.enabled, minutes: m.estimated_minutes })),
+    });
+    await ok('POST', '/api/planner/generate', { editionIds: [famerp.edition_id], primaryEditionId: famerp.edition_id, startDate: today });
+    p = await ok('GET', '/api/planner');
+    expect(p.plan.settings_snapshot.manual).toBeUndefined();
+    const own = p.subjects.filter((x: any) => x.own);
+    expect(own.map((x: any) => x.name).sort()).toEqual(['ECG — revisão', 'Síndrome de Brugada']);
+    expect(p.subjects.filter((x: any) => !x.own).length).toBeGreaterThan(50);
+    week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
+    const before = on(week, '2026-10-02');
+    expect(before.length).toBeGreaterThan(0);
+    expect(on(week, '2026-10-01')).toContain('Síndrome de Brugada');
+
+    // "+" com assunto da prova e com assunto novo no mesmo dia: o que já estava planejado continua lá
+    const examSubject = p.subjects.find((x: any) => !x.own && !before.includes(x.name) && x.status === 'pending');
+    await ok('POST', '/api/planner/days/2026-10-02/subjects', { subjectId: examSubject.subjectId });
+    await ok('POST', '/api/planner/days/2026-10-02/subjects', { name: 'Arritmias — meu resumo' });
+    week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
+    expect(on(week, '2026-10-02')).toEqual(expect.arrayContaining([...before, examSubject.name, 'Arritmias — meu resumo']));
+
+    // Concluir um assunto reorganiza a fila automática, mas não mexe nos assuntos próprios
+    const firstAuto = p.subjects.find((x: any) => x.name === before[0]);
+    await ok('POST', `/api/planner/subjects/${firstAuto.subjectId}/complete`, { done: true });
+    await ok('POST', '/api/planner/replan');
+    week = await ok('GET', '/api/reviews/calendar?from=2026-09-28&to=2026-10-04');
+    expect(on(week, '2026-10-01')).toContain('Síndrome de Brugada');
+    expect(on(week, '2026-10-02')).toContain('Arritmias — meu resumo');
+
+    // Excluir o assunto próprio apaga só ele
+    await ok('DELETE', `/api/subjects/${brugada}`);
+    p = await ok('GET', '/api/planner');
+    expect(p.subjects.some((x: any) => x.subjectId === brugada)).toBe(false);
+    await expect(ok('DELETE', `/api/subjects/${examSubject.subjectId}`)).rejects.toThrow(/não encontrado/);
+  });
 });

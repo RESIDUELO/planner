@@ -65,6 +65,19 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
     onSuccess: () => { invalidate(); setMsg({ tone: 'neutral', text: 'Registro de questões excluído.' }); }, onError,
   });
 
+  // Assunto criado pelo aluno: pode ser renomeado ou excluído de vez
+  const [editing, setEditing] = useState<{ name: string; areaId: string | null } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const areas = useQuery({ queryKey: ['areas'], queryFn: () => api.get<{ id: string; name: string; other: boolean }[]>('/api/areas'), staleTime: Infinity, enabled: !!editing });
+  const rename = useMutation({
+    mutationFn: (b: { name: string; areaId: string | null }) => api.patch(`/api/subjects/${subjectId}`, b),
+    onSuccess: () => { invalidate(); setEditing(null); }, onError,
+  });
+  const remove = useMutation({
+    mutationFn: () => api.del(`/api/subjects/${subjectId}`),
+    onSuccess: () => { invalidate(); onClose(); }, onError,
+  });
+
   const d = q.data;
   const s = d?.subject;
   const tpl = s?.perExam?.[0]?.template;
@@ -85,7 +98,25 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
         <div>
           <header>
             <Tint area={s.area} className="text-[12px] tracking-[0.12em] uppercase">{areaShort(s.area)}{s.specialty ? ` · ${s.specialty}` : ''}</Tint>
-            <h2 className="mt-4 pr-8 font-display text-[40px] leading-[1.05]">{s.name}</h2>
+            {s.own && <span className="ml-3 text-[11px] tracking-[0.14em] text-ink-3 uppercase">seu assunto</span>}
+            {editing ? (
+              <form className="mt-4 animate-in" onSubmit={(e) => { e.preventDefault(); if (editing.name.trim()) rename.mutate({ name: editing.name.trim(), areaId: editing.areaId }); }}>
+                <input className="w-full border-b border-line bg-transparent pb-2 font-display text-[32px] leading-tight outline-none focus:border-ink" autoFocus
+                  aria-label="Nome do assunto" maxLength={200} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {(areas.data ?? []).map((a) => (
+                    <button type="button" key={a.id} aria-pressed={editing.areaId === a.id} onClick={() => setEditing({ ...editing, areaId: a.id })}
+                      className={clsx('rounded-full border px-3 py-1 text-[13px] transition', editing.areaId === a.id ? 'border-ink bg-ink text-canvas' : 'border-line text-ink-2 hover:border-ink hover:text-ink')}>
+                      {areaShort(a.name)}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-5 flex items-center gap-4">
+                  <Button type="submit" size="sm" disabled={!editing.name.trim()} loading={rename.isPending}>Salvar</Button>
+                  <Button type="button" variant="plain" size="sm" onClick={() => setEditing(null)}>Cancelar</Button>
+                </div>
+              </form>
+            ) : <h2 className="mt-4 pr-8 font-display text-[40px] leading-[1.05]">{s.name}</h2>}
             <p className="mt-3 text-[14px] text-ink-2" data-testid="subject-status">
               {studied ? <span className="text-ink">✓ Concluído</span> : `${doneCount} de ${s.checklist.length} ${s.checklist.length === 1 ? 'atividade' : 'atividades'}`}
             </p>
@@ -119,8 +150,20 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
             <Button variant="plain" size="sm" loading={complete.isPending} onClick={() => complete.mutate(!studied)}>
               {studied ? 'Desmarcar assunto' : 'Marcar assunto como concluído'}
             </Button>
-            {!s.hidden && <Button variant="destructive" size="sm" loading={hide.isPending} onClick={() => hide.mutate(true)}>Excluir do planner</Button>}
+            {s.own ? (
+              <>
+                {!editing && <Button variant="plain" size="sm" onClick={() => setEditing({ name: s.name, areaId: d.areaId ?? null })}>Editar assunto</Button>}
+                {!confirmDelete && <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>Excluir assunto</Button>}
+              </>
+            ) : !s.hidden && <Button variant="destructive" size="sm" loading={hide.isPending} onClick={() => hide.mutate(true)}>Excluir do planner</Button>}
           </div>
+          {confirmDelete && (
+            <div className="mt-5 flex flex-wrap items-baseline gap-x-4 gap-y-2 rounded-[12px] bg-fill px-4 py-3 text-[14px] animate-in" role="alert">
+              <span>Excluir “{s.name}” e todo o histórico dele (atividades, revisões e questões)?</span>
+              <Button variant="destructive" size="sm" loading={remove.isPending} onClick={() => remove.mutate()}>Excluir de vez</Button>
+              <Button variant="plain" size="sm" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+            </div>
+          )}
 
           {s.card?.nextReview && s.card.nextReview <= today && (
             <section className="mt-10">
@@ -188,6 +231,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
               </section>
 
               <div className="border-t border-line">
+                {!s.own && <>
                 <Disclosure summary="Por que este assunto?" className="border-b border-line">
                   <p className="text-[14px] text-ink-2">{LEVEL_TEXT[s.level]} · #{s.rank} · {pct(s.percentage)} da prova{!s.scheduled && ' · fora do tempo disponível'}</p>
                   <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{d.explanation}</p>
@@ -234,6 +278,7 @@ export function SubjectModal({ subjectId, onClose }: { subjectId: string; onClos
                     ))}
                   </dl>
                 </Disclosure>
+                </>}
 
                 {(d.subtopics.length > 0 || d.reviews.length > 0) && (
                   <Disclosure summary="Histórico e subassuntos" className="border-b border-line">

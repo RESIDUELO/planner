@@ -9,7 +9,7 @@ import { RATINGS, type Rating } from '../../../shared/memory';
 import { sufficiencyMessage } from '../../../shared/stats';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, toApiError, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
-import { generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
+import { addSubjectToDay, deleteOwnSubject, updateOwnSubject, generatePlan, loadMethods, loadPlanState, loadProfile, logPractice, rateReview, replan, setMethodDone, setReviewsPerDay, setSubjectHidden, scheduleSubjectOn, moveTask, moveReview, setSubjectActivities, setSubjectDone, studyWeekdays } from './planner';
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
 import { agendaView, createTask, deleteTask, plannerTasks, saveNote, updateTask } from './personal';
@@ -310,11 +310,12 @@ route('GET', '/api/planner/subjects/:id', async ({ ctx, params }) => {
   const n = subj.yearsAnalyzed;
   const pct = (subj.percentage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
   const tpl = (subj.perExam?.[0] as any)?.template;
-  const explanation = tpl ? templateExplanation(subj, tpl, primary?.institution) : s.exams.length === 1
+  const explanation = subj.own ? 'Assunto criado por você: não vem da análise das provas e não muda a base de assuntos de ninguém.' : tpl ? templateExplanation(subj, tpl, primary?.institution) : s.exams.length === 1
     ? `${subj.name} está em #${subj.rank} porque representou ${pct}% das questões das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'} de ${primary?.institution ?? 'sua prova'}.`
     : `${subj.name} está em #${subj.rank} porque representou, em média ponderada, ${pct}% das questões das provas selecionadas (peso maior para a prova principal e para as provas mais próximas).`;
+  const areaId = subj.own ? (await loadSubjectsInfo(ctx, [id])).get(id)?.area_id ?? null : null;
   return {
-    subject: subj, explanation, examWeights: s.plan.summary.weights, exams: s.plan.summary.exams, subtopics: children,
+    subject: subj, areaId, explanation, examWeights: s.plan.summary.weights, exams: s.plan.summary.exams, subtopics: children,
     practice, reviews, allMethods, weights: PRIORITY.weights, mastery: { priorWeight: MASTERY.priorWeight, priorMean: MASTERY.priorMean },
   };
 });
@@ -441,4 +442,25 @@ route('DELETE', '/api/agenda/tasks/:id', async ({ ctx, params }) => deleteTask(c
 route('PUT', '/api/agenda/notes/:date', async ({ ctx, params, body }) => {
   const { content } = z.object({ content: z.string().max(5000) }).parse(body);
   return saveNote(ctx, isoDate.parse(params.date), content);
+});
+
+// Montar o planner à mão: "+" num dia (assunto da prova ou novo), editar e excluir assuntos próprios
+route('POST', '/api/planner/days/:date/subjects', async ({ ctx, params, body }) => {
+  const b = z.object({
+    subjectId: uuid.optional(),
+    name: z.string().trim().min(1, 'Escreva o nome do assunto.').max(200).optional(),
+    areaId: uuid.nullable().optional(),
+  }).refine((x) => !!x.subjectId !== !!x.name, 'Escolha um assunto ou escreva um novo.').parse(body);
+  return addSubjectToDay(ctx, { date: isoDate.parse(params.date), ...b });
+});
+route('PATCH', '/api/subjects/:id', async ({ ctx, params, body }) => {
+  const b = z.object({ name: z.string().trim().min(1, 'Escreva o nome do assunto.').max(200), areaId: uuid.nullable().optional() }).parse(body);
+  return updateOwnSubject(ctx, uuid.parse(params.id), b);
+});
+route('DELETE', '/api/subjects/:id', async ({ ctx, params }) => deleteOwnSubject(ctx, uuid.parse(params.id)));
+// Grandes áreas (para classificar um assunto novo)
+route('GET', '/api/areas', async ({ ctx }) => {
+  await currentUserId(ctx);
+  const rows = await q<any[]>(ctx.sb.from('medical_areas').select('id, name, slug, sort_order').is('parent_id', null).eq('active', true).order('sort_order').order('name'));
+  return rows.map((r) => ({ id: r.id, name: r.name, other: r.slug === 'outros' }));
 });

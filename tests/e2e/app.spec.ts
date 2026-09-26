@@ -10,6 +10,11 @@ const student = { name: 'Aluna E2E', email: `aluna${Date.now()}@e2e.test`, passw
 const inDays = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + n * 86_400_000));
 const HOME = /\/planner\/planner$/;
 
+/** Sem prova o planner abre vazio; o cronograma de uma prova é opcional. */
+async function openSetup(page: Page) {
+  await page.getByRole('button', { name: 'usar o cronograma de uma prova' }).click();
+}
+
 async function login(page: Page, email: string, password: string) {
   await page.goto('login');
   await page.getByLabel('E-mail').fill(email);
@@ -36,6 +41,10 @@ test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async
   await page.getByLabel('Senha').fill(student.password);
   await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
   await expect(page).toHaveURL(HOME);
+  // Planner vazio, pronto para montar à mão; a prova é opcional
+  await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
+  await expect(page.getByTestId('add-subject').first()).toBeVisible();
+  await openSetup(page);
   await expect(page.getByRole('heading', { name: 'Planner' })).toBeVisible();
   await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
   await expect(page.getByText('Receba seu planner')).toHaveCount(0);
@@ -72,6 +81,7 @@ test('datas oficiais fixas; inscrição e valor são do aluno (teste 3)', async 
 
 test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e checklist', async ({ page }) => {
   await login(page, student.email, student.password);
+  await openSetup(page);
   await expect(page.getByLabel(/Selecionar FAMERP/)).toBeChecked();
   // Uma tela só: prova e (opcionalmente) como estuda; tempo fica em "Opções avançadas"
   await expect(page.getByText('Como você estuda?')).toBeVisible();
@@ -208,6 +218,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
 
   // Sem configuração: prova → planner → marcar a primeira tarefa
   await page.goto('planner');
+  await openSetup(page);
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
   await expect(page.getByLabel(/Selecionar FAMERP/)).toBeChecked();
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
@@ -259,6 +270,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await page.getByRole('button', { name: 'Zerar meu perfil' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Zerar tudo' }).click();
   await expect(page).toHaveURL(HOME);
+  await openSetup(page);
   await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
   await expect(page.getByLabel(/Selecionar FAMERP/)).not.toBeChecked();
 });
@@ -267,6 +279,7 @@ test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Pl
   await page.goto('login');
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
   await expect(page).toHaveURL(HOME);
+  await openSetup(page);
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
   await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
@@ -313,4 +326,53 @@ test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Pl
 
   await page.getByRole('link', { name: 'Agenda', exact: true }).click();
   await expect(row.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+});
+
+test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no mesmo dia', async ({ page }) => {
+  await page.goto('login');
+  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
+  await expect(page).toHaveURL(HOME);
+  await expect(page.getByText('Meu planner')).toBeVisible();
+
+  // Planner vazio: "+" num dia → novo assunto
+  // Hoje sempre está na semana aberta
+  const tomorrow = page.getByTestId(`day-${inDays(0)}`);
+  await tomorrow.getByTestId('add-subject').click();
+  await page.getByLabel('Nome do assunto').fill('Síndrome de Brugada');
+  await page.getByRole('button', { name: 'Clínica' }).click();
+  await page.getByRole('button', { name: 'Adicionar ao Planner' }).click();
+  await expect(tomorrow.getByTestId('task-name')).toHaveText(['Síndrome de Brugada']);
+  await expect(page.getByTestId('library-item')).toHaveCount(1);
+
+  // Funciona como os outros: concluir no dia
+  await tomorrow.getByTestId('task').getByRole('checkbox').click();
+  await expect(tomorrow.getByTestId('task').getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+
+  // Depois escolhe uma prova: o assunto próprio continua no dia e dá para somar um da prova
+  await openSetup(page);
+  await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
+  await page.getByRole('button', { name: 'Criar meu planner' }).click();
+  const day2 = page.getByTestId(`day-${inDays(0)}`);
+  await expect(day2).toBeVisible();
+  const before = await day2.getByTestId('task-name').allTextContents();
+  await day2.getByTestId('add-subject').click();
+  await page.getByLabel('Pesquisar assunto').fill('pneumonia');
+  await page.getByTestId('add-pick').first().click();
+  await expect(day2.getByTestId('task-name')).toHaveCount(before.length + 1);
+  for (const n of before) await expect(day2.getByTestId('task-name').filter({ hasText: n })).toHaveCount(1);
+  await day2.getByTestId('add-subject').click();
+  await page.getByTestId('add-create').click();
+  await page.getByLabel('Nome do assunto').fill('Revisar ECG');
+  await page.getByRole('button', { name: 'Adicionar ao Planner' }).click();
+  await expect(day2.getByTestId('task-name').filter({ hasText: 'Revisar ECG' })).toHaveCount(1);
+
+  // Editar e excluir o assunto próprio pela folha do assunto
+  await day2.getByTestId('task-name').filter({ hasText: 'Revisar ECG' }).click();
+  await page.getByRole('button', { name: 'Editar assunto' }).click();
+  await page.getByLabel('Nome do assunto').fill('ECG — revisão');
+  await page.getByRole('button', { name: 'Salvar' }).click();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'ECG — revisão' })).toBeVisible();
+  await page.getByRole('button', { name: 'Excluir assunto' }).click();
+  await page.getByRole('button', { name: 'Excluir de vez' }).click();
+  await expect(day2.getByTestId('task-name').filter({ hasText: 'ECG' })).toHaveCount(0);
 });

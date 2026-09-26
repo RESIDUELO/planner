@@ -11,7 +11,7 @@ import { buildSchedule, sizeFactors } from '../../../shared/scheduler';
 import { estimateMastery } from '../../../shared/mastery';
 import { assignReviews } from '../../../shared/reviewQueue';
 import { sufficiencyMessage } from '../../../shared/stats';
-import { ApiError, badRequest, currentUserId, q, rpc, selectAll, type Ctx } from './core';
+import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
 import { loadExamHistories, loadSubjectsInfo } from './history';
 import { ensureStudiedReviews, reflowTemplate, replanTemplate } from './templates';
 
@@ -231,8 +231,7 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
 
   const primary = eds.find((e) => e.edition_id === params.primaryEditionId)!;
   const scheduledSet = new Set(schedule.scheduledSubjectIds);
-  const planId = await rpc<string>(ctx, 'save_plan', {
-    p: {
+  const planId = await savePlan(ctx, {
       name: `Planner ${editionLabel(primary)}`,
       start_date: startDate,
       end_date: endDate,
@@ -264,10 +263,116 @@ export async function generatePlan(ctx: Ctx, params: GenerateParams): Promise<st
       activities: schedule.activities.map((a) => ({
         subject_id: a.subjectId, method_id: a.methodId, date: a.date, activity_type: a.activityType, minutes: a.minutes, priority: a.priority,
       })),
-    },
   });
   await readjustCards(ctx, userId, planId);
   return planId;
+}
+
+// ---------------------------------------------------------------------------
+// Assuntos do próprio aluno e planner montado à mão
+// ---------------------------------------------------------------------------
+
+/** Assuntos criados pelo aluno (14_own_subjects.sql). Sem a coluna ainda: nenhum. */
+export async function ownSubjectIds(ctx: Ctx, userId: string): Promise<Set<string>> {
+  const { data, error } = await ctx.sb.from('subjects').select('id').eq('owner_user_id', userId);
+  if (error) return new Set();
+  return new Set((data as any[]).map((r) => r.id));
+}
+
+const OWN_ROW = (planId: string, userId: string, subjectId: string, rank: number) => ({
+  study_plan_id: planId, user_id: userId, subject_id: subjectId, historical_frequency: 0, historical_percentage: 0, annual_average: 0,
+  years_present: 0, years_analyzed: 0, recent_frequency: 0, priority_score: 0, priority_rank: rank, priority_level: 'baixa',
+  estimated_questions: 0, size_factor: 1, exam_date: null, scheduled: true, per_exam: [],
+});
+
+/**
+ * Grava um plano novo (o anterior é arquivado). Os assuntos criados pelo aluno
+ * vão junto, nos mesmos dias: gerar ou refazer o cronograma de uma prova não
+ * apaga o que foi montado à mão.
+ */
+export async function savePlan(ctx: Ctx, p: Record<string, unknown>): Promise<string> {
+  const userId = await currentUserId(ctx);
+  const prev = await activePlan(ctx, userId);
+  const own = prev ? await ownSubjectIds(ctx, userId) : new Set<string>();
+  const keep = own.size ? (await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank')
+    .eq('study_plan_id', prev.id).order('priority_rank').range(a, b)) as any[]).filter((r) => own.has(r.subject_id)) : [];
+  const pending = keep.length ? (await selectAll((a, b) => ctx.sb.from('study_schedule').select('subject_id, study_method_id, scheduled_date, activity_type, estimated_minutes, priority')
+    .eq('study_plan_id', prev.id).eq('completed', false).neq('activity_type', 'review').range(a, b)) as any[]).filter((r) => own.has(r.subject_id)) : [];
+
+  const planId = await rpc<string>(ctx, 'save_plan', { p });
+  if (!keep.length) return planId;
+  const max = (await q(ctx.sb.from('study_plan_subjects').select('priority_rank').eq('study_plan_id', planId)
+    .order('priority_rank', { ascending: false }).limit(1).maybeSingle()) as any)?.priority_rank ?? 0;
+  await q(ctx.sb.from('study_plan_subjects').insert(keep.map((r, i) => OWN_ROW(planId, userId, r.subject_id, max + i + 1))));
+  if (pending.length) {
+    const rows = pending.map((r) => ({ ...r, user_id: userId, study_plan_id: planId }));
+    let { error } = await ctx.sb.from('study_schedule').insert(rows.map((r) => ({ ...r, pinned: true })) as any);
+    if (error?.code === MISSING_COLUMN) ({ error } = await ctx.sb.from('study_schedule').insert(rows));
+    if (error) throw error;
+  }
+  return planId;
+}
+
+/** Planner ativo; se ainda não houver nenhum, cria um vazio (sem prova), para montar à mão. */
+export async function ensurePlan(ctx: Ctx, userId: string) {
+  const existing = await activePlan(ctx, userId);
+  if (existing) return existing;
+  const methods = await loadMethods(ctx, userId);
+  if (!methods.some((m) => m.enabled)) {
+    // Sem "Como você estuda?" configurado: videoaula + flashcards (dá para mudar em cada assunto)
+    const pick = methods.filter((m) => ['video', 'flashcards'].includes(m.code));
+    await q(ctx.sb.from('user_study_methods').upsert((pick.length ? pick : methods.slice(0, 1))
+      .map((m) => ({ study_method_id: m.id, enabled: true, estimated_minutes: m.estimated_minutes })), { onConflict: 'user_id,study_method_id' }));
+  }
+  const today = ctx.today();
+  await savePlan(ctx, {
+    name: 'Meu planner', start_date: today, end_date: addDays(today, 3650), primary_exam_edition_id: null, mode: 'single',
+    algorithm_version: `${PRIORITY_VERSION}+${MEMORY_VERSION}`, scheduler_version: SCHEDULER_VERSION,
+    settings_snapshot: { manual: true }, summary: { manual: true, exams: [], weights: [], warnings: [] },
+    exams: [], subjects: [], activities: [],
+  });
+  return (await activePlan(ctx, userId))!;
+}
+
+/**
+ * "+" num dia do planner: um assunto da prova (já no planner) ou um assunto
+ * novo, criado pelo aluno. Entra naquele dia, junto do que já estava lá.
+ */
+export async function addSubjectToDay(ctx: Ctx, body: { date: ISODate; subjectId?: string; name?: string; areaId?: string | null }) {
+  const userId = await currentUserId(ctx);
+  if (body.date < ctx.today()) throw badRequest('Escolha hoje ou um dia futuro.');
+  const plan = await ensurePlan(ctx, userId);
+  let subjectId = body.subjectId;
+  if (!subjectId) {
+    const { data, error } = await ctx.sb.rpc('create_my_subject', { p_name: body.name ?? '', p_area: body.areaId ?? null });
+    if (error?.code === 'PGRST202' || error?.code === '42883') throw new ApiError(503, 'O banco do site está desatualizado: rode no Supabase o SQL mais recente de supabase/parts/ (14_own_subjects.sql).');
+    if (error) throw error;
+    subjectId = data as string;
+  }
+  const inPlan = await q(ctx.sb.from('study_plan_subjects').select('subject_id').eq('study_plan_id', plan.id).eq('subject_id', subjectId).maybeSingle());
+  if (!inPlan) {
+    // Fora do planner só entram assuntos do próprio aluno (os das provas já estão nele)
+    if (!(await ownSubjectIds(ctx, userId)).has(subjectId)) throw notFound('Assunto');
+    const max = (await q(ctx.sb.from('study_plan_subjects').select('priority_rank').eq('study_plan_id', plan.id)
+      .order('priority_rank', { ascending: false }).limit(1).maybeSingle()) as any)?.priority_rank ?? 0;
+    await q(ctx.sb.from('study_plan_subjects').insert(OWN_ROW(plan.id, userId, subjectId, max + 1)));
+  }
+  // Estava fora do planner ("Excluir do planner"): volta
+  await ctx.sb.from('hidden_subjects').delete().eq('user_id', userId).eq('subject_id', subjectId);
+  await scheduleSubjectOn(ctx, subjectId, body.date);
+  return { subjectId };
+}
+
+export async function updateOwnSubject(ctx: Ctx, subjectId: string, body: { name: string; areaId?: string | null }) {
+  await currentUserId(ctx);
+  await rpc(ctx, 'update_my_subject', { p_id: subjectId, p_name: body.name, p_area: body.areaId ?? null });
+  return { ok: true };
+}
+
+export async function deleteOwnSubject(ctx: Ctx, subjectId: string) {
+  await currentUserId(ctx);
+  await rpc(ctx, 'delete_my_subject', { p_id: subjectId });
+  return { ok: true };
 }
 
 /** Regera o planner com a mesma seleção, a partir de hoje. */
@@ -277,6 +382,8 @@ export async function replan(ctx: Ctx): Promise<string> {
   const plan = await activePlan(ctx, userId);
   if (!plan) throw badRequest('Nenhum planner ativo.');
   if (plan.settings_snapshot?.template) return replanTemplate(ctx);
+  // Planner montado à mão: nada a redistribuir (o atrasado continua como atrasado)
+  if (plan.settings_snapshot?.manual) return plan.id;
   const exams = await q(ctx.sb.from('study_plan_exams').select('exam_edition_id, is_primary, exam_date').eq('study_plan_id', plan.id));
   const primary = (exams as any[]).find((e) => e.is_primary) ?? exams[0];
   const hasFutureDate = (exams as any[]).some((e) => e.exam_date && e.exam_date > today);
@@ -314,7 +421,7 @@ export interface PlanSubjectView {
   subjectId: string; name: string; area: string; specialty: string | null; rank: number; level: PriorityLevel; levelLabel: string;
   percentage: number; frequency: number; annualAverage: number; yearsPresent: number; yearsAnalyzed: number;
   recentPercentage: number; estimatedQuestions: number; sizeFactor: number; scheduled: boolean; examDate: ISODate | null;
-  perExam: any[]; status: SubjectStatus; customActivities: boolean; hidden: boolean;
+  perExam: any[]; status: SubjectStatus; customActivities: boolean; hidden: boolean; own: boolean;
   checklist: { methodId: string; code: string; name: string; done: boolean; completedAt: string | null; scheduledDate: ISODate | null; minutes: number | null }[];
   progress: number;
   performance: { answered: number; correct: number; accuracy: number | null; lastQuestionAt: string | null };
@@ -410,7 +517,7 @@ export async function loadPlanState(ctx: Ctx, userId: string) {
       percentage: num(s.historical_percentage), frequency: num(s.historical_frequency), annualAverage: num(s.annual_average),
       yearsPresent: s.years_present, yearsAnalyzed: s.years_analyzed, recentPercentage: num(s.recent_frequency),
       estimatedQuestions: num(s.estimated_questions), sizeFactor: num(s.size_factor), scheduled: s.scheduled, examDate: s.exam_date,
-      perExam: s.per_exam, status, checklist, customActivities: !!chosen, hidden: hidden.has(s.subject_id),
+      perExam: s.per_exam, status, checklist, customActivities: !!chosen, hidden: hidden.has(s.subject_id), own: !!(inf as any)?.own,
       progress: checklist.length ? doneCount / checklist.length : 0,
       performance: { answered, correct, accuracy: answered ? correct / answered : null, lastQuestionAt: p?.last_question_at ?? null },
       card: c ? {
@@ -628,6 +735,8 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
 
   // Cronograma pessoal: a fila anda nos dias de aula do próprio cronograma
   if (plan.settings_snapshot?.template) return reflowTemplate(ctx, plan);
+  // Montado à mão: cada assunto fica no dia em que foi colocado
+  if (plan.settings_snapshot?.manual) return;
   if (tomorrow >= plan.end_date) return;
 
   // 1b) Assunto começado hoje: o resto dele (se estava em outro dia) vem para hoje também
@@ -646,8 +755,10 @@ export async function reflowSchedule(ctx: Ctx, userId: string) {
   const enabledIds = allMethods.filter((m) => m.enabled).map((m) => m.id);
   const choices = await loadActivityChoices(ctx, userId);
   const hiddenIds = await loadHidden(ctx, userId);
-  const ps = await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank, historical_percentage, size_factor, exam_date, scheduled')
-    .eq('study_plan_id', plan.id).range(a, b)) as any[];
+  // Assuntos do aluno ficam no dia escolhido: o cronograma automático não os redistribui
+  const own = await ownSubjectIds(ctx, userId);
+  const ps = (await selectAll((a, b) => ctx.sb.from('study_plan_subjects').select('subject_id, priority_rank, historical_percentage, size_factor, exam_date, scheduled')
+    .eq('study_plan_id', plan.id).range(a, b)) as any[]).filter((s) => !own.has(s.subject_id));
   const cards = await selectAll<CardRow>((a, b) => ctx.sb.from('spaced_repetition_cards').select('*').eq('user_id', userId).range(a, b));
   const cardBy = new Map(cards.map((c) => [c.subject_id, c]));
   const planExams = await q(ctx.sb.from('study_plan_exams').select('exam_date').eq('study_plan_id', plan.id)) as any[];

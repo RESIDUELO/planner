@@ -62,12 +62,12 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
               <span className={`h-2 w-2 shrink-0 rounded-full dot-${tintFor(s.area)}`} aria-hidden />
               <button onClick={() => onOpen(s.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
                 <span className={clsx('block truncate text-[15px] leading-snug', s.status === 'studied' && 'text-ink-3 line-through decoration-1')}>{s.name}</span>
-                <span className="block truncate text-[11px] text-ink-3">{areaShort(s.area)} · {pct(s.percentage)}{date ? ` · ${date < today ? 'atrasado' : shortDate(date, false)}` : ' · sem dia'}</span>
+                <span className="block truncate text-[11px] text-ink-3">{areaShort(s.area)} · {s.own ? 'seu assunto' : pct(s.percentage)}{date ? ` · ${date < today ? 'atrasado' : shortDate(date, false)}` : ' · sem dia'}</span>
               </button>
             </li>
           );
         })}
-        {!list.length && <li className="py-3 text-[14px] text-ink-3">Nada por aqui.</li>}
+        {!list.length && <li className="py-3 text-[14px] text-ink-3">{data.subjects.length ? 'Nada por aqui.' : 'Use “+ adicionar assunto” em qualquer dia para montar seu planner.'}</li>}
       </ul>
       {!fit && list.length > limit && (
         <button onClick={() => setLimit(limit + 10)} className="mt-2 text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">

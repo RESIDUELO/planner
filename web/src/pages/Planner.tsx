@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { ChevronLeft, ChevronRight, Search, Timer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Search, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
 import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/format';
@@ -12,6 +12,7 @@ import { useWide } from '../lib/zoom';
 import { IS_LOCAL } from '../lib/platform';
 import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
 import { AgendaRow, TaskEditor } from '../components/Agenda';
+import { AddSubjectSheet } from '../components/AddSubject';
 import { longDate, usePlannerTasks, weekdayLong, type AgendaTask } from '../lib/agenda';
 import { FocusWidget, PerformanceStrip, SubjectLibrary } from '../components/Workspace';
 import { SubjectModal, useInvalidateStudy } from '../components/SubjectModal';
@@ -24,9 +25,10 @@ export function PlannerPage() {
   if (q.isLoading) return <Spinner />;
   return (
     <>
-      {!q.data?.plan || setup
-        ? <PlannerSetup onDone={() => setSetup(false)} canCancel={!!q.data?.plan} />
-        : <PlannerView data={q.data} onReconfigure={() => setSetup(true)} />}
+      {/* Sem prova escolhida o planner começa vazio, para montar à mão; a prova é opcional */}
+      {setup
+        ? <PlannerSetup onDone={() => setSetup(false)} canCancel />
+        : <PlannerView data={q.data?.plan ? q.data : EMPTY} onReconfigure={() => setSetup(true)} />}
       {user?.isGuest && (
         <p className="mx-auto mt-20 max-w-3xl text-[13px] text-ink-3">
           Você está no modo visitante. <Link to="/configuracoes" className="text-ink underline underline-offset-4">Crie uma conta</Link> para acessar de outros dispositivos.
@@ -41,6 +43,7 @@ export function PlannerPage() {
 // ============================================================================
 
 export const REVIEW_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
+const EMPTY = { plan: null, exams: [], subjects: [], methods: [] };
 
 function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
   const qc = useQueryClient();
@@ -262,17 +265,22 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   const replan = useMutation({ mutationFn: () => api.post('/api/planner/replan'), onSuccess: () => qc.invalidateQueries() });
   const exam = data.exams.find((e: any) => e.is_primary) ?? data.exams[0];
   const left = exam?.exam_date ? daysBetween(exam.exam_date, todayBR()) : null;
-  const eyebrow = data.plan.summary?.template
+  const [adding, setAdding] = useState<string | null>(null);
+  // Sem prova: planner montado à mão (a prova e o cronograma automático são opcionais)
+  const noExam = !data.exams.length;
+  const eyebrow: ReactNode = noExam
+    ? <>Meu planner · <button onClick={onReconfigure} className="tracking-[0.16em] uppercase underline decoration-line underline-offset-4 hover:text-ink hover:decoration-ink">usar o cronograma de uma prova</button></>
+    : data.plan.summary?.template
     ? `${data.plan.name} · ${shortDate(exam?.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}`
     : exam?.exam_date ? `${exam.institution} · ${shortDate(exam.exam_date)}${left != null && left > 0 ? ` · faltam ${left} dias` : ''}` : data.plan.name.replace(/^Planner /, '');
   const dnd = useDnd();
   const menu = (
     <Menu items={[
-      { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate() },
-      { label: 'Todos os assuntos', onClick: () => setSheet('subjects') },
+      { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate(), hidden: noExam },
+      { label: 'Todos os assuntos', onClick: () => setSheet('subjects'), hidden: !data.subjects.length },
       { label: 'Tabela combinada das provas', onClick: () => setSheet('multi'), hidden: data.exams.length < 2 },
-      { label: 'Reconfigurar planner', onClick: onReconfigure },
-      { label: 'Sobre este plano', onClick: () => setSheet('about') },
+      { label: noExam ? 'Usar o cronograma de uma prova' : 'Reconfigurar planner', onClick: onReconfigure },
+      { label: 'Sobre este plano', onClick: () => setSheet('about'), hidden: noExam },
     ]} />
   );
 
@@ -286,7 +294,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   return (
     <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-105px)] fit:grid-cols-[minmax(0,1fr)_300px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
       <section aria-label="Semana" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
-        <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} />
+        <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} onAdd={setAdding} />
       </section>
       <aside aria-label="Estudo" className="no-scrollbar min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-10 fit:space-y-0 fit:overflow-y-auto">
         <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} fit={desktop} />
@@ -298,6 +306,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       {sheet === 'subjects' && <Sheet open onClose={() => setSheet(null)} wide title="Assuntos"><SubjectList data={data} onOpen={(id) => { setSheet(null); setOpen(id); }} /></Sheet>}
       {sheet === 'multi' && <Sheet open onClose={() => setSheet(null)} wide title="Tabela combinada"><MultiTable data={data} onOpen={(id) => { setSheet(null); setOpen(id); }} /></Sheet>}
       {open && <SubjectModal subjectId={open} onClose={() => setOpen(null)} />}
+      {adding && <AddSubjectSheet date={adding} data={data} onClose={() => setAdding(null)} />}
     </div>
   );
 }
@@ -366,7 +375,7 @@ function useReviewDone() {
   });
 }
 
-function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean; dnd: DnD; eyebrow: string; menu: ReactNode; desktop?: boolean }) {
+function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, onAdd }: { onOpen: (id: string) => void; onReplan: () => void; replanning: boolean; dnd: DnD; eyebrow: ReactNode; menu: ReactNode; desktop?: boolean; onAdd: (date: string) => void }) {
   const today = todayBR();
   // DIA | SEMANA: a mesma semana (mesmos dados), vista um dia por vez ou inteira
   const [mode, setModeState] = useState<ViewMode>(() => { try { return localStorage.getItem(VIEW_KEY) === 'dia' ? 'dia' : 'semana'; } catch { return 'semana'; } });
@@ -407,7 +416,9 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
     // Abre em hoje (se não houver atrasados para mostrar no topo)
     el.scrollTop = !single && isThisWeek && t && !late.length ? Math.max(0, t.offsetTop - 8) : 0;
   }, [desktop, from, week.isLoading, single, day]);
-  const shown = (week.data?.days ?? []).filter((d: any) => !single || d.date === day);
+  // Ainda sem planner: a semana aparece vazia, pronta para receber assuntos
+  const days = week.data?.days ?? Array.from({ length: 7 }, (_, i) => ({ date: addDays(from, i), reviews: [], newSubjects: [], exams: [] }));
+  const shown = days.filter((d: any) => !single || d.date === day);
 
   return (
     <div className={clsx(desktop && 'flex min-h-0 flex-1 flex-col')}>
@@ -465,7 +476,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
           {shown.map((d: any) => (
             <DayBlock key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
               onCheck={onCheck} onReview={(id) => reviewDone.mutate(id)} busy={busy} dnd={dnd}
-              agenda={agendaOn(d.date)} onTask={setTask} detailed={single} />
+              agenda={agendaOn(d.date)} onTask={setTask} detailed={single} onAdd={onAdd} />
           ))}
         </div>
       )}
@@ -523,9 +534,9 @@ function ColumnHead({ children }: { children: string }) {
   return <div className="border-b border-ink/70 pb-1.5 text-[10.5px] font-medium tracking-[0.18em] text-ink-2 uppercase">{children}</div>;
 }
 
-function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd, agenda = [], onTask, detailed }: {
+function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd, agenda = [], onTask, detailed, onAdd }: {
   day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; onReview: (id: string) => void; questions?: any; busy?: boolean; dnd: DnD;
-  agenda?: AgendaTask[]; onTask: (t: AgendaTask) => void; detailed?: boolean;
+  agenda?: AgendaTask[]; onTask: (t: AgendaTask) => void; detailed?: boolean; onAdd: (date: string) => void;
 }) {
   const isToday = day.date === today;
   const past = day.date < today;
@@ -571,6 +582,12 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd,
             ))}
             {!day.newSubjects.length && <li className="py-3 text-[14px] text-ink-3">{past ? '—' : 'Livre'}</li>}
           </ul>
+          {!past && (
+            <button onClick={() => onAdd(day.date)} data-testid="add-subject" title="Adicionar um assunto neste dia"
+              className="mt-1 flex items-center gap-1.5 py-1 text-[12px] text-ink-3 opacity-70 transition hover:text-ink hover:opacity-100 focus-visible:opacity-100">
+              <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />adicionar assunto
+            </button>
+          )}
         </div>
         <div data-testid="col-reviews" {...dropZone(dnd, day.date, 'review', clsx(!reviews.length && 'hidden md:block'))}>
           <ColumnHead>Revisões</ColumnHead>
@@ -722,7 +739,7 @@ function SubjectList({ data, onOpen }: { data: any; onOpen: (id: string) => void
               <span className="min-w-0 flex-1">
                 <span className={clsx('block truncate text-[17px]', (!s.scheduled || s.hidden) && 'text-ink-3', s.status === 'studied' && !s.hidden && 'text-ink-3 line-through decoration-1')}>{s.name}</span>
                 <span className="block truncate text-[13px] text-ink-2">
-                  <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle dot-${tintFor(s.area)}`} />{areaShort(s.area)} · {pct(s.percentage)} da prova · {s.hidden ? 'fora do planner' : s.card?.nextReview
+                  <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle dot-${tintFor(s.area)}`} />{areaShort(s.area)} · {s.own ? 'seu assunto' : `${pct(s.percentage)} da prova`} · {s.hidden ? 'fora do planner' : s.card?.nextReview
                     ? (s.card.nextReview < today ? <span className="text-negative">revisão atrasada</span> : `revisão ${relativeDays(daysBetween(s.card.nextReview, today))}`)
                     : !s.scheduled ? 'fora do tempo disponível' : STATUS_LABEL[s.status].toLowerCase()}
                 </span>

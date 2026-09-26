@@ -660,3 +660,27 @@ describe('Agenda (organização pessoal, fora do planner de estudos)', () => {
     expect((await student.ok('GET', '/api/agenda?from=2026-10-26&to=2026-11-01')).tasks).toHaveLength(1);
   });
 });
+
+describe('Assuntos criados pelo aluno', () => {
+  it('ficam só com quem criou: não entram na base global nem aparecem para outro aluno', async () => {
+    student.today = TODAY;
+    const token = await other.accessToken();
+    const globalBefore = (await rest(token, 'GET', '/subjects?select=id')).body.length;
+    const { subjectId } = await student.ok('POST', '/api/planner/days/2026-09-28/subjects', { name: 'Síndrome de Brugada' });
+    const mine = (await student.ok('GET', '/api/planner')).subjects.find((s: any) => s.subjectId === subjectId);
+    expect(mine).toMatchObject({ name: 'Síndrome de Brugada', own: true });
+
+    expect((await rest(token, 'GET', `/subjects?id=eq.${subjectId}`)).body).toEqual([]);
+    expect((await rest(token, 'GET', '/subjects?select=id')).body.length).toBe(globalBefore);
+    expect((await other.req('PATCH', `/api/subjects/${subjectId}`, { name: 'Hack' })).status).toBe(404);
+    expect((await other.req('DELETE', `/api/subjects/${subjectId}`)).status).toBe(404);
+    expect((await other.req('POST', '/api/planner/days/2026-09-28/subjects', { subjectId })).status).toBe(404);
+    // Ninguém cria assunto "próprio" em nome de outro nem escreve direto na tabela
+    const denied = await rest(token, 'POST', '/subjects', { name: 'X', slug: 'x-hack', medical_area_id: (await dbQuery(`select id from medical_areas limit 1`)).rows[0].id });
+    expect(denied.status).toBeGreaterThanOrEqual(400);
+
+    // O aluno exclui o próprio assunto (e só ele)
+    await student.ok('DELETE', `/api/subjects/${subjectId}`);
+    expect((await dbQuery('select count(*)::int as n from subjects where id = $1', [subjectId])).rows[0].n).toBe(0);
+  });
+});

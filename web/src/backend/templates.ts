@@ -11,7 +11,7 @@ import { MEMORY_VERSION } from '../../../shared/config';
 import { review } from '../../../shared/memory';
 import { assignReviews } from '../../../shared/reviewQueue';
 import { badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
-import { activePlan, loadEditions, loadHidden, loadMethods, loadProfile, readjustCards, saveSelection, studyWeekdays } from './planner';
+import { activePlan, savePlan, loadEditions, loadHidden, loadMethods, loadProfile, readjustCards, saveSelection, studyWeekdays } from './planner';
 
 type Kind = 'lesson' | 'questions' | 'mock' | 'review' | 'studied' | 'reserve';
 interface TemplateItem {
@@ -129,8 +129,7 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
   const lessonSlots = dated.filter((i) => i.kind === 'lesson').map((i) => i.date!);
   const covered = [...dated, ...studied].reduce((s, i) => s + (i.total ?? 0), 0);
   const label = `${ed?.institution ?? 'Prova'} — ${ed?.exam_name ?? ''}`;
-  const planId = await rpc<string>(ctx, 'save_plan', {
-    p: {
+  const planId = await savePlan(ctx, {
       name: t.name, start_date: today, end_date: examDate, primary_exam_edition_id: edition, mode: 'single',
       algorithm_version: `template:${t.code}`, scheduler_version: 'template_v1',
       settings_snapshot: {
@@ -149,7 +148,6 @@ export async function generateFromTemplate(ctx: Ctx, templateId: string): Promis
       exams: [{ exam_edition_id: edition, is_primary: true, weight: 1, exam_date: examDate, editions_analyzed: nEds }],
       subjects,
       activities,
-    },
   });
   await scheduleStudiedReviews(ctx, userId, planId, data, ids, examDate, profile);
   await readjustCards(ctx, userId, planId);
