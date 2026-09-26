@@ -362,74 +362,23 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
   const onCheck = (item: any, done: boolean) => check.mutate({ subjectId: item.subjectId, methodIds: item.methodIds, done });
   const busy = check.isPending || reviewDone.isPending || dnd.busy;
 
-  // Desktop: cabeçalho compacto + quadro de 7 colunas que ocupa a altura disponível
-  if (desktop) return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-start justify-between gap-4">
-        <Eyebrow>{eyebrow}</Eyebrow>
-        <div className="-mt-2 -mb-2">{menu}</div>
-      </div>
-      <div className="mt-[clamp(2px,0.8vh,10px)] flex items-center justify-between gap-3">
-        <button onClick={() => setFrom(addDays(from, -7))} aria-label="Semana anterior"
-          className="flex items-center gap-1.5 rounded-full py-1 pr-2 text-[13px] text-ink-2 transition hover:text-ink">
-          <ChevronLeft className="h-5 w-5" strokeWidth={1.5} /><span className="hidden xl:inline">semana anterior</span>
-        </button>
-        <div className="text-center">
-          <h1 className="font-display text-[clamp(28px,4.6vh,52px)] leading-none">{range}</h1>
-        </div>
-        <button onClick={() => setFrom(addDays(from, 7))} aria-label="Próxima semana"
-          className="flex items-center gap-1.5 rounded-full py-1 pl-2 text-[13px] text-ink-2 transition hover:text-ink">
-          <span className="hidden xl:inline">semana seguinte</span><ChevronRight className="h-5 w-5" strokeWidth={1.5} />
-        </button>
-      </div>
-      <div className="mt-1 flex h-5 items-center justify-center truncate text-center text-[12.5px]" aria-live="polite">
-        {dnd.message
-          ? <span className={dnd.message.tone === 'positive' ? 'text-ink' : 'text-negative'}>{dnd.message.text}</span>
-          : !isThisWeek
-            ? <button onClick={() => setFrom(mondayOf(today))} className="text-ink-2 underline underline-offset-4 hover:text-ink">voltar para esta semana</button>
-            : <span className="text-ink-3">Arraste aulas, revisões ou assuntos da lista para qualquer dia.</span>}
-      </div>
-
-      {late.length > 0 && (
-        <section className="mt-[clamp(4px,1vh,12px)] flex min-w-0 items-center gap-3 animate-in" aria-label="Atrasados">
-          <span className="shrink-0 font-display text-[clamp(17px,2.4vh,22px)] italic">Atrasados</span>
-          <ul className="flex min-w-0 flex-1 gap-2 overflow-hidden">
-            {late.slice(0, 4).map((s: any) => {
-              const dp = dragProps(dnd, { type: 'task', subjectId: s.subjectId, from: s.oldestDate, methodIds: s.methods.map((m: any) => m.methodId), name: s.name });
-              return (
-                <li key={s.subjectId} {...dp.li} data-testid="late" className={clsx('flex min-w-0 max-w-[200px] shrink items-center gap-2 rounded-full border border-line py-0.5 pr-1.5 pl-3', dp.className)}>
-                  <button onClick={() => onOpen(s.subjectId)} className="min-w-0 truncate text-[13px] hover:opacity-70">{s.name}</button>
-                  <CheckButton on={false} size="sm" disabled={busy} label={`Concluir ${s.name}`}
-                    onChange={(done) => check.mutate({ subjectId: s.subjectId, methodIds: s.methods.map((m: any) => m.methodId), done })} />
-                </li>
-              );
-            })}
-            {late.length > 4 && <li className="shrink-0 self-center text-[12px] text-ink-3">+{late.length - 4}</li>}
-          </ul>
-          <Button variant="plain" size="sm" loading={replanning} onClick={onReplan}>Reorganizar</Button>
-        </section>
-      )}
-
-      <div className="mt-[clamp(8px,1.8vh,22px)] grid min-h-0 flex-1 grid-cols-7 gap-2 xl:gap-3" data-testid="week-board">
-        {week.isLoading
-          ? <div className="col-span-7"><Spinner /></div>
-          : (week.data?.days ?? []).map((d: any) => (
-            <DayColumn key={d.date} day={d} today={today} onOpen={onOpen} questions={d.date === today ? t.data?.questions : null}
-              onCheck={onCheck} onReview={(id) => reviewDone.mutate(id)} busy={busy} dnd={dnd} />
-          ))}
-      </div>
-
-      <WeekNotes week={from} compact />
-    </div>
-  );
+  // Desktop: o cabeçalho fica fixo e os dias rolam por dentro (sem barra visível)
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!desktop || !el || week.isLoading) return;
+    const t = el.querySelector<HTMLElement>(`[data-testid="day-${today}"]`);
+    // Abre em hoje (se não houver atrasados para mostrar no topo)
+    el.scrollTop = isThisWeek && t && !late.length ? Math.max(0, t.offsetTop - 8) : 0;
+  }, [desktop, from, week.isLoading]);
 
   return (
-    <div>
+    <div className={clsx(desktop && 'flex min-h-0 flex-1 flex-col')}>
       <div className="flex items-start justify-between gap-4">
         <Eyebrow>{eyebrow}</Eyebrow>
         <div className="-mt-2">{menu}</div>
       </div>
-      <div className="mt-3 mb-10 flex items-center justify-between gap-3">
+      <div className={clsx('mt-3 flex items-center justify-between gap-3', desktop ? 'mb-8 shrink-0' : 'mb-10')}>
         <button onClick={() => setFrom(addDays(from, -7))} aria-label="Semana anterior"
           className="flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-[13px] text-ink-2 transition hover:text-ink">
           <ChevronLeft className="h-5 w-5" strokeWidth={1.5} /><span className="hidden sm:inline">semana anterior</span>
@@ -443,12 +392,13 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
           <span className="hidden sm:inline">semana seguinte</span><ChevronRight className="h-5 w-5" strokeWidth={1.5} />
         </button>
       </div>
-      <div className="-mt-6 mb-8 min-h-5 text-center text-[13px]" aria-live="polite">
+      <div className={clsx('-mt-6 min-h-5 text-center text-[13px]', desktop ? 'mb-2 shrink-0' : 'mb-8')} aria-live="polite">
         {dnd.message
           ? <span className={dnd.message.tone === 'positive' ? 'text-ink' : 'text-negative'}>{dnd.message.text}</span>
           : <span className="hidden text-ink-3 md:inline">Arraste aulas, revisões ou assuntos da lista para qualquer dia.</span>}
       </div>
 
+      <div ref={scroller} data-testid="week-scroll" className={clsx(desktop && 'no-scrollbar fade-scroll relative -mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-10')}>
       {late.length > 0 && (
         <section className="mb-14 animate-in" aria-label="Atrasados">
           <div className="flex items-baseline gap-3">
@@ -476,6 +426,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop }:
       )}
 
       <WeekNotes week={from} />
+      </div>
     </div>
   );
 }
@@ -504,7 +455,7 @@ export function dragProps(dnd: DnD, d: Drag): DragProps {
 }
 
 /** Coluna que aceita a soltura: só do mesmo tipo (aula → Assuntos, revisão → Revisões), de hoje em diante. */
-function dropZone(dnd: DnD, date: string, type: 'task' | 'review', extra?: string, compact?: boolean) {
+function dropZone(dnd: DnD, date: string, type: 'task' | 'review', extra?: string) {
   const key = `${date}|${type}`;
   // Aula (ou assunto da lista) só entra em Assuntos; revisão só em Revisões
   const kind = dnd.drag?.type === 'library' ? 'task' : dnd.drag?.type;
@@ -514,7 +465,7 @@ function dropZone(dnd: DnD, date: string, type: 'task' | 'review', extra?: strin
     onDragOver: (e: React.DragEvent) => { if (!ok) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dnd.over !== key) dnd.setOver(key); },
     onDragLeave: (e: React.DragEvent) => { if (!(e.currentTarget as Node).contains(e.relatedTarget as Node)) dnd.setOver(null); },
     onDrop: (e: React.DragEvent) => { e.preventDefault(); if (ok) dnd.drop(date); },
-    className: clsx(compact ? 'rounded-[10px] px-1 pb-1' : '-mx-3 rounded-[12px] px-3 pb-2', 'transition-colors duration-150', extra,
+    className: clsx('-mx-3 rounded-[12px] px-3 pb-2 transition-colors duration-150', extra,
       ok && 'outline-1 outline-dashed outline-ink-3', ok && dnd.over === key && 'bg-fill outline-ink'),
   };
 }
@@ -592,89 +543,8 @@ function DayBlock({ day, today, onOpen, onCheck, onReview, questions, busy, dnd 
   );
 }
 
-/** Desktop: um dia como coluna estreita do quadro semanal (Assuntos em cima, Revisões embaixo). */
-function DayColumn({ day, today, onOpen, onCheck, onReview, questions, busy, dnd }: {
-  day: any; today: string; onOpen: (id: string) => void; onCheck: (item: any, done: boolean) => void; onReview: (id: string) => void; questions?: any; busy?: boolean; dnd: DnD;
-}) {
-  const p = usePomodoro();
-  const isToday = day.date === today;
-  const past = day.date < today;
-  const reviews = (day.reviews as any[]).filter((r, i, arr) => arr.findIndex((x) => x.subjectId === r.subjectId) === i);
-  const label = 'text-[9.5px] font-medium tracking-[0.16em] text-ink-3 uppercase';
-  return (
-    <section data-testid={`day-${day.date}`} aria-label={isToday ? 'Hoje' : undefined}
-      className={clsx('flex min-h-0 min-w-0 flex-col rounded-[14px] px-1.5 pt-1.5 animate-in', isToday && 'bg-surface ring-1 ring-line')}>
-      <div className={clsx('flex items-baseline gap-1.5 border-b px-1 pb-1', isToday ? 'border-today/60' : 'border-ink/70')}>
-        <span className={clsx('text-[10.5px] font-medium tracking-[0.14em] uppercase', isToday ? 'text-today' : 'text-ink-2')}>{WD[weekday(day.date)]}</span>
-        <span className={clsx('tabular font-display text-[clamp(22px,3.4vh,38px)] leading-none', isToday ? 'text-today' : past ? 'text-ink-3' : 'text-ink')}>{Number(day.date.slice(8))}</span>
-      </div>
-      {day.exams.map((e: string) => <span key={e} className="tint tint-rose mt-1 self-start text-[11px] font-medium">Prova · {e}</span>)}
-
-      <div className="no-scrollbar mt-1 flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div data-testid="col-subjects" {...dropZone(dnd, day.date, 'task', 'min-h-[4.5rem]', true)}>
-          <span className={clsx(label, 'sr-only')}>Assuntos</span>
-          <ul>
-            {day.newSubjects.map((n: any) => {
-              const dp = n.done ? undefined : dragProps(dnd, { type: 'task', subjectId: n.subjectId, from: day.date, methodIds: n.methodIds, name: n.name });
-              const partial = !n.done && n.methodIds.length < n.totalActivities ? n.methods.join(' · ') : null;
-              return (
-                <li key={n.subjectId} {...dp?.li} data-testid="task" className={clsx('group border-b border-line/70 py-[clamp(4px,0.8vh,8px)] last:border-0', dp?.className)}>
-                  <div className="flex items-center gap-1">
-                    <Tint area={n.area} className={clsx('min-w-0 truncate text-[9px] font-medium tracking-[0.1em] uppercase', n.done && 'opacity-50')}>{n.specialty || areaShort(n.area)}</Tint>
-                    <span className="flex-1" />
-                    <CheckButton on={n.done} size="sm" onChange={(done) => onCheck(n, done)} disabled={busy} label={`Concluir ${n.name}`} />
-                  </div>
-                  <button onClick={() => onOpen(n.subjectId)} className="block w-full text-left transition-opacity hover:opacity-70">
-                    <span data-testid="task-name" className={clsx('line-clamp-3 block text-[12px] leading-snug break-words hyphens-auto xl:text-[clamp(12px,1.5vh,14px)]', n.done && 'text-ink-3 line-through decoration-1')}>{n.name}</span>
-                    {partial && <span className="block truncate text-[10.5px] text-ink-3">{partial}</span>}
-                  </button>
-                  {!n.done && (
-                    <button onClick={() => { p.start({ subject: { id: n.subjectId, name: n.name, area: n.area } }); p.setExpanded(true); }}
-                      aria-label={`Iniciar Pomodoro — ${n.name}`} title="Iniciar Pomodoro"
-                      className={clsx('mt-0.5 flex items-center gap-1 text-[10.5px] text-ink-3 transition hover:text-ink', !isToday && 'opacity-0 group-hover:opacity-100 focus:opacity-100')}>
-                      <Timer className="h-3 w-3" strokeWidth={1.5} />foco
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-            {!day.newSubjects.length && <li className="py-2 text-[12px] text-ink-3">{past ? '—' : 'Livre'}</li>}
-          </ul>
-        </div>
-        <div data-testid="col-reviews" {...dropZone(dnd, day.date, 'review', 'mt-1 flex-1', true)}>
-          <span className={clsx(label, 'block border-t border-line pt-1.5')}>Revisões</span>
-          <ul>
-            {reviews.map((r: any) => {
-              const done = r.status === 'done';
-              const dp = done ? undefined : dragProps(dnd, { type: 'review', subjectId: r.subjectId, from: day.date, name: r.name });
-              return (
-                <li key={`r${r.subjectId}`} {...dp?.li} data-testid="review" className={clsx('flex items-start gap-1 border-b border-line/70 py-[clamp(3px,0.6vh,6px)] last:border-0', dp?.className)}>
-                  <button onClick={() => onOpen(r.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
-                    <span className={clsx('line-clamp-2 block text-[11.5px] leading-snug break-words hyphens-auto xl:text-[clamp(11.5px,1.4vh,13px)]', done && 'text-ink-3 line-through decoration-1')}>{r.name}</span>
-                    {r.status === 'overdue' && <span className="text-[10px] text-today">atrasada</span>}
-                  </button>
-                  <CheckButton on={done} size="sm" disabled={done || busy} onChange={() => onReview(r.subjectId)} label={`Revisão feita — ${r.name}`} />
-                </li>
-              );
-            })}
-            {!reviews.length && <li className="py-1 text-[12px] text-ink-3">—</li>}
-          </ul>
-        </div>
-        {questions?.perDay > 0 && questions.suggestions.length > 0 && (
-          <p className="mt-1 border-t border-line pt-1.5 pb-1 text-[11px] leading-snug text-ink-2">
-            <span className={clsx(label, 'block')}>Questões</span>
-            {questions.suggestions.map((s: any, i: number) => (
-              <span key={s.subjectId}>{i > 0 && ', '}<button className="underline decoration-line underline-offset-2 hover:decoration-ink" onClick={() => onOpen(s.subjectId)}>{s.name}</button> ({s.questions})</span>
-            ))}
-          </p>
-        )}
-      </div>
-    </section>
-  );
-}
-
 /** Observações da semana: uma folha pautada, salva sozinha. */
-function WeekNotes({ week, compact }: { week: string; compact?: boolean }) {
+function WeekNotes({ week }: { week: string }) {
   const q = useQuery({ queryKey: ['notes', week], queryFn: () => api.get(`/api/notes/${week}`) });
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -694,19 +564,9 @@ function WeekNotes({ week, compact }: { week: string; compact?: boolean }) {
   const lines = Math.max(7, text.split('\n').length + 2);
   const status = state === 'saving' ? 'Salvando…' : state === 'saved' ? 'Salvo' : state === 'error' ? 'Não foi possível salvar' : '';
   const area = (
-    <textarea className={clsx('notebook-text', compact && 'no-scrollbar')} rows={compact ? undefined : lines} value={text} disabled={q.isLoading} aria-label="Observações da semana"
+    <textarea className="notebook-text" rows={lines} value={text} disabled={q.isLoading} aria-label="Observações da semana"
       placeholder="Escreva o que quiser lembrar nesta semana…" onChange={(e) => onChange(e.target.value)}
       onBlur={() => { clearTimeout(timer.current); save(text); }} />
-  );
-  if (compact) return (
-    <section className="mt-[clamp(8px,1.6vh,20px)] shrink-0 animate-in" aria-label="Observações da semana">
-      <div className="flex items-baseline gap-3">
-        <span className="font-display text-[clamp(17px,2.4vh,22px)] italic">Observações da semana</span>
-        <span className="h-px flex-1 bg-line" />
-        <span className="text-[11px] text-ink-3">{status}</span>
-      </div>
-      <div className="notebook notebook-compact mt-1.5 h-[clamp(46px,9vh,110px)]">{area}</div>
-    </section>
   );
   return (
     <section className="mt-20 animate-in" aria-label="Observações da semana">

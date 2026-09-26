@@ -52,7 +52,7 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
           {show === 'todo' ? `${todo} a estudar` : 'todos'}
         </button>
       </div>
-      <ul className="no-scrollbar mt-2 fit:mt-1 fit:min-h-0 fit:flex-1 fit:overflow-y-auto fit:overscroll-contain" data-testid="library">
+      <ul className="no-scrollbar mt-2 fit:mt-0 fit:min-h-0 fit:flex-1 fit:overflow-y-auto fit:overscroll-contain fit:fade-scroll fit:pt-2 fit:pb-6" data-testid="library">
         {shown.map((s: any) => {
           const dp = s.status === 'studied' ? undefined : dragProps(dnd, { type: 'library', subjectId: s.subjectId, from: '', name: s.name });
           const date = s.nextScheduledDate as string | null;

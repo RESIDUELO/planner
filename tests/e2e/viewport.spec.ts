@@ -1,13 +1,13 @@
 /**
  * A tela principal cabe inteira na viewport do computador (sem rolagem da página);
- * só a lista de Assuntos rola por dentro, sem barra visível.
+ * só a lista de Assuntos e os dias da semana rolam por dentro, sem barra visível.
  */
 import { expect, test } from '@playwright/test';
 
 const user = { name: 'Tela E2E', email: `tela${Date.now()}@e2e.test`, password: 'senha-tela-123' };
 const SIZES = [[1366, 768], [1280, 800], [1440, 900], [1536, 864], [1920, 1080], [2560, 1440], [1024, 768]] as const;
 
-test('workspace cabe na viewport em várias alturas, só Assuntos rola', async ({ page }) => {
+test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('login');
   await page.getByRole('tab', { name: 'Criar conta' }).click();
@@ -17,7 +17,7 @@ test('workspace cabe na viewport em várias alturas, só Assuntos rola', async (
   await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
   await page.getByLabel('Selecionar FAMERP').check({ force: true });
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
-  await expect(page.getByTestId('week-board')).toBeVisible();
+  await expect(page.getByTestId('week-scroll')).toBeVisible();
 
   for (const [width, height] of SIZES) {
     await page.setViewportSize({ width, height });
@@ -49,7 +49,7 @@ test('workspace cabe na viewport em várias alturas, só Assuntos rola', async (
       expect(r.bottom, `${width}x${height} ${r.s}`).toBeLessThanOrEqual(m.innerH + 0.5);
       expect(r.right, `${width}x${height} ${r.s}`).toBeLessThanOrEqual(m.innerW + 0.5);
     }
-    // Só a lista de Assuntos rola por dentro
-    expect(m.scrollers.filter((s) => s !== 'library'), `${width}x${height} rolagens internas`).toEqual([]);
+    // Só a lista de Assuntos e os dias da semana rolam por dentro
+    expect(m.scrollers.filter((s) => s !== 'library' && s !== 'week-scroll'), `${width}x${height} rolagens internas`).toEqual([]);
   }
 });

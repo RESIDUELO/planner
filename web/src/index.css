@@ -183,9 +183,8 @@ input[type="date"].field, input[type="time"].field { min-height: 42px; }
 @media (min-width: 1024px) and (min-height: 600px) {
   html.rp-fit, html.rp-fit body, html.rp-fit #root { height: 100%; overflow: hidden; }
 }
-/* Caderno compacto (desktop): poucas linhas, altura fixa */
-.notebook.notebook-compact { padding: 6px 14px 4px 46px; overflow: hidden; height: 100%; }
-.notebook.notebook-compact::before { left: 32px; }
-.notebook.notebook-compact::after { left: 11px; top: 12px; width: 8px; height: 8px; box-shadow: 0 40px 0 var(--canvas); }
-.notebook-compact .notebook-text { min-height: 0; height: 100%; font-size: 19px; line-height: 28px; background-size: 100% 28px;
-  background-image: linear-gradient(to bottom, transparent 27px, var(--paper-rule) 27px); }
+/* Bordas suaves nas áreas que rolam por dentro (em vez de um corte seco) */
+@utility fade-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 32px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 32px), transparent 100%);
+}
