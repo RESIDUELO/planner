@@ -56,9 +56,9 @@ export function LoginPage() {
   return (
     <div className="flex min-h-[var(--app-h,100vh)] flex-col items-center justify-center px-6 py-16">
       <div className="w-full max-w-[340px] animate-in">
-        <LogoMark className="mx-auto h-12 w-12 text-[26px]" />
-        <h1 className="mt-8 text-center font-display text-[48px] leading-none">Residência</h1>
-        <p className="mt-2 text-center text-[11px] tracking-[0.3em] text-ink-2 uppercase">planner</p>
+        <div className="flex justify-center"><LogoMark size={56} /></div>
+        <h1 className="mt-8 text-center font-display text-[48px] leading-none">Planner</h1>
+        <p className="mt-2 text-center text-[11px] tracking-[0.3em] text-ink-2 uppercase">Pablo e Samêla</p>
         <p className="mt-6 text-center text-[16px] text-ink-2">Planeje seus estudos com base no que realmente cai na sua prova.</p>
 
         <Segmented className="mt-10 flex w-full justify-center" value={mode} onChange={(m) => { setMode(m); setError(null); }}

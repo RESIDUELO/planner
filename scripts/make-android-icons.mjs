@@ -1,5 +1,5 @@
 /**
- * Gera o ícone e a tela de abertura do app Android a partir do monograma "R"
+ * Gera o ícone e a tela de abertura do app Android a partir do monograma "P&S"
  * do site (fonte Tinos, papel creme). Uso: node scripts/make-android-icons.mjs
  * (precisa da fonte Tinos instalada no sistema e do Chromium do Playwright).
  */
@@ -12,10 +12,10 @@ const CANVAS = '#F1EEE8', INK = '#1C1B19';
 const browser = await chromium.launch(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {});
 const page = await browser.newPage();
 
-/** Monograma: círculo fino + R em serifa, `d` = diâmetro em px. */
+/** Monograma: círculo fino + P&S em serifa, `d` = diâmetro em px. */
 const mark = (d) => `<div style="width:${d}px;height:${d}px;border:${Math.max(1, d * 0.035)}px solid ${INK};border-radius:50%;box-sizing:border-box;
-  display:flex;align-items:center;justify-content:center;font-family:Tinos;font-size:${d * 0.58}px;color:${INK};line-height:1">
-  <span style="transform:translateY(${d * 0.02}px)">R</span></div>`;
+  display:flex;align-items:center;justify-content:center;font-family:Tinos;font-size:${d * 0.36}px;letter-spacing:-0.02em;color:${INK};line-height:1">
+  <span style="transform:translateY(${d * 0.02}px)">P<i>&amp;</i>S</span></div>`;
 
 async function shot(path, w, h, body, transparent = false) {
   await page.setViewportSize({ width: w, height: h });

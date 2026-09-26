@@ -21,11 +21,11 @@ async function login(page: Page, email: string, password: string) {
 test('tela de login mostra as três opções', async ({ page }) => {
   await page.goto('./');
   await expect(page).toHaveURL(/\/planner\/login/);
-  await expect(page.getByRole('heading', { name: 'Residência', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Planner', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Entrar' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Criar conta' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continuar como visitante' })).toBeVisible();
-  await expect(page).toHaveTitle('Residência Planner');
+  await expect(page).toHaveTitle('Planner Pablo e Samêla');
 });
 
 test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async ({ page }) => {
