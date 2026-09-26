@@ -68,8 +68,8 @@
 
 @theme inline {
   --font-hand: "Patrick Hand", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
-  --font-display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: "Tinos", "Liberation Serif", "Times New Roman", Times, serif;
+  --font-sans: "Arimo", "Liberation Sans", Arial, Helvetica, sans-serif;
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-fill: var(--fill);

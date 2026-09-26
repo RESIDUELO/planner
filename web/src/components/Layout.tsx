@@ -42,8 +42,7 @@ export function Layout() {
     ]} />
   );
 
-  // Planner no desktop: usa mais da largura em telas grandes (7 colunas de dias)
-  const width = home ? 'max-w-7xl fit:max-w-[1560px]' : 'max-w-7xl';
+  const width = 'max-w-7xl';
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md">
