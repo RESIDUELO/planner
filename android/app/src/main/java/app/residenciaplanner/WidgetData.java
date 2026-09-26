@@ -79,7 +79,7 @@ final class WidgetData {
     /** "UNOESTE/HRPP · FALTAM 70 DIAS" */
     String subtitle() {
         JSONObject exam = json == null ? null : json.optJSONObject("exam");
-        if (exam == null) return "RESIDÊNCIA PLANNER";
+        if (exam == null) return "PLANNER P&S";
         String name = exam.optString("name", "");
         String date = exam.optString("date", "");
         long left = daysUntil(date);

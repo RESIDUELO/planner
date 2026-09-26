@@ -60,7 +60,7 @@ jobs:
         run: |
           if ! gh release view app-android >/dev/null 2>&1; then
             gh release create app-android --target "$GITHUB_SHA" --title "App Android" \
-              --notes "APK do Residência Planner (off-line, com o widget Hoje). Baixe residencia-planner.apk no celular e instale."
+              --notes "APK do Planner P&S (off-line, com o widget Hoje). Baixe residencia-planner.apk no celular e instale."
           fi
           gh release upload app-android residencia-planner.apk --clobber
-          gh release edit app-android --notes "APK do Residência Planner (off-line, com o widget Hoje). Versão 1.0.${GITHUB_RUN_NUMBER}, gerada em $(date -u +'%d/%m/%Y %H:%M') UTC. Baixe residencia-planner.apk no celular e instale."
+          gh release edit app-android --notes "APK do Planner P&S (off-line, com o widget Hoje). Versão 1.0.${GITHUB_RUN_NUMBER}, gerada em $(date -u +'%d/%m/%Y %H:%M') UTC. Baixe residencia-planner.apk no celular e instale."
