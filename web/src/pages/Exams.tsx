@@ -14,7 +14,7 @@ export function ExamsPage() {
   const [err, setErr] = useState<string | null>(null);
   const m = useMutation({
     mutationFn: ({ id, body }: { id: string; body: any }) => api.put(`/api/me/editions/${id}`, body),
-    onSuccess: () => { setErr(null); qc.invalidateQueries({ queryKey: ['exams'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); },
+    onSuccess: () => { setErr(null); qc.invalidateQueries({ queryKey: ['exams'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['residencies'] }); },
     onError: (e) => setErr(errorMessage(e)),
   });
   if (q.isLoading) return <Spinner />;

@@ -13,6 +13,7 @@ import { addSubjectToDay, ensurePlan, deleteOwnSubject, updateOwnSubject, genera
 import { calendarView, dashboardView, performanceView, todayView } from './agenda';
 import { generateFromTemplate, listTemplates } from './templates';
 import { agendaView, createTask, deleteTask, plannerTasks, saveNote, updateTask } from './personal';
+import { createResidency, deleteResidency, listResidencies, updateResidency } from './residencies';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
 interface Route { method: string; re: RegExp; keys: string[]; handler: Handler }
@@ -454,6 +455,12 @@ route('POST', '/api/planner/days/:date/subjects', async ({ ctx, params, body }) 
   return addSubjectToDay(ctx, { date: isoDate.parse(params.date), ...b });
 });
 // "Montar do zero": planner vazio, sem prova (os assuntos entram pelo "+" de cada dia)
+// Residências
+route('GET', '/api/residencies', async ({ ctx }) => listResidencies(ctx));
+route('POST', '/api/residencies', async ({ ctx, body }) => createResidency(ctx, body));
+route('PATCH', '/api/residencies/:id', async ({ ctx, params, body }) => updateResidency(ctx, uuid.parse(params.id), body));
+route('DELETE', '/api/residencies/:id', async ({ ctx, params }) => deleteResidency(ctx, uuid.parse(params.id)));
+
 route('POST', '/api/planner/manual', async ({ ctx }) => {
   await ensurePlan(ctx, await currentUserId(ctx));
   return { ok: true };

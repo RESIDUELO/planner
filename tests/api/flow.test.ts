@@ -684,3 +684,46 @@ describe('Assuntos criados pelo aluno', () => {
     expect((await dbQuery('select count(*)::int as n from subjects where id = $1', [subjectId])).rows[0].n).toBe(0);
   });
 });
+
+describe('Residências', () => {
+  it('cada conta tem a sua lista; a prova ligada tem uma data só', async () => {
+    expect(await student.ok('GET', '/api/residencies')).toBeInstanceOf(Array);
+    const r = await student.ok('POST', '/api/residencies', {
+      name: 'FAMEMA', city: 'Marília', specialties: [{ name: 'Radiologia', vacancies: 3, cutoff: '' }], fee: 600,
+    });
+    expect(r.steps).toHaveLength(11);
+    expect(r.steps.every((s: any) => s.date === null)).toBe(true);
+
+    // Outra conta não vê nem altera
+    expect(await other.ok('GET', '/api/residencies')).toEqual([]);
+    expect((await other.req('PATCH', `/api/residencies/${r.id}`, { name: 'Hack' })).status).toBe(404);
+    expect((await rest(await other.accessToken(), 'GET', '/residencies')).body).toEqual([]);
+
+    // Ligada a uma prova com data oficial: vale a data oficial
+    const famema = await editionOf('FAMEMA');
+    const linked = await student.ok('PATCH', `/api/residencies/${r.id}`, { examEditionId: famema });
+    expect(linked.steps.find((s: any) => s.key === 'prova').date).toBe('2026-12-08');
+    expect(linked.exam).toMatchObject({ institution: 'FAMEMA', official: true });
+
+    // Sem data oficial: mudar aqui muda em Provas, e vice-versa
+    const uel = await editionOf('HU-UEL');
+    await dbQuery('update exam_editions set exam_date = null where id = $1', [uel]);
+    try {
+      const u = await student.ok('POST', '/api/residencies', { name: 'UEL', examEditionId: uel });
+      const steps = u.steps.map((s: any) => (s.key === 'prova' ? { ...s, date: '2026-11-15' } : s));
+      await student.ok('PATCH', `/api/residencies/${u.id}`, { steps });
+      expect((await student.ok('GET', '/api/exams')).find((e: any) => e.edition_id === uel).exam_date).toBe('2026-11-15');
+      await student.ok('PUT', `/api/me/editions/${uel}`, { examDate: '2026-11-20' });
+      const again = (await student.ok('GET', '/api/residencies')).find((x: any) => x.id === u.id);
+      expect(again.steps.find((s: any) => s.key === 'prova').date).toBe('2026-11-20');
+    } finally {
+      await dbQuery(`update exam_editions set exam_date = '2026-11-08' where id = $1`, [uel]);
+    }
+
+    // Período invertido é recusado; excluir apaga
+    const bad = r.steps.map((s: any) => (s.key === 'inscricao' ? { ...s, date: '2026-10-27', end: '2026-09-10' } : s));
+    expect((await student.req('PATCH', `/api/residencies/${r.id}`, { steps: bad })).status).toBe(400);
+    await student.ok('DELETE', `/api/residencies/${r.id}`);
+    expect((await student.ok('GET', '/api/residencies')).some((x: any) => x.id === r.id)).toBe(false);
+  });
+});

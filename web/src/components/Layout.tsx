@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CalendarDays, NotebookPen } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, Hospital, NotebookPen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../lib/auth';
 import { IS_LOCAL } from '../lib/platform';
@@ -30,15 +30,17 @@ function FocusChip() {
   );
 }
 
-/** PLANNER | AGENDA: as duas áreas principais, separadas. */
+/** PLANNER | AGENDA | RESIDÊNCIAS: as áreas principais, separadas. */
 function Tabs() {
-  const tab = ({ isActive }: { isActive: boolean }) => clsx('relative py-1 text-[12px] font-medium tracking-[0.2em] uppercase transition-colors',
+  const tab = ({ isActive }: { isActive: boolean }) => clsx('relative py-1 text-[10.5px] font-medium tracking-[0.12em] uppercase transition-colors min-[420px]:text-[12px] min-[420px]:tracking-[0.2em]',
     isActive ? 'text-ink after:absolute after:inset-x-0 after:-bottom-px after:h-px after:bg-ink' : 'text-ink-3 hover:text-ink');
   return (
-    <nav aria-label="Áreas" className="flex items-center gap-4 sm:gap-5">
+    <nav aria-label="Áreas" className="flex min-w-0 items-center gap-2.5 min-[420px]:gap-4 sm:gap-5">
       <NavLink to="/planner" className={tab}>Planner</NavLink>
       <span className="h-3 w-px bg-line" aria-hidden />
       <NavLink to="/agenda" className={tab}>Agenda</NavLink>
+      <span className="h-3 w-px bg-line" aria-hidden />
+      <NavLink to="/residencias" className={tab}>Residências</NavLink>
     </nav>
   );
 }
@@ -105,6 +107,9 @@ function Sidebar({ collapsed, onToggle, profileItems, avatar, name }: {
         <NavLink to="/agenda" className={item}>
           {(s) => (<>{bar(s)}<CalendarDays className="h-5 w-5 shrink-0" strokeWidth={1.25} /><Label hidden={collapsed} className={text}>Agenda</Label>{collapsed && <Tip>Agenda</Tip>}</>)}
         </NavLink>
+        <NavLink to="/residencias" className={item}>
+          {(s) => (<>{bar(s)}<Hospital className="h-5 w-5 shrink-0" strokeWidth={1.25} /><Label hidden={collapsed} className={text}>Residências</Label>{collapsed && <Tip>Residências</Tip>}</>)}
+        </NavLink>
       </nav>
 
       <span className="flex-1" />
@@ -152,10 +157,10 @@ export function Layout() {
     <div className={clsx('min-h-full', collapsed ? '[--sb-w:64px]' : '[--sb-w:200px] lg:[--sb-w:224px]')}>
       <Sidebar collapsed={collapsed} onToggle={toggle} profileItems={profileItems} avatar={avatar} name={user?.isGuest ? 'Visitante' : user?.name?.split(' ')[0] ?? 'Perfil'} />
       <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md md:hidden">
-        <div className="relative flex h-16 items-center justify-between gap-4 px-5 sm:px-8">
+        <div className="relative flex h-16 items-center justify-between gap-3 px-4 sm:gap-4 sm:px-8">
           <Link to="/planner" className="flex shrink-0 items-center transition-opacity hover:opacity-70" aria-label="Início"><LogoMark /></Link>
           <Tabs />
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             <FocusChip />
             <Menu label="Perfil" trigger={avatar} items={profileItems} />
           </div>

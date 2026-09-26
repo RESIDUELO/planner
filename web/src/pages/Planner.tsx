@@ -10,6 +10,8 @@ import { areaShort, tintFor } from '../lib/areas';
 import { usePomodoro } from '../lib/pomodoro';
 import { useWide } from '../lib/zoom';
 import { IS_LOCAL } from '../lib/platform';
+import { nearest, useResidencies } from '../lib/residency';
+import { DeadlineLine } from '../components/Residencies';
 import { Advanced, Button, CheckButton, CheckCircle, Eyebrow, Field, Hint, Menu, Note, Segmented, Sheet, Spinner, Tint, Title, Toggle } from '../components/ui';
 import { AgendaRow, TaskEditor } from '../components/Agenda';
 import { AddSubjectSheet } from '../components/AddSubject';
@@ -520,6 +522,9 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, o
     // Abre em hoje (se não houver atrasados para mostrar no topo)
     el.scrollTop = !single && isThisWeek && t && !late.length ? Math.max(0, t.offsetTop - 8) : 0;
   }, [desktop, from, week.isLoading, single, day]);
+  // Prazo mais próximo das residências (linha discreta sob o título)
+  const residencies = useResidencies();
+  const deadline = nearest(residencies.data, today);
   // Ainda sem planner: a semana aparece vazia, pronta para receber assuntos
   const days = week.data?.days ?? Array.from({ length: 7 }, (_, i) => ({ date: addDays(from, i), reviews: [], newSubjects: [], exams: [] }));
   const shown = days.filter((d: any) => !single || d.date === day);
@@ -554,6 +559,7 @@ function WeekView({ onOpen, onReplan, replanning, dnd, eyebrow, menu, desktop, o
       <div className={clsx('-mt-6 min-h-5 text-center text-[13px]', desktop ? 'mb-5 shrink-0' : 'mb-8')} aria-live="polite">
         {dnd.message
           ? <span className={dnd.message.tone === 'positive' ? 'text-ink' : 'text-negative'}>{dnd.message.text}</span>
+          : deadline ? <DeadlineLine e={deadline} today={today} />
           : <span className="hidden text-ink-3 md:inline">Arraste aulas, revisões ou assuntos da lista para qualquer dia.</span>}
       </div>
 

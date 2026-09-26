@@ -408,3 +408,84 @@ test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no 
   await page.getByRole('button', { name: 'Excluir de vez' }).click();
   await expect(day2.getByTestId('task-name').filter({ hasText: 'ECG' })).toHaveCount(0);
 });
+
+test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no fim', async ({ page }) => {
+  await page.goto('login');
+  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
+  await expect(page).toHaveURL(HOME);
+  await page.getByTestId('scratch').click();
+  await expect(page.getByTestId('choose-exam')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Residências', exact: true }).click();
+  await expect(page.getByText('Nenhuma residência ainda.')).toBeVisible();
+
+  // Nova residência: dados, especialidade, período de inscrição e ligação com a prova de Provas
+  await page.getByTestId('new-residency').click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByLabel('Nome da residência').fill('FAMEMA');
+  await sheet.getByLabel('Cidade', { exact: true }).fill('Marília');
+  await sheet.getByRole('button', { name: 'Adicionar especialidade' }).click();
+  await sheet.getByLabel('Especialidade', { exact: true }).fill('Radiologia');
+  await sheet.getByLabel('Vagas', { exact: true }).fill('3');
+  await sheet.getByLabel('Nota de corte', { exact: true }).fill('66/100');
+  await expect(sheet.getByTestId('step')).toHaveCount(11);
+  await expect(sheet.getByTestId('step').filter({ hasText: 'Gabarito' })).toContainText('a divulgar');
+  await sheet.getByLabel('Inscrição - início', { exact: true }).fill(inDays(-5));
+  await sheet.getByLabel('Inscrição - fim', { exact: true }).fill(inDays(3));
+  // Etapa que não existe nesta residência sai; etapa nova entra
+  await sheet.getByRole('button', { name: 'Remover etapa Gabarito' }).click();
+  await sheet.getByLabel('Nova etapa').fill('Entrega de documentos');
+  await sheet.getByRole('tab', { name: 'Resultado' }).click();
+  await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click();
+  await expect(sheet.getByTestId('step')).toHaveCount(11);
+  await sheet.getByLabel('Prova em Provas').selectOption({ label: 'FAMEMA · R1 Acesso Direto' });
+  await expect(sheet.getByTestId('step').filter({ hasText: /^Prova/ })).toContainText('8 dez 2026');
+  await sheet.getByRole('button', { name: 'Salvar' }).click();
+  await expect(sheet).toBeHidden();
+
+  const card = page.getByTestId('residency-FAMEMA');
+  await expect(card).toContainText('Radiologia 3 vagas, corte 66/100');
+  await expect(card.getByTestId('status').first()).toHaveText('inscrições abertas · fecham em 3 dias');
+  await expect(card.getByTestId('next-deadline')).toContainText('fim da inscrição');
+  await expect(card.getByRole('link', { name: 'ver em Provas' })).toBeVisible();
+  await expect(page.getByTestId('upcoming').getByTestId('residency-event').first()).toContainText('FAMEMA - fim da inscrição');
+
+  // Uma segunda, com várias instituições
+  await page.getByTestId('new-residency').click();
+  await sheet.getByLabel('Nome da residência').fill('ENARE');
+  await sheet.getByText('Prova com várias instituições').click();
+  await sheet.getByLabel('Instituição', { exact: true }).fill('Santa Casa de Votuporanga');
+  await sheet.getByLabel('Prova - dia', { exact: true }).fill(inDays(40));
+  await sheet.getByRole('button', { name: 'Salvar' }).click();
+  await expect(page.getByTestId('residency-ENARE')).toContainText('1 instituição');
+  await expect(page.locator('article[data-testid^="residency-"]')).toHaveCount(2);
+
+  // Agenda: marcador no dia e a lista do dia; Próximos prazos ao lado
+  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Próximos prazos' })).toContainText('FAMEMA - fim da inscrição');
+  const cal = page.getByRole('region', { name: 'Calendário' });
+  const end = inDays(3);
+  if (!(await cal.locator(`[data-date="${end}"]`).count())) await cal.getByRole('button', { name: 'Próximo mês' }).click();
+  await expect(cal.locator(`[data-date="${end}"] [data-mark="residency-inscricao"]`)).toHaveCount(1);
+  await cal.locator(`[data-date="${end}"]`).click();
+  await expect(page.getByRole('group', { name: 'Residências do dia' })).toContainText('FAMEMA - fim da inscrição');
+
+  // Planner: linha discreta com o prazo mais próximo; clicar leva à residência
+  await page.getByRole('link', { name: 'Planner', exact: true }).click();
+  await expect(page.getByTestId('deadline-line')).toHaveText('Inscrição FAMEMA termina em 3 dias');
+  await page.getByTestId('deadline-line').click();
+  await expect(page).toHaveURL(/residencias\?r=/);
+  await expect(page.getByRole('dialog').getByLabel('Nome da residência')).toHaveValue('FAMEMA');
+
+  // "Não vou": vai para o fim, apagada, e sai dos prazos
+  await page.getByRole('dialog').getByRole('tab', { name: 'Não vou' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Salvar' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(page.locator('article[data-testid^="residency-"]').last()).toHaveAttribute('data-testid', 'residency-FAMEMA');
+  await expect(page.getByTestId('residency-FAMEMA').getByTestId('status').first()).toHaveText('não vou');
+  await expect(page.getByTestId('upcoming')).not.toContainText('FAMEMA');
+
+  // Continua lá depois de recarregar
+  await page.reload();
+  await expect(page.locator('article[data-testid^="residency-"]')).toHaveCount(2);
+});

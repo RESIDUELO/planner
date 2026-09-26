@@ -217,3 +217,17 @@ describe('app off-line', () => {
     await expect(ok('DELETE', `/api/subjects/${examSubject.subjectId}`)).rejects.toThrow(/não encontrado/);
   });
 });
+
+describe('Residências no app off-line', () => {
+  it('cadastra, liga à prova e edita', async () => {
+    const exams = await ok('GET', '/api/exams');
+    const famema = exams.find((e: any) => e.institution === 'FAMEMA');
+    const r = await ok('POST', '/api/residencies', { name: 'ENARE', institutions: [{ name: 'Santa Casa de Votuporanga', city: 'Votuporanga', specialties: [] }] });
+    expect(r.institutions).toHaveLength(1);
+    const f = await ok('POST', '/api/residencies', { name: 'FAMEMA', examEditionId: famema.edition_id, decision: 'maybe' });
+    expect(f.steps.find((s: any) => s.key === 'prova').date).toBe(famema.exam_date);
+    await ok('PATCH', `/api/residencies/${r.id}`, { decision: 'no', enrolled: true });
+    const list = await ok('GET', '/api/residencies');
+    expect(list.map((x: any) => [x.name, x.decision])).toEqual([['ENARE', 'no'], ['FAMEMA', 'maybe']]);
+  });
+});

@@ -11,6 +11,7 @@ import { PerformancePage } from './pages/Performance';
 import { SettingsPage } from './pages/Settings';
 import { FocusPage } from './pages/Focus';
 import { AgendaPage } from './pages/Agenda';
+import { ResidenciesPage } from './pages/Residencies';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -29,6 +30,7 @@ export function App() {
         <Route path="provas" element={<ExamsPage />} />
         <Route path="planner" element={<PlannerPage />} />
         <Route path="agenda" element={<AgendaPage />} />
+        <Route path="residencias" element={<ResidenciesPage />} />
         <Route path="foco" element={<FocusPage />} />
         <Route path="revisoes" element={<ReviewsPage />} />
         <Route path="desempenho" element={<PerformancePage />} />

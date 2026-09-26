@@ -5,20 +5,24 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { longDate, MONTHS_LONG } from '../lib/agenda';
 import { addDays, weekday } from '../../../shared/dates';
+import type { StepType } from '../../../shared/residency';
+import { TYPE_DOT } from '../lib/residency';
 
 const WD1 = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const mondayOf = (d: string) => addDays(d, -((weekday(d) + 6) % 7));
 export const monthStart = (d: string) => `${d.slice(0, 7)}-01`;
 export const monthEnd = (d: string) => addDays(monthStart(addDays(monthStart(d), 32)), -1);
 
-export type Mark = { task: 'open' | 'done' | null; reminder: boolean; note: boolean };
+/** residency: tipos das datas de residências no dia (uma bolinha colorida por tipo). */
+export type Mark = { task: 'open' | 'done' | null; reminder: boolean; note: boolean; residency?: StepType[] };
 
 export function Marks({ m, className }: { m: Mark; className?: string }) {
   return (
     <span className={clsx('flex h-[6px] items-center justify-center gap-[3px]', className)} aria-hidden>
       {m.task && <span data-mark="task" className={clsx('h-[6px] w-[6px] rounded-full', m.task === 'open' ? 'bg-ink' : 'bg-ink-3/60')} />}
       {m.reminder && <span data-mark="reminder" className="h-[6px] w-[6px] rounded-full dot-rose" />}
-      {m.note && !m.task && !m.reminder && <span data-mark="note" className="h-[2px] w-[8px] rounded-full bg-ink-3" />}
+      {m.residency?.map((t) => <span key={t} data-mark={`residency-${t}`} className={clsx('h-[6px] w-[6px] rounded-full', TYPE_DOT[t])} />)}
+      {m.note && !m.task && !m.reminder && !m.residency?.length && <span data-mark="note" className="h-[2px] w-[8px] rounded-full bg-ink-3" />}
     </span>
   );
 }

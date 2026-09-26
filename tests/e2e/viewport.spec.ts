@@ -81,4 +81,23 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
     expect(m.scrollers.filter((s) => s !== 'library' && s !== 'week-scroll'), `${state} ${width}x${height} rolagens internas`).toEqual([]);
   }
   }
+
+  // Residências com a lista cheia: a página também não rola, só a lista por dentro
+  await page.getByRole('button', { name: 'Abrir menu' }).click();
+  await page.getByRole('link', { name: 'Residências', exact: true }).click();
+  for (const name of ['FAMEMA', 'SUS-SP', 'HR Presidente Prudente', 'UNIFIPA', 'ENARE', 'Santa Casa Ourinhos', 'FAMERP', 'HU-UEL']) {
+    await page.getByTestId('new-residency').click();
+    await page.getByRole('dialog').getByLabel('Nome da residência').fill(name);
+    await page.getByRole('dialog').getByLabel('Inscrição - fim', { exact: true }).fill('2026-12-20');
+    await page.getByRole('dialog').getByRole('button', { name: 'Salvar' }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
+  }
+  for (const [width, height] of SIZES) {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, w: document.documentElement.scrollWidth, ih: innerHeight, iw: innerWidth }));
+    if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/res-${width}x${height}.png` });
+    expect(m.h, `residências ${width}x${height} altura`).toBeLessThanOrEqual(m.ih);
+    expect(m.w, `residências ${width}x${height} largura`).toBeLessThanOrEqual(m.iw);
+  }
 });

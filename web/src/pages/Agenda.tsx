@@ -16,7 +16,11 @@ import { AddLine, AgendaRow, TaskEditor, useQuickAdd } from '../components/Agend
 import { Eyebrow, Note, Spinner } from '../components/ui';
 import { Marks, MonthCalendar, monthEnd, monthStart, type Mark } from '../components/MonthCalendar';
 import { addDays, weekday } from '../../../shared/dates';
+import type { StepType } from '../../../shared/residency';
+import { allEvents, upcoming, useResidencies } from '../lib/residency';
+import { EventRow, UpcomingList } from '../components/Residencies';
 
+const ORDER: StepType[] = ['inscricao', 'prova', 'resultado'];
 const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const mondayOf = (d: string) => addDays(d, -((weekday(d) + 6) % 7));
 const isISO = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -47,6 +51,15 @@ export function AgendaPage() {
     return () => document.documentElement.classList.remove('rp-fit');
   }, []);
 
+  // Datas das residências (inscrição, prova, resultado...)
+  const res = useResidencies();
+  const resByDay = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof allEvents>>();
+    for (const e of allEvents(res.data)) m.set(e.date, [...(m.get(e.date) ?? []), e]);
+    return m;
+  }, [res.data]);
+  const next = useMemo(() => upcoming(res.data, today), [res.data, today]);
+
   const byDay = useMemo(() => {
     const m = new Map<string, AgendaTask[]>();
     for (const t of q.data?.tasks ?? []) if (t.date) m.set(t.date, [...(m.get(t.date) ?? []), t]);
@@ -60,6 +73,7 @@ export function AgendaPage() {
       task: tasks.some((t) => !t.done) ? 'open' : tasks.length ? 'done' : null,
       reminder: l.some((t) => t.kind === 'reminder'),
       note: !!q.data?.notes[d],
+      residency: [...new Set((resByDay.get(d) ?? []).map((e) => e.type))].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)),
     };
   };
 
@@ -91,6 +105,12 @@ export function AgendaPage() {
         </div>
 
         <div className={clsx(desktop && 'no-scrollbar fade-scroll -mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-10')}>
+          {(resByDay.get(day) ?? []).length > 0 && (
+            <div aria-label="Residências do dia" role="group" className="mt-8 animate-in">
+              <ColumnHead>Residências</ColumnHead>
+              <ul>{resByDay.get(day)!.map((e) => <EventRow key={`${e.residencyId}-${e.stepId}-${e.edge}`} e={e} today={today} />)}</ul>
+            </div>
+          )}
           <div key={day} className="mt-10 grid gap-x-10 gap-y-10 animate-in md:grid-cols-2">
             <div aria-label="Tarefas do dia" role="group">
               <ColumnHead>Tarefas</ColumnHead>
@@ -109,6 +129,15 @@ export function AgendaPage() {
 
       <aside aria-label="Agenda do mês" className="no-scrollbar flex min-w-0 flex-col gap-14 fit:min-h-0 fit:gap-10 fit:overflow-y-auto">
         <MonthCalendar month={month} day={day} today={today} mark={mark} onPick={setDay} onMonth={setMonth} />
+        {(res.data?.length ?? 0) > 0 && (
+          <section aria-label="Próximos prazos" className="fit:shrink-0">
+            <div className="flex items-baseline gap-3">
+              <span className="font-display text-[26px] italic">Próximos prazos</span>
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            <div className="mt-2"><UpcomingList events={next} today={today} limit={3} empty="Nenhum prazo nas próximas semanas." /></div>
+          </section>
+        )}
         <section aria-label="Tarefas a fazer" className="order-first fit:order-none fit:flex fit:min-h-[220px] fit:flex-1 fit:flex-col">
           <div className="flex items-baseline gap-3 fit:shrink-0">
             <span className="font-display text-[26px] italic">Tarefas a fazer</span>
