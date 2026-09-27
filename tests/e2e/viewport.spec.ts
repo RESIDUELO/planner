@@ -18,7 +18,7 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
   await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
   await page.locator('label', { has: page.getByLabel('Selecionar FAMERP') }).click();
   await expect(page.getByLabel('Selecionar FAMERP')).toBeChecked();
-  await page.getByRole('button', { name: 'Criar meu planner' }).click();
+  for (const step of ['exams', 'start', 'methods']) await page.getByTestId(`setup-${step}`).getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByTestId('week-scroll')).toBeVisible();
 
   // Barra lateral aberta (padrão) e recolhida: nos dois casos tudo cabe na tela

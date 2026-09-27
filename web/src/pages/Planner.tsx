@@ -43,10 +43,13 @@ export function PlannerPage() {
 }
 
 // ============================================================================
-// Começar - tudo numa tela só, dentro do próprio Planner
+// Começar - uma pergunta por vez: provas → data de início → como estuda
 // ============================================================================
 
 export const REVIEW_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
+
+type SetupStep = 'exams' | 'start' | 'methods';
+const STEP_OUT_MS = 220;
 
 function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
   const qc = useQueryClient();
@@ -60,6 +63,21 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const [methods, setMethods] = useState<any[]>([]);
   const [dates, setDates] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<SetupStep>('exams');
+  // "Continuar sem escolher uma prova": planner montado à mão
+  const [manual, setManual] = useState(false);
+  // A etapa atual sai (fade) e a próxima entra no mesmo lugar
+  const [leaving, setLeaving] = useState(false);
+  const top = useRef<HTMLDivElement>(null);
+  const go = (next: SetupStep) => {
+    setError(null);
+    setLeaving(true);
+    window.setTimeout(() => {
+      setStep(next);
+      setLeaving(false);
+      top.current?.scrollIntoView({ block: 'nearest' });
+    }, STEP_OUT_MS);
+  };
 
   useEffect(() => {
     if (exams.data && sel === null) {
@@ -79,8 +97,10 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 
   const generate = useMutation({
     mutationFn: async () => {
-      for (const e of chosen) {
-        if (!e.date_official && dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id], keepPlanner: true });
+      if (!manual) {
+        for (const e of chosen) {
+          if (!e.date_official && dates[e.edition_id] && dates[e.edition_id] !== e.exam_date) await api.put(`/api/me/editions/${e.edition_id}`, { examDate: dates[e.edition_id], keepPlanner: true });
+        }
       }
       await api.put('/api/me/study-settings', {
         profile: {
@@ -90,14 +110,10 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
         },
         methods: methods.map((m) => ({ id: m.id, enabled: m.enabled, minutes: Number(m.minutes) })),
       });
+      if (manual) return api.post('/api/planner/manual', { startDate: profile.start_date });
       if (tplId) return api.post('/api/planner/generate-template', { templateId: tplId, editionIds: chosen.map((e) => e.edition_id), primaryEditionId: primary });
       return api.post('/api/planner/generate', { editionIds: sel, primaryEditionId: primary, startDate: profile.start_date });
     },
-    onSuccess: () => { qc.invalidateQueries(); onDone(); },
-    onError: (e) => setError(errorMessage(e)),
-  });
-  const scratch = useMutation({
-    mutationFn: () => api.post('/api/planner/manual'),
     onSuccess: () => { qc.invalidateQueries(); onDone(); },
     onError: (e) => setError(errorMessage(e)),
   });
@@ -105,14 +121,17 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   if (exams.isLoading || settings.isLoading || !profile || sel === null) return <Spinner />;
   const tpls = templates.data ?? [];
   // Com o cronograma pessoal, a prova dele já vem nele: as outras são opcionais
-  const tplEdition = tpls.find((t: any) => t.id === tplId)?.examEditionId ?? null;
+  const tpl = tpls.find((t: any) => t.id === tplId) ?? null;
+  const tplEdition = tpl?.examEditionId ?? null;
   const available = (exams.data ?? []).filter((e) => (e.days_left == null || e.days_left > 0) && e.edition_id !== tplEdition);
   const chosen = available.filter((e) => sel.includes(e.edition_id));
   const dateOf = (e: any) => (e.date_official ? e.exam_date : dates[e.edition_id] ?? e.exam_date ?? '');
   const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const enabledMethods = methods.filter((m) => m.enabled);
-  const tplStart = tpls.find((t: any) => t.id === tplId)?.startDate ?? null;
-  const ready = (tplId ? !missingDate : chosen.length > 0 && !!primary && !missingDate && !!profile.start_date) && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
+  const examsReady = tplId ? !missingDate : chosen.length > 0 && !!primary && !missingDate;
+  const startReady = !!tplId || (!!profile.start_date && profile.start_date >= todayBR());
+  const ready = enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
+  const stepIndex = step === 'exams' ? 0 : step === 'start' ? 1 : 2;
 
   const toggleExam = (id: string) => {
     const on = sel.includes(id);
@@ -123,166 +142,193 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl" ref={top}>
       <Title eyebrow="Seu planner começa aqui" trailing={canCancel ? <Button variant="plain" size="sm" onClick={onDone}>Cancelar</Button> : undefined}>Planner</Title>
-      {!canCancel && (
-        <div className="-mt-6 mb-12 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-line pb-6 animate-in">
-          <p className="text-[15px] text-ink-2">Escolha uma prova para o cronograma automático.<span className="block text-[13px] text-ink-3">Prefere montar você mesmo, dia a dia?</span></p>
-          <button onClick={() => { setError(null); scratch.mutate(); }} disabled={scratch.isPending} data-testid="scratch"
-            className="rounded-full border border-line px-4 py-2 text-[14px] text-ink transition hover:border-ink disabled:opacity-40">
-            {scratch.isPending ? 'Abrindo…' : 'Montar do zero'}
+
+      <div className="-mt-4 mb-10 flex items-center gap-4">
+        <span className="sr-only">Etapa {stepIndex + 1} de 3</span>
+        <span className="flex gap-1.5" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className={clsx('h-1.5 rounded-full transition-all duration-300 ease-apple', i === stepIndex ? 'w-6 bg-ink' : i < stepIndex ? 'w-1.5 bg-ink' : 'w-1.5 bg-line')} />
+          ))}
+        </span>
+        {step !== 'exams' && (
+          <button type="button" onClick={() => go(step === 'methods' ? 'start' : 'exams')} className="text-[13px] text-ink-3 transition hover:text-ink">
+            Voltar
           </button>
-        </div>
-      )}
-      {!canCancel && error && !chosen.length && !tplId && <Note tone="negative" className="-mt-8 mb-10">{error}</Note>}
+        )}
+      </div>
 
-      {tpls.length > 0 && (
-        <section className="-mt-4 mb-12 animate-in" aria-label="Só para você">
-          <div className="flex items-baseline gap-3">
-            <span className="font-display text-[28px] italic">Só para você</span>
-            <span className="h-px flex-1 bg-line" />
-          </div>
-          <div className="mt-4 border-t border-line">
-            {tpls.map((t: any) => (
-              <label key={t.id} className="flex cursor-pointer items-center gap-4 border-b border-line py-4">
-                <input type="checkbox" className="sr-only" checked={tplId === t.id} aria-label={`Usar ${t.name}`}
-                  onChange={() => setTplId(tplId === t.id ? null : t.id)} />
-                <CheckCircle on={tplId === t.id} />
-                <span className="min-w-0 flex-1">
-                  <span className="block font-display text-[24px] leading-tight">{t.name}</span>
-                  <span className="block text-[13px] text-ink-2">{t.lessons} aulas a partir de {shortDate(t.startDate, false)} · {t.studied} temas já estudados · prova em {shortDate(t.examDate)}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-          <p className="mt-3 text-[13px] text-ink-3">{IS_LOCAL ? '' : 'Visível só para administradores. '}Segue as datas do seu cronograma; o que você já estudou entra como concluído.</p>
-        </section>
-      )}
+      <div key={step} className={clsx(leaving ? 'rp-step-out' : 'rp-step-in')} data-testid={`setup-${step}`}>
+        {step === 'exams' && (
+          <section aria-label="Provas">
+            <StepQuestion>Quais provas você quer fazer?</StepQuestion>
 
-      <section className={clsx('animate-in', tpls.length ? '' : '-mt-4')}>
-        <div className="flex items-baseline gap-3">
-          <span className="font-display text-[28px]">{tplId ? 'Junto com o cronograma' : tpls.length ? 'Ou escolha uma prova' : 'Qual prova você vai fazer?'}</span>
-        </div>
-        {tplId && <p className="mt-1 text-[14px] text-ink-2">Opcional. O cronograma vem primeiro, nas datas dele; os assuntos das provas marcadas aqui entram no tempo que sobra e, depois dele, até a data de cada prova.</p>}
-        {available.length === 0 ? <p className="mt-4 text-[17px] text-ink-2">Ainda não há provas disponíveis.</p> : (
-          <div className="mt-4 border-t border-line">
-            {available.map((e) => {
-              const on = sel.includes(e.edition_id);
-              return (
-                <div key={e.edition_id} className="border-b border-line py-4">
-                  <label className="flex cursor-pointer items-center gap-4">
-                    <input type="checkbox" className="sr-only" checked={on} aria-label={`Selecionar ${e.institution}`} onChange={() => toggleExam(e.edition_id)} />
-                    <CheckCircle on={on} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-display text-[24px] leading-tight">{e.institution}</span>
-                      <span className="block text-[13px] text-ink-2">{e.exam_name}</span>
-                    </span>
-                    {e.date_official && <span className="shrink-0 text-right text-[14px]">{shortDate(e.exam_date)}<span className="block text-[11px] text-ink-3">data oficial</span></span>}
-                  </label>
-                  {on && (!e.date_official || chosen.length > 1) && (
-                    <div className="mt-3 ml-10 flex flex-wrap items-end gap-x-6 gap-y-3 animate-in">
-                      {!e.date_official && (
-                        <Field label="Data da prova" className="w-44">
-                          <input type="date" className="field" aria-label={`Data da prova - ${e.institution}`} min={todayBR()}
-                            value={dateOf(e)} onChange={(ev) => setDates({ ...dates, [e.edition_id]: ev.target.value })} />
-                        </Field>
-                      )}
-                      {chosen.length > 1 && (
-                        <label className="flex items-center gap-2 pb-2.5 text-[14px] text-ink-2">
-                          <input type="radio" name="primary" className="accent-[var(--ink)]" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
-                        </label>
+            {tpls.length > 0 && (
+              <div className="mt-6">
+                <span className="font-display text-[20px] italic text-ink-2">Só para você</span>
+                <div className="mt-2 border-t border-line">
+                  {tpls.map((t: any) => (
+                    <label key={t.id} className="flex cursor-pointer items-center gap-4 border-b border-line py-4">
+                      <input type="checkbox" className="sr-only" checked={tplId === t.id} aria-label={`Usar ${t.name}`}
+                        onChange={() => setTplId(tplId === t.id ? null : t.id)} />
+                      <CheckCircle on={tplId === t.id} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-display text-[24px] leading-tight">{t.name}</span>
+                        <span className="block text-[13px] text-ink-2">{t.lessons} aulas a partir de {shortDate(t.startDate, false)} · {t.studied} temas já estudados · prova em {shortDate(t.examDate)}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-3 text-[13px] text-ink-3">{IS_LOCAL ? '' : 'Visível só para administradores. '}Segue as datas do seu cronograma; o que você já estudou entra como concluído.</p>
+              </div>
+            )}
+
+            {tpls.length > 0 && <span className="mt-8 block font-display text-[20px] italic text-ink-2">{tplId ? 'Junto com o cronograma' : 'Provas'}</span>}
+            {tplId && <p className="mt-1 text-[14px] text-ink-2">Opcional. O cronograma vem primeiro, nas datas dele; os assuntos das provas marcadas aqui entram no tempo que sobra e, depois dele, até a data de cada prova.</p>}
+            {available.length === 0 ? <p className="mt-4 text-[17px] text-ink-2">Ainda não há provas disponíveis.</p> : (
+              <div className={clsx('border-t border-line', tpls.length ? 'mt-2' : 'mt-6')}>
+                {available.map((e) => {
+                  const on = sel.includes(e.edition_id);
+                  return (
+                    <div key={e.edition_id} className="border-b border-line py-4">
+                      <label className="flex cursor-pointer items-center gap-4">
+                        <input type="checkbox" className="sr-only" checked={on} aria-label={`Selecionar ${e.institution}`} onChange={() => toggleExam(e.edition_id)} />
+                        <CheckCircle on={on} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-display text-[24px] leading-tight">{e.institution}</span>
+                          <span className="block text-[13px] text-ink-2">{e.exam_name}</span>
+                        </span>
+                        {e.date_official && <span className="shrink-0 text-right text-[14px]">{shortDate(e.exam_date)}<span className="block text-[11px] text-ink-3">data oficial</span></span>}
+                      </label>
+                      {on && (!e.date_official || chosen.length > 1) && (
+                        <div className="mt-3 ml-10 flex flex-wrap items-end gap-x-6 gap-y-3 animate-in">
+                          {!e.date_official && (
+                            <Field label="Data da prova" className="w-44">
+                              <input type="date" className="field" aria-label={`Data da prova - ${e.institution}`} min={todayBR()}
+                                value={dateOf(e)} onChange={(ev) => setDates({ ...dates, [e.edition_id]: ev.target.value })} />
+                            </Field>
+                          )}
+                          {chosen.length > 1 && (
+                            <label className="flex items-center gap-2 pb-2.5 text-[14px] text-ink-2">
+                              <input type="radio" name="primary" className="accent-[var(--ink)]" checked={primary === e.edition_id} onChange={() => setPrimary(e.edition_id)} /> Principal
+                            </label>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {(chosen.length > 0 || tplId) && (
-        <section className="mt-12 animate-in" aria-label="Início do planner">
-          <span className="font-display text-[28px]">Quando você começa?</span>
-          {tplId ? (
-            <p className="mt-1 text-[14px] text-ink-2">Começa em {shortDate(tplStart, false)}, na primeira aula do seu cronograma.</p>
-          ) : (
-            <Field label="Começar em" className="mt-4 w-44">
-              <input type="date" className="field" aria-label="Começar em" min={todayBR()} value={profile.start_date ?? ''}
-                onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
-            </Field>
-          )}
-        </section>
-      )}
-
-      {(chosen.length > 0 || tplId) && (
-        <section className="mt-12 animate-in">
-          <span className="font-display text-[28px]">Como você estuda?</span>
-          <p className="mt-1 text-[14px] text-ink-2">Opcional. Um assunto fica concluído quando você faz tudo o que marcou aqui.</p>
-          <div className="mt-4 flex flex-wrap gap-2.5">
-            {methods.map((m, i) => (
-              <label key={m.id} className={clsx('cursor-pointer rounded-full border px-4 py-2 text-[15px] transition select-none',
-                m.enabled ? 'border-ink bg-ink text-canvas' : 'border-line text-ink hover:border-ink')}>
-                <input type="checkbox" className="sr-only" checked={m.enabled} aria-label={m.name}
-                  onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />
-                {m.name}
-              </label>
-            ))}
-          </div>
-
-          <Advanced className="mt-10 border-t border-line pt-5">
-            <div className="space-y-8">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Horas por dia">
-                  <input type="number" min={0.5} max={16} step={0.5} className="field" value={profile.daily_hours} onChange={(e) => setProfile({ ...profile, daily_hours: e.target.value })} />
-                </Field>
-                <Field label="Revisões por dia">
-                  <select className="field" aria-label="Revisões por dia" value={profile.reviews_per_day ?? 2} onChange={(e) => setProfile({ ...profile, reviews_per_day: Number(e.target.value) })}>
-                    {REVIEW_OPTIONS.map((n) => <option key={n} value={n}>até {n}</option>)}
-                  </select>
-                </Field>
-                <Field label="Questões por dia">
-                  <input type="number" min={0} max={500} className="field" value={profile.questions_per_day} onChange={(e) => setProfile({ ...profile, questions_per_day: e.target.value })} />
-                </Field>
-                <Field label="Dias de estudo por semana">
-                  <input type="number" min={1} max={7} className="field" value={profile.study_days_per_week} onChange={(e) => setProfile({ ...profile, study_days_per_week: e.target.value })} />
-                </Field>
+                  );
+                })}
               </div>
-              <div className="border-y border-line">
-                <div className="flex items-center justify-between py-3"><span className="text-[15px]">Estudo aos sábados</span><Toggle label="Estudo aos sábados" checked={profile.study_saturday} onChange={(v) => setProfile({ ...profile, study_saturday: v })} /></div>
-                <div className="flex items-center justify-between border-t border-line py-3"><span className="text-[15px]">Estudo aos domingos</span><Toggle label="Estudo aos domingos" checked={profile.study_sunday} onChange={(v) => setProfile({ ...profile, study_sunday: v })} /></div>
-              </div>
-              {enabledMethods.length > 0 && (
-                <div>
-                  <p className="mb-2 text-[13px] text-ink-2">Tempo estimado por atividade (usado só para distribuir os assuntos nos dias)</p>
-                  <div className="space-y-2">
-                    {enabledMethods.map((m) => (
-                      <label key={m.id} className="flex items-center justify-between gap-4 text-[15px]">
-                        {m.name}
-                        <span className="flex items-center gap-2 text-ink-2">
-                          <input type="number" min={5} max={600} className="field w-20 text-right" aria-label={`Minutos - ${m.name}`} value={m.minutes}
-                            onChange={(e) => setMethods(methods.map((x) => (x.id === m.id ? { ...x, minutes: e.target.value } : x)))} /> min
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+            )}
+
+            {!tplId && chosen.some((e) => e.history.sufficiency === 'insufficient' || e.history.sufficiency === 'none') && (
+              <Note className="mt-8">Algumas provas têm poucos dados históricos: {chosen.filter((e) => !['good', 'limited'].includes(e.history.sufficiency)).map((e) => `${e.institution} (${e.history.message})`).join('; ')}</Note>
+            )}
+            <StepActions>
+              <Button size="lg" disabled={!examsReady} onClick={() => { setManual(false); go('start'); }}>Confirmar</Button>
+              {(chosen.length > 0 || tplId) && missingDate && <p className="mt-3 text-[13px] text-ink-3">Informe a data da prova para continuar.</p>}
+              {!canCancel && (
+                <button type="button" data-testid="scratch" onClick={() => { setManual(true); setTplId(null); go('start'); }}
+                  className="mt-6 block text-[14px] text-ink-2 underline decoration-line underline-offset-4 transition hover:text-ink hover:decoration-ink">
+                  Continuar sem escolher uma prova
+                </button>
               )}
-            </div>
-          </Advanced>
+            </StepActions>
+          </section>
+        )}
 
-          {!tplId && chosen.some((e) => e.history.sufficiency === 'insufficient' || e.history.sufficiency === 'none') && (
-            <Note className="mt-8">Algumas provas têm poucos dados históricos: {chosen.filter((e) => !['good', 'limited'].includes(e.history.sufficiency)).map((e) => `${e.institution} (${e.history.message})`).join('; ')}</Note>
-          )}
-          {error && <Note tone="negative" className="mt-6">{error}</Note>}
-          <div className="mt-10">
-            <Button size="lg" disabled={!ready} loading={generate.isPending} onClick={() => { setError(null); generate.mutate(); }}>Criar meu planner</Button>
-            {missingDate && <p className="mt-3 text-[13px] text-ink-3">Informe a data da prova para continuar.</p>}
-          </div>
-        </section>
-      )}
+        {step === 'start' && (
+          <section aria-label="Início">
+            <StepQuestion>Quando você quer começar?</StepQuestion>
+            {tplId && !manual ? (
+              <p className="mt-6 text-[17px] text-ink-2">Em {shortDate(tpl?.startDate, false)}, na primeira aula do seu cronograma.</p>
+            ) : (
+              <Field label="Data de início" className="mt-6 w-52">
+                <input type="date" className="field" aria-label="Data de início" min={todayBR()} value={profile.start_date ?? ''}
+                  onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
+              </Field>
+            )}
+            <StepActions>
+              <Button size="lg" disabled={!startReady} onClick={() => go('methods')}>Confirmar</Button>
+            </StepActions>
+          </section>
+        )}
+
+        {step === 'methods' && (
+          <section aria-label="Como estudar">
+            <StepQuestion>Como você quer estudar?</StepQuestion>
+            <p className="mt-2 text-[14px] text-ink-2">Um assunto fica concluído quando você faz tudo o que marcou aqui.</p>
+            <div className="mt-6 flex flex-wrap gap-2.5">
+              {methods.map((m, i) => (
+                <label key={m.id} className={clsx('cursor-pointer rounded-full border px-4 py-2 text-[15px] transition select-none',
+                  m.enabled ? 'border-ink bg-ink text-canvas' : 'border-line text-ink hover:border-ink')}>
+                  <input type="checkbox" className="sr-only" checked={m.enabled} aria-label={m.name}
+                    onChange={(e) => setMethods(methods.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))} />
+                  {m.name}
+                </label>
+              ))}
+            </div>
+
+            <Advanced className="mt-10 border-t border-line pt-5">
+              <div className="space-y-8">
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Horas por dia">
+                    <input type="number" min={0.5} max={16} step={0.5} className="field" value={profile.daily_hours} onChange={(e) => setProfile({ ...profile, daily_hours: e.target.value })} />
+                  </Field>
+                  <Field label="Revisões por dia">
+                    <select className="field" aria-label="Revisões por dia" value={profile.reviews_per_day ?? 2} onChange={(e) => setProfile({ ...profile, reviews_per_day: Number(e.target.value) })}>
+                      {REVIEW_OPTIONS.map((n) => <option key={n} value={n}>até {n}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Questões por dia">
+                    <input type="number" min={0} max={500} className="field" value={profile.questions_per_day} onChange={(e) => setProfile({ ...profile, questions_per_day: e.target.value })} />
+                  </Field>
+                  <Field label="Dias de estudo por semana">
+                    <input type="number" min={1} max={7} className="field" value={profile.study_days_per_week} onChange={(e) => setProfile({ ...profile, study_days_per_week: e.target.value })} />
+                  </Field>
+                </div>
+                <div className="border-y border-line">
+                  <div className="flex items-center justify-between py-3"><span className="text-[15px]">Estudo aos sábados</span><Toggle label="Estudo aos sábados" checked={profile.study_saturday} onChange={(v) => setProfile({ ...profile, study_saturday: v })} /></div>
+                  <div className="flex items-center justify-between border-t border-line py-3"><span className="text-[15px]">Estudo aos domingos</span><Toggle label="Estudo aos domingos" checked={profile.study_sunday} onChange={(v) => setProfile({ ...profile, study_sunday: v })} /></div>
+                </div>
+                {enabledMethods.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-[13px] text-ink-2">Tempo estimado por atividade (usado só para distribuir os assuntos nos dias)</p>
+                    <div className="space-y-2">
+                      {enabledMethods.map((m) => (
+                        <label key={m.id} className="flex items-center justify-between gap-4 text-[15px]">
+                          {m.name}
+                          <span className="flex items-center gap-2 text-ink-2">
+                            <input type="number" min={5} max={600} className="field w-20 text-right" aria-label={`Minutos - ${m.name}`} value={m.minutes}
+                              onChange={(e) => setMethods(methods.map((x) => (x.id === m.id ? { ...x, minutes: e.target.value } : x)))} /> min
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Advanced>
+
+            {error && <Note tone="negative" className="mt-6">{error}</Note>}
+            <StepActions>
+              <Button size="lg" disabled={!ready} loading={generate.isPending} onClick={() => { setError(null); generate.mutate(); }}>Confirmar</Button>
+              {enabledMethods.length === 0 && <p className="mt-3 text-[13px] text-ink-3">Escolha ao menos um jeito de estudar.</p>}
+            </StepActions>
+          </section>
+        )}
+      </div>
     </div>
   );
+}
+
+function StepQuestion({ children }: { children: ReactNode }) {
+  return <h2 className="font-display text-[32px] leading-tight tracking-[-0.01em]">{children}</h2>;
+}
+
+function StepActions({ children }: { children: ReactNode }) {
+  return <div className="mt-10">{children}</div>;
 }
 
 // ============================================================================

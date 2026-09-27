@@ -104,7 +104,7 @@ export async function loadMethods(ctx: Ctx, userId: string): Promise<UserMethod[
   });
 }
 
-/** Atividades escolhidas por assunto (sem escolha = métodos marcados em "Como você estuda?"). */
+/** Atividades escolhidas por assunto (sem escolha = métodos marcados em "Como você quer estudar?"). */
 /** Assuntos que o aluno tirou do planner (12_hidden_subjects.sql). Sem a tabela: nenhum. */
 export async function loadHidden(ctx: Ctx, userId: string): Promise<Set<string>> {
   const { data, error } = await ctx.sb.from('hidden_subjects').select('subject_id').eq('user_id', userId);
@@ -314,19 +314,20 @@ export async function savePlan(ctx: Ctx, p: Record<string, unknown>): Promise<st
 }
 
 /** Planner ativo; se ainda não houver nenhum, cria um vazio (sem prova), para montar à mão. */
-export async function ensurePlan(ctx: Ctx, userId: string) {
+export async function ensurePlan(ctx: Ctx, userId: string, startDate?: ISODate) {
   const existing = await activePlan(ctx, userId);
   if (existing) return existing;
   const methods = await loadMethods(ctx, userId);
   if (!methods.some((m) => m.enabled)) {
-    // Sem "Como você estuda?" configurado: videoaula + flashcards (dá para mudar em cada assunto)
+    // Sem "Como você quer estudar?" configurado: videoaula + flashcards (dá para mudar em cada assunto)
     const pick = methods.filter((m) => ['video', 'flashcards'].includes(m.code));
     await q(ctx.sb.from('user_study_methods').upsert((pick.length ? pick : methods.slice(0, 1))
       .map((m) => ({ study_method_id: m.id, enabled: true, estimated_minutes: m.estimated_minutes })), { onConflict: 'user_id,study_method_id' }));
   }
   const today = ctx.today();
+  const start = startDate && startDate > today ? startDate : today;
   await savePlan(ctx, {
-    name: 'Meu planner', start_date: today, end_date: addDays(today, 3650), primary_exam_edition_id: null, mode: 'single',
+    name: 'Meu planner', start_date: start, end_date: addDays(start, 3650), primary_exam_edition_id: null, mode: 'single',
     algorithm_version: `${PRIORITY_VERSION}+${MEMORY_VERSION}`, scheduler_version: SCHEDULER_VERSION,
     settings_snapshot: { manual: true }, summary: { manual: true, exams: [], weights: [], warnings: [] },
     exams: [], subjects: [], activities: [],

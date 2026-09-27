@@ -25,7 +25,19 @@ function route(method: string, pattern: string, handler: Handler) {
   routes.push({ method, re, keys, handler });
 }
 
+// Alterações rodam uma de cada vez: duas reorganizações ao mesmo tempo (ex.: dois
+// arrastes seguidos com a internet lenta) apagariam e regravariam as mesmas aulas
+let writes: Promise<unknown> = Promise.resolve();
+
 export async function handle(ctx: Ctx, method: string, url: string, body?: unknown) {
+  if (method === 'GET') return dispatch(ctx, method, url, body);
+  const run = () => dispatch(ctx, method, url, body);
+  const p = writes.then(run, run);
+  writes = p.catch(() => {});
+  return p;
+}
+
+async function dispatch(ctx: Ctx, method: string, url: string, body?: unknown) {
   const [path, qs] = url.split('?');
   for (const r of routes) {
     if (r.method !== method) continue;
@@ -489,15 +501,16 @@ route('POST', '/api/planner/days/:date/subjects', async ({ ctx, params, body }) 
   }).refine((x) => !!x.subjectId !== !!x.name, 'Escolha um assunto ou escreva um novo.').parse(body);
   return addSubjectToDay(ctx, { date: isoDate.parse(params.date), ...b });
 });
-// "Montar do zero": planner vazio, sem prova (os assuntos entram pelo "+" de cada dia)
+// "Continuar sem escolher uma prova": planner vazio, sem prova (os assuntos entram pelo "+" de cada dia)
 // Residências
 route('GET', '/api/residencies', async ({ ctx }) => listResidencies(ctx));
 route('POST', '/api/residencies', async ({ ctx, body }) => createResidency(ctx, body));
 route('PATCH', '/api/residencies/:id', async ({ ctx, params, body }) => updateResidency(ctx, uuid.parse(params.id), body));
 route('DELETE', '/api/residencies/:id', async ({ ctx, params }) => deleteResidency(ctx, uuid.parse(params.id)));
 
-route('POST', '/api/planner/manual', async ({ ctx }) => {
-  await ensurePlan(ctx, await currentUserId(ctx));
+route('POST', '/api/planner/manual', async ({ ctx, body }) => {
+  const b = z.object({ startDate: isoDate.optional() }).parse(body ?? {});
+  await ensurePlan(ctx, await currentUserId(ctx), b.startDate);
   return { ok: true };
 });
 route('PATCH', '/api/subjects/:id', async ({ ctx, params, body }) => {

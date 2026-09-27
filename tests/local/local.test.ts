@@ -205,11 +205,12 @@ describe('app off-line', () => {
     const cardio = areas.find((a: any) => /Clínica/.test(a.name));
     expect(outros && cardio).toBeTruthy();
 
-    // "Montar do zero": planner vazio, sem prova (e repetir não cria outro)
-    await ok('POST', '/api/planner/manual');
+    // "Continuar sem escolher uma prova": planner vazio, sem prova, na data de início escolhida (e repetir não cria outro)
+    await ok('POST', '/api/planner/manual', { startDate: '2026-09-29' });
     await ok('POST', '/api/planner/manual');
     const manual = await ok('GET', '/api/planner');
     expect(manual.plan?.summary?.manual).toBe(true);
+    expect(manual.plan.start_date).toBe('2026-09-29');
     expect(manual.subjects).toHaveLength(0);
 
     // Primeiro "+": cria o planner vazio e o assunto do próprio aluno
@@ -316,5 +317,33 @@ describe('Residências no app off-line', () => {
     expect(p.subjects.some((s: any) => fromSc(s) && s.nextScheduledDate && s.nextScheduledDate < '2026-12-05')).toBe(true);
     const d = await ok('GET', `/api/planner/subjects/${p.subjects.find(fromSc).subjectId}`);
     expect(d.explanation).toContain('da Santa Casa Araçatuba');
+  });
+});
+
+describe('alterações seguidas', () => {
+  it('dois arrastes ao mesmo tempo não brigam: nenhuma aula some nem se repete', async () => {
+    today = '2026-09-28';
+    await ok('POST', '/api/me/reset');
+    const f = (await ok('GET', '/api/exams')).find((e: any) => e.institution === 'FAMERP');
+    const st = await ok('GET', '/api/me/study-settings');
+    await ok('PUT', '/api/me/study-settings', {
+      profile: { ...st.profile, preferred_start_time: null, preferred_end_time: null },
+      methods: st.methods.map((m: any) => ({ id: m.id, enabled: ['video', 'flashcards'].includes(m.code), minutes: m.estimated_minutes })),
+    });
+    await ok('POST', '/api/planner/generate', { editionIds: [f.edition_id], primaryEditionId: f.edition_id, startDate: today });
+    const before = await ok('GET', '/api/planner');
+    const [a, b] = before.subjects.slice(20, 22);
+    await Promise.all([
+      ok('POST', `/api/planner/subjects/${a.subjectId}/schedule`, { to: '2026-10-07' }),
+      ok('POST', `/api/planner/subjects/${b.subjectId}/schedule`, { to: '2026-10-08' }),
+    ]);
+    const after = await ok('GET', '/api/planner');
+    const dates = (id: string) => after.subjects.find((s: any) => s.subjectId === id).checklist.map((c: any) => c.scheduledDate);
+    expect(dates(a.subjectId)).toEqual(['2026-10-07', '2026-10-07']);
+    expect(dates(b.subjectId)).toEqual(['2026-10-08', '2026-10-08']);
+    // Todo assunto que estava no planner continua nele (reorganizar pode até caber mais)
+    const scheduled = (p: any) => p.subjects.filter((s: any) => s.checklist.some((c: any) => c.scheduledDate)).map((s: any) => s.subjectId);
+    const still = new Set(scheduled(after));
+    expect(scheduled(before).filter((id: string) => !still.has(id))).toEqual([]);
   });
 });

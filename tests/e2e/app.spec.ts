@@ -18,6 +18,26 @@ async function openSetup(page: Page) {
   if (await later.isVisible()) await later.click();
 }
 
+/** Configuração em 3 perguntas: provas → data de início → como estuda (cada uma com "Confirmar"). */
+async function confirmStep(page: Page, step: 'exams' | 'start' | 'methods') {
+  await page.getByTestId(`setup-${step}`).getByRole('button', { name: 'Confirmar' }).click();
+}
+/** Estuda todos os dias: os testes não dependem do dia da semana em que rodam. */
+async function studyEveryDay(page: Page) {
+  await page.getByRole('button', { name: 'Opções avançadas' }).click();
+  const sunday = page.getByRole('switch', { name: 'Estudo aos domingos' });
+  if ((await sunday.getAttribute('aria-checked')) !== 'true') await sunday.click();
+  const saturday = page.getByRole('switch', { name: 'Estudo aos sábados' });
+  if ((await saturday.getAttribute('aria-checked')) !== 'true') await saturday.click();
+  await page.getByLabel('Dias de estudo por semana').fill('7');
+}
+async function finishSetup(page: Page, from: 'exams' | 'start' = 'exams') {
+  if (from === 'exams') await confirmStep(page, 'exams');
+  await confirmStep(page, 'start');
+  await studyEveryDay(page);
+  await confirmStep(page, 'methods');
+}
+
 async function login(page: Page, email: string, password: string) {
   await page.goto('login');
   await page.getByLabel('E-mail').fill(email);
@@ -47,7 +67,7 @@ test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async
   // Primeira vez: as provas (cronograma automático) ou montar do zero
   await expect(page.getByRole('heading', { name: 'Planner' })).toBeVisible();
   await expect(page.getByTestId('scratch')).toBeVisible();
-  await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
+  await expect(page.getByText('Quais provas você quer fazer?')).toBeVisible();
   await expect(page.getByText('Receba seu planner')).toHaveCount(0);
   await page.goto('provas');
   await expect(page.locator('article')).toHaveCount(6);
@@ -84,13 +104,20 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await login(page, student.email, student.password);
   await openSetup(page);
   await expect(page.getByLabel(/Selecionar FAMERP/)).toBeChecked();
-  // Uma tela só: prova e (opcionalmente) como estuda; tempo fica em "Opções avançadas"
-  await expect(page.getByText('Como você estuda?')).toBeVisible();
+  // Uma pergunta por vez: provas → data de início → como estuda
+  await expect(page.getByText('Quando você quer começar?')).toHaveCount(0);
+  await expect(page.getByText('Como você quer estudar?')).toHaveCount(0);
+  await confirmStep(page, 'exams');
+  await expect(page.getByText('Quais provas você quer fazer?')).toHaveCount(0);
+  await expect(page.getByLabel('Data de início')).toHaveValue(inDays(0));
+  await confirmStep(page, 'start');
+  await expect(page.getByText('Quando você quer começar?')).toHaveCount(0);
+  await expect(page.getByText('Como você quer estudar?')).toBeVisible();
   await expect(page.getByLabel('Videoaula')).toBeChecked();
+  // Tempo fica em "Opções avançadas"
   await expect(page.getByText('Horas por dia')).toHaveCount(0);
-  // Data de início à vista, abaixo das provas e antes de "Como você estuda?"
-  await expect(page.getByLabel('Começar em')).toHaveValue(inDays(0));
-  await page.getByRole('button', { name: 'Criar meu planner' }).click();
+  await studyEveryDay(page);
+  await confirmStep(page, 'methods');
 
   const today = page.getByTestId(`day-${inDays(0)}`);
   await expect(today.getByTestId('col-subjects').getByTestId('task').first()).toBeVisible();
@@ -225,7 +252,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await openSetup(page);
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
   await expect(page.getByLabel(/Selecionar FAMERP/)).toBeChecked();
-  await page.getByRole('button', { name: 'Criar meu planner' }).click();
+  await finishSetup(page);
   const task = page.getByTestId(`day-${inDays(0)}`).getByTestId('task').first();
   const circle = task.getByRole('checkbox');
   await expect(circle).toHaveAttribute('aria-checked', 'false');
@@ -312,7 +339,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await page.getByRole('dialog').getByRole('button', { name: 'Zerar tudo' }).click();
   await expect(page).toHaveURL(HOME);
   await openSetup(page);
-  await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
+  await expect(page.getByText('Quais provas você quer fazer?')).toBeVisible();
   await expect(page.getByLabel(/Selecionar FAMERP/)).not.toBeChecked();
 });
 
@@ -322,7 +349,7 @@ test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Pl
   await expect(page).toHaveURL(HOME);
   await openSetup(page);
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
-  await page.getByRole('button', { name: 'Criar meu planner' }).click();
+  await finishSetup(page);
   await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
 
   await page.getByRole('link', { name: 'Agenda', exact: true }).click();
@@ -373,8 +400,9 @@ test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no 
   await page.goto('login');
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
   await expect(page).toHaveURL(HOME);
-  await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
+  await expect(page.getByText('Quais provas você quer fazer?')).toBeVisible();
   await page.getByTestId('scratch').click();
+  await finishSetup(page, 'start');
   await expect(page.getByText('Meu planner')).toBeVisible();
   await expect(page.getByTestId('choose-exam')).toHaveText('Escolher prova para montar cronograma');
 
@@ -395,7 +423,7 @@ test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no 
   // Depois escolhe uma prova: o assunto próprio continua no dia e dá para somar um da prova
   await openSetup(page);
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
-  await page.getByRole('button', { name: 'Criar meu planner' }).click();
+  await finishSetup(page);
   const day2 = page.getByTestId(`day-${inDays(0)}`);
   await expect(day2).toBeVisible();
   const before = await day2.getByTestId('task-name').allTextContents();
@@ -426,6 +454,7 @@ test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
   await expect(page).toHaveURL(HOME);
   await page.getByTestId('scratch').click();
+  await finishSetup(page, 'start');
   await expect(page.getByTestId('choose-exam')).toBeVisible();
 
   await page.getByRole('link', { name: 'Residências', exact: true }).click();
