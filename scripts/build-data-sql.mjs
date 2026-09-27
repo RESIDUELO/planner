@@ -25,6 +25,37 @@ export function slug(...parts) {
 const lit = (v) => (v === null || v === undefined ? 'null' : typeof v === 'number' || typeof v === 'boolean' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
 const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
+// Campo da banca e a função que o devolve para a análise (vai junto no SQL da prova que usa)
+const BOARDS_DDL = `alter table public.exam_editions add column if not exists board text
+  check (board is null or char_length(board) <= 60);
+
+create or replace function public.exam_history_data(p_exam_ids uuid[], p_include_drafts boolean default false)
+returns jsonb language sql stable set search_path = public, pg_temp as $$
+  select jsonb_build_object(
+    'editions', coalesce((
+      select jsonb_agg(jsonb_build_object('id', ed.id, 'exam_id', ed.exam_id, 'year', ed.year, 'status', ed.status, 'board', ed.board,
+               'question_count', (select count(*) from questions q where q.exam_edition_id = ed.id and q.active),
+               'classified_count', (select count(*) from questions q where q.exam_edition_id = ed.id and q.active
+                                     and exists (select 1 from question_subjects qs where qs.question_id = q.id)))
+             order by ed.year)
+        from exam_editions ed
+       where ed.exam_id = any(p_exam_ids)
+         and (case when p_include_drafts then ed.status <> 'archived' else ed.status = 'published' end)), '[]'::jsonb),
+    -- links: [questão, edição, prova, assunto raiz, peso, assunto classificado]
+    'links', coalesce((
+      select jsonb_agg(jsonb_build_array(q.id, q.exam_edition_id, ed.exam_id, r.root, qs.relevance_weight, qs.subject_id))
+        from questions q
+        join exam_editions ed on ed.id = q.exam_edition_id
+        join question_subjects qs on qs.question_id = q.id
+        join subject_roots r on r.id = qs.subject_id
+        join subjects s on s.id = r.root and s.active
+       where ed.exam_id = any(p_exam_ids) and q.active
+         and (case when p_include_drafts then ed.status <> 'archived' else ed.status = 'published' end)), '[]'::jsonb)
+  )
+$$;
+grant execute on function public.exam_history_data(uuid[], boolean) to authenticated;
+revoke execute on function public.exam_history_data(uuid[], boolean) from anon;`;
+
 export function buildExamSql(entry) {
   const doc = JSON.parse(readFileSync(join(root, 'data/import', entry.file), 'utf8'));
   const qs = doc.questions;
@@ -120,7 +151,8 @@ on conflict (exam_id, year) do update set notes = excluded.notes, exam_date = ex
 `);
 
   // Banca por edição (troca de banca: a análise pesa mais as provas da banca atual)
-  if (entry.boards) out.push(`-- Banca de cada edição (precisa de supabase/parts/16_edition_boards.sql)
+  if (entry.boards) out.push(`-- Banca de cada edição: com troca de banca, as provas da banca atual pesam mais (shared/stats.ts)
+${BOARDS_DDL}
 update public.exam_editions ed set board = v.board
 from (values ${Object.entries(entry.boards).map(([y, b]) => `(${Number(y)}, ${lit(b)})`).join(', ')}) as v(year, board)
 where ed.exam_id = ${examRef} and ed.year = v.year;
