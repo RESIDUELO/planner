@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { ChevronLeft, ChevronRight, Plus, Search, Timer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
 import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/format';
@@ -341,7 +341,7 @@ const mondayOf = (d: string) => addDays(d, -((weekday(d) + 6) % 7));
 
 function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<null | 'about' | 'subjects' | 'multi'>(null);
+  const [sheet, setSheet] = useState<null | 'about' | 'subjects' | 'multi' | 'reconfigure'>(null);
   const qc = useQueryClient();
   const replan = useMutation({ mutationFn: () => api.post('/api/planner/replan'), onSuccess: () => qc.invalidateQueries() });
   const exam = data.exams.find((e: any) => e.is_primary) ?? data.exams[0];
@@ -362,9 +362,22 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       { label: 'Reorganizar a partir de hoje', onClick: () => replan.mutate(), hidden: noExam },
       { label: 'Todos os assuntos', onClick: () => setSheet('subjects'), hidden: !data.subjects.length },
       { label: 'Tabela combinada das provas', onClick: () => setSheet('multi'), hidden: data.exams.length < 2 },
-      { label: noExam ? 'Escolher prova para montar cronograma' : 'Reconfigurar planner', onClick: onReconfigure },
+      { label: 'Escolher prova para montar cronograma', onClick: onReconfigure, hidden: !noExam },
       { label: 'Sobre este plano', onClick: () => setSheet('about'), hidden: noExam },
     ]} />
+  );
+  // Reconfigurar à vista no topo; antes, um aviso (para um clique sem querer não refazer o planner)
+  const actions = (
+    <>
+      {!noExam && (
+        <button type="button" onClick={() => setSheet('reconfigure')} data-testid="reconfigure" aria-label="Reconfigurar planner"
+          className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px] font-medium tracking-[0.16em] text-ink-2 uppercase transition hover:border-ink hover:text-ink">
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <span className="hidden sm:inline">Reconfigurar</span>
+        </button>
+      )}
+      {menu}
+    </>
   );
 
   // Tela larga (computador, tablet ou celular deitados): tudo cabe na tela, sem rolagem da página
@@ -377,7 +390,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   return (
     <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-var(--chrome-h))] fit:grid-cols-[minmax(0,1fr)_300px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
       <section aria-label="Semana" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
-        <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={menu} desktop={desktop} onAdd={setAdding} jump={jump} />
+        <WeekView onOpen={setOpen} onReplan={() => replan.mutate()} replanning={replan.isPending} dnd={dnd} eyebrow={eyebrow} menu={actions} desktop={desktop} onAdd={setAdding} jump={jump} />
       </section>
       <aside aria-label="Estudo" className="no-scrollbar min-w-0 space-y-12 fit:flex fit:min-h-0 fit:flex-col fit:gap-10 fit:space-y-0 fit:overflow-y-auto">
         <SubjectLibrary data={data} dnd={dnd} onOpen={setOpen} onAll={() => setSheet('subjects')} fit={desktop} />
@@ -392,6 +405,20 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       </aside>
 
       {sheet === 'about' && <AboutPlan data={data} onClose={() => setSheet(null)} />}
+      {sheet === 'reconfigure' && (
+        <Sheet open onClose={() => setSheet(null)} title="Reconfigurar o planner?">
+          <p className="text-[16px] text-ink-2">Você vai escolher de novo as provas, a data de início e como estuda, e o cronograma é montado outra vez a partir disso.</p>
+          <ul className="mt-4 list-disc space-y-1 pl-5 text-[15px] text-ink-2">
+            <li><span className="text-ink">Continuam:</span> o que você já estudou, as revisões, as questões registradas e os assuntos que você criou.</li>
+            <li><span className="text-ink">Mudam:</span> as datas das aulas, inclusive as que você arrastou para outro dia.</li>
+          </ul>
+          <p className="mt-4 text-[15px] text-ink-2">Nada muda até você confirmar a última etapa; dá para cancelar no caminho.</p>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Button onClick={() => { setSheet(null); onReconfigure(); }}>Reconfigurar</Button>
+            <Button variant="plain" onClick={() => setSheet(null)}>Manter como está</Button>
+          </div>
+        </Sheet>
+      )}
       {sheet === 'subjects' && <Sheet open onClose={() => setSheet(null)} wide title="Assuntos"><SubjectList data={data} onOpen={(id) => { setSheet(null); setOpen(id); }} /></Sheet>}
       {sheet === 'multi' && <Sheet open onClose={() => setSheet(null)} wide title="Tabela combinada"><MultiTable data={data} onOpen={(id) => { setSheet(null); setOpen(id); }} /></Sheet>}
       {open && <SubjectModal subjectId={open} onClose={() => setOpen(null)} />}

@@ -125,6 +125,19 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await expect(today.getByText('Saúde do Trabalhador')).toBeVisible();
   await expect(today).not.toContainText('min');
 
+  // Reconfigurar fica à vista, mas pede confirmação antes (clique sem querer não muda nada)
+  await page.getByTestId('reconfigure').click();
+  const warn = page.getByRole('dialog').filter({ hasText: 'Reconfigurar o planner?' });
+  await expect(warn).toContainText('Continuam');
+  await warn.getByRole('button', { name: 'Manter como está' }).click();
+  await expect(warn).toHaveCount(0);
+  await expect(today.getByTestId('col-subjects').getByTestId('task').first()).toBeVisible();
+  await page.getByTestId('reconfigure').click();
+  await page.getByRole('dialog').filter({ hasText: 'Reconfigurar o planner?' }).getByRole('button', { name: 'Reconfigurar', exact: true }).click();
+  await expect(page.getByText('Quais provas você quer fazer?')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(today.getByTestId('col-subjects').getByTestId('task').first()).toBeVisible();
+
   // Adiantar: uma tarefa de outro dia concluída hoje aparece hoje, como feita
   // (procura nesta semana e, se não houver mais dias de aula nela, na próxima)
   let future = null as null | { name: string };
