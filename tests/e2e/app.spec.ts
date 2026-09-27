@@ -88,6 +88,8 @@ test('TESTES 3, 5–12 — planner em duas colunas, fila dinâmica, Pomodoro e c
   await expect(page.getByText('Como você estuda?')).toBeVisible();
   await expect(page.getByLabel('Videoaula')).toBeChecked();
   await expect(page.getByText('Horas por dia')).toHaveCount(0);
+  // Data de início à vista, abaixo das provas e antes de "Como você estuda?"
+  await expect(page.getByLabel('Começar em')).toHaveValue(inDays(0));
   await page.getByRole('button', { name: 'Criar meu planner' }).click();
 
   const today = page.getByTestId(`day-${inDays(0)}`);

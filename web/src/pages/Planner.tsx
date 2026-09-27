@@ -70,7 +70,9 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   }, [exams.data]);
   useEffect(() => {
     if (settings.data && !profile) {
-      setProfile({ ...settings.data.profile, start_date: settings.data.profile.configured ? settings.data.profile.start_date : todayBR() });
+      // Reconfigurando: o planner novo não começa numa data que já passou
+      const saved = settings.data.profile.configured ? settings.data.profile.start_date : null;
+      setProfile({ ...settings.data.profile, start_date: saved && saved > todayBR() ? saved : todayBR() });
       setMethods(settings.data.methods.map((m: any) => ({ ...m, enabled: m.configured ? m.enabled : ['video', 'flashcards'].includes(m.code), minutes: m.estimated_minutes })));
     }
   }, [settings.data]);
@@ -109,7 +111,8 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
   const dateOf = (e: any) => (e.date_official ? e.exam_date : dates[e.edition_id] ?? e.exam_date ?? '');
   const missingDate = chosen.some((e) => !dateOf(e) || dateOf(e) <= todayBR());
   const enabledMethods = methods.filter((m) => m.enabled);
-  const ready = (tplId ? !missingDate : chosen.length > 0 && !!primary && !missingDate) && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
+  const tplStart = tpls.find((t: any) => t.id === tplId)?.startDate ?? null;
+  const ready = (tplId ? !missingDate : chosen.length > 0 && !!primary && !missingDate && !!profile.start_date) && enabledMethods.length > 0 && Number(profile.daily_hours) > 0;
 
   const toggleExam = (id: string) => {
     const on = sel.includes(id);
@@ -199,6 +202,20 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
       </section>
 
       {(chosen.length > 0 || tplId) && (
+        <section className="mt-12 animate-in" aria-label="Início do planner">
+          <span className="font-display text-[28px]">Quando você começa?</span>
+          {tplId ? (
+            <p className="mt-1 text-[14px] text-ink-2">Começa em {shortDate(tplStart, false)}, na primeira aula do seu cronograma.</p>
+          ) : (
+            <Field label="Começar em" className="mt-4 w-44">
+              <input type="date" className="field" aria-label="Começar em" min={todayBR()} value={profile.start_date ?? ''}
+                onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
+            </Field>
+          )}
+        </section>
+      )}
+
+      {(chosen.length > 0 || tplId) && (
         <section className="mt-12 animate-in">
           <span className="font-display text-[28px]">Como você estuda?</span>
           <p className="mt-1 text-[14px] text-ink-2">Opcional. Um assunto fica concluído quando você faz tudo o que marcou aqui.</p>
@@ -229,9 +246,6 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
                 </Field>
                 <Field label="Dias de estudo por semana">
                   <input type="number" min={1} max={7} className="field" value={profile.study_days_per_week} onChange={(e) => setProfile({ ...profile, study_days_per_week: e.target.value })} />
-                </Field>
-                <Field label="Começar em">
-                  <input type="date" className="field" value={profile.start_date} onChange={(e) => setProfile({ ...profile, start_date: e.target.value })} />
                 </Field>
               </div>
               <div className="border-y border-line">
