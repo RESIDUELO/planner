@@ -66,6 +66,56 @@
   color-scheme: dark;
 }
 
+/*
+ * Paletas (Configurações → Aparência, ou Planner → Personalizar). Só cores:
+ * papel, tinta, linhas e o destaque dos botões. Os tons das áreas continuam.
+ */
+:root[data-palette="lavanda"] {
+  --canvas: #f1eef3; --surface: #f7f5f8; --fill: #e6e1ec; --fill-strong: #d7cfe2; --line: #d9d3e1;
+  --ink: #262233; --ink-2: #6c6677; --ink-3: #a29bac; --accent: #262233; --accent-hover: #3d3552;
+  --accent-soft: rgba(38, 34, 51, 0.08); --paper: #fbf9fc;
+}
+:root[data-palette="rosa"] {
+  --canvas: #f5ece9; --surface: #faf4f2; --fill: #ede0dd; --fill-strong: #e2d0cc; --line: #e1d3cf;
+  --ink: #2e1b20; --ink-2: #76615f; --ink-3: #ad9a97; --accent: #4a2029; --accent-hover: #63303b;
+  --accent-soft: rgba(74, 32, 41, 0.08); --paper: #fcf8f6;
+}
+:root[data-palette="sage"] {
+  --canvas: #eef0e9; --surface: #f5f6f1; --fill: #e0e5da; --fill-strong: #d1d9ca; --line: #d5dbcd;
+  --ink: #1f2a23; --ink-2: #636b60; --ink-3: #99a094; --accent: #23302a; --accent-hover: #37473d;
+  --accent-soft: rgba(35, 48, 42, 0.08); --paper: #f9faf6;
+}
+:root[data-palette="azul"] {
+  --canvas: #edf1f3; --surface: #f5f7f9; --fill: #dfe6eb; --fill-strong: #cfd9e0; --line: #d3dce2;
+  --ink: #172a35; --ink-2: #5d6b74; --ink-3: #95a2ab; --accent: #173746; --accent-hover: #245064;
+  --accent-soft: rgba(23, 55, 70, 0.08); --paper: #f9fbfc;
+}
+:root[data-palette="butter"] {
+  --canvas: #f5f0e0; --surface: #faf6ea; --fill: #ece5cd; --fill-strong: #e1d8b9; --line: #e2dac2;
+  --ink: #1f1d16; --ink-2: #6f6a57; --ink-3: #a7a08a; --accent: #1f1d16; --accent-hover: #3a372b;
+  --accent-soft: rgba(31, 29, 22, 0.08); --paper: #fcf9ef;
+}
+:root.dark[data-palette="lavanda"] {
+  --canvas: #17151b; --surface: #1f1c24; --fill: #2a2631; --fill-strong: #37323f; --line: #332f3a;
+  --ink: #efeaf5; --ink-2: #b2abbd; --ink-3: #7f7889; --accent: #efeaf5; --accent-hover: #ffffff; --paper: #1d1a22;
+}
+:root.dark[data-palette="rosa"] {
+  --canvas: #1a1516; --surface: #231d1e; --fill: #2e2627; --fill-strong: #3b3132; --line: #362d2e;
+  --ink: #f5ebea; --ink-2: #bba9a7; --ink-3: #857573; --accent: #f5ebea; --accent-hover: #ffffff; --paper: #211b1c;
+}
+:root.dark[data-palette="sage"] {
+  --canvas: #151814; --surface: #1d211c; --fill: #272c25; --fill-strong: #333a31; --line: #2f352d;
+  --ink: #eef1ea; --ink-2: #aab1a4; --ink-3: #767d71; --accent: #eef1ea; --accent-hover: #ffffff; --paper: #1b1f1a;
+}
+:root.dark[data-palette="azul"] {
+  --canvas: #13171a; --surface: #1b2024; --fill: #252b30; --fill-strong: #31383e; --line: #2c3338;
+  --ink: #ebf0f3; --ink-2: #a6b1b8; --ink-3: #717c84; --accent: #ebf0f3; --accent-hover: #ffffff; --paper: #191e22;
+}
+:root.dark[data-palette="butter"] {
+  --canvas: #181612; --surface: #211f19; --fill: #2b2821; --fill-strong: #38342b; --line: #34302a;
+  --ink: #f4efdf; --ink-2: #b9b29d; --ink-3: #847d6a; --accent: #f4efdf; --accent-hover: #ffffff; --paper: #1f1d17;
+}
+
 @theme inline {
   --font-hand: "Patrick Hand", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
   --font-display: "Tinos", "Liberation Serif", "Times New Roman", Times, serif;
@@ -129,6 +179,14 @@ input[type="date"].field, input[type="time"].field { min-height: 42px; }
 .animate-sheet { animation: rp-sheet 280ms var(--ease-apple) both; }
 /* Configuração do planner: uma pergunta sai, a próxima entra no mesmo lugar */
 @keyframes rp-step-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-6px); } }
+/* Aviso no rodapé: sobe um pouco e aparece */
+@keyframes rp-toast { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.animate-toast { animation: rp-toast 220ms var(--ease-apple) both; }
+/* Semana/dia novo entrando pelo lado do gesto */
+@keyframes rp-page-next { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes rp-page-prev { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.rp-page-next { animation: rp-page-next 240ms var(--ease-apple) both; }
+.rp-page-prev { animation: rp-page-prev 240ms var(--ease-apple) both; }
 .rp-step-in { animation: rp-fade 260ms var(--ease-apple) both; }
 .rp-step-out { animation: rp-step-out 220ms var(--ease-apple) both; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {

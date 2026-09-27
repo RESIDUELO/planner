@@ -6,12 +6,15 @@ import { errorMessage } from '../lib/api';
 import { shortDate, todayBR } from '../lib/format';
 import { PRIORITY, splitTime, useTaskActions, type AgendaTask, type TaskKind, type TaskPatch } from '../lib/agenda';
 import { Button, CheckSquare, Field, Note, Segmented, Sheet, SquareButton } from './ui';
+import { ActionMenu, DayChoices, finePointer, SwipeRow, type Anchor } from './Gestures';
+import { toast } from '../lib/toast';
 
 /** Uma linha da agenda: quadradinho (tarefa) ou sininho (lembrete). */
 export function AgendaRow({ task, onOpen, checklist, inPlanner, className }: {
   task: AgendaTask; onOpen: (t: AgendaTask) => void; checklist?: boolean; inPlanner?: boolean; className?: string;
 }) {
-  const { toggle, patch } = useTaskActions();
+  const { toggle, patch, create, remove } = useTaskActions();
+  const [menu, setMenu] = useState<{ anchor: Anchor; mode: 'actions' | 'move' } | null>(null);
   const today = todayBR();
   const reminder = task.kind === 'reminder';
   const late = !task.done && task.kind === 'general' && !!task.date && task.date < today;
@@ -24,14 +27,29 @@ export function AgendaRow({ task, onOpen, checklist, inPlanner, className }: {
     task.showInPlanner && !inPlanner && task.date && <span key="pl" className="inline-flex items-center gap-1" title="Aparece no Planner"><CalendarCheck2 className="h-3 w-3" strokeWidth={1.75} />planner</span>,
   ].filter(Boolean);
   const setItem = (i: number, done: boolean) => patch.mutate({ id: task.id, patch: { checklist: task.checklist.map((c, j) => (j === i ? { ...c, done } : c)) } });
+  // Mesmo padrão dos assuntos: direita conclui, esquerda exclui; as duas com Desfazer
+  const complete = (done: boolean) => {
+    toggle(task, done);
+    if (done) toast(`✓ ${task.title} concluída`, { action: { label: 'Desfazer', onClick: () => toggle(task, false) } });
+  };
+  const del = () => {
+    const { id: _id, doneAt: _d, createdAt: _c, ...copy } = task;
+    remove.mutate(task.id, { onError: (e) => toast(errorMessage(e), { tone: 'negative' }) });
+    toast(reminder ? 'Lembrete excluído' : 'Tarefa excluída', { action: { label: 'Desfazer', onClick: () => create.mutate(copy) } });
+  };
+  const gestures = {
+    onMenu: (anchor: Anchor) => setMenu({ anchor, mode: 'actions' }),
+    right: reminder || task.done ? undefined : { label: 'Concluir', run: () => complete(true) },
+    left: { label: 'Excluir', run: del },
+  };
 
   return (
-    <li className={clsx('border-b border-line/70 py-3 last:border-0', className)} data-testid="agenda-task">
+    <SwipeRow gestures={gestures} testId="agenda-task" className={clsx('border-b border-line/70 last:border-0', className)} rowClassName="py-3">
       <div className="flex items-start gap-3.5">
         {reminder
           ? <span className="flex w-[19px] shrink-0 justify-center pt-[3px] text-ink-3"><Bell className="h-4 w-4" strokeWidth={1.5} /></span>
-          : <span className="pt-[3px]"><SquareButton on={task.done} onChange={(v) => toggle(task, v)} label={`Concluir ${task.title}`} /></span>}
-        <button onClick={() => onOpen(task)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
+          : <span className="pt-[3px]"><SquareButton on={task.done} onChange={(v) => (v ? complete(true) : toggle(task, false))} label={`Concluir ${task.title}`} /></span>}
+        <button onClick={() => onOpen(task)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70 active:opacity-50">
           <span className={clsx('block text-[16px] leading-snug', task.done && 'text-ink-3 line-through decoration-1')}>
             {reminder && task.time && <span className="tabular mr-2 text-ink-2">{task.time}</span>}
             <span data-testid="agenda-title">{task.title}</span>
@@ -50,7 +68,24 @@ export function AgendaRow({ task, onOpen, checklist, inPlanner, className }: {
           ))}
         </ul>
       )}
-    </li>
+      {menu && (
+        <ActionMenu title={menu.mode === 'move' ? `Mover ${task.title}` : task.title} anchor={menu.anchor} onClose={() => setMenu(null)}
+          subtitle={task.date ? shortDate(task.date, false) : undefined}
+          items={[
+            { label: task.done ? 'Desmarcar' : 'Concluir', onClick: () => complete(!task.done), hidden: reminder },
+            { label: 'Mover para outro dia', onClick: () => setMenu({ ...menu, mode: 'move' }), hidden: task.done || task.kind === 'general' },
+            { label: 'Editar', onClick: () => onOpen(task) },
+            { label: 'Excluir', onClick: del, destructive: true, hint: 'dá para desfazer' },
+          ]}>
+          {menu.mode === 'move' ? <DayChoices current={task.date} sheet={!finePointer() || !menu.anchor} onPick={(d) => {
+            setMenu(null);
+            const from = task.date;
+            patch.mutate({ id: task.id, patch: { date: d } });
+            toast(`${task.title} movida para ${shortDate(d, false)}`, from ? { action: { label: 'Desfazer', onClick: () => patch.mutate({ id: task.id, patch: { date: from } }) } } : {});
+          }} /> : undefined}
+        </ActionMenu>
+      )}
+    </SwipeRow>
   );
 }
 

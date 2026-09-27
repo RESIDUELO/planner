@@ -14,6 +14,8 @@ import { int, pct, shortDate, todayBR } from '../lib/format';
 import { dragProps, type DnD } from '../pages/Planner';
 import { PerformancePage } from '../pages/Performance';
 import { Sheet } from './ui';
+import { SwipeRow } from './Gestures';
+import { useSubjectActions } from './SubjectActions';
 
 function AreaHead({ title, trailing }: { title: string; trailing?: React.ReactNode }) {
   return (
@@ -31,6 +33,7 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
   const [show, setShow] = useState<'todo' | 'all'>('todo');
   const [limit, setLimit] = useState(8);
   const today = todayBR();
+  const actions = useSubjectActions();
   const visible = data.subjects.filter((s: any) => !s.hidden);
   const list = useMemo(() => visible
     .filter((s: any) => (show === 'all' || s.status !== 'studied') && (!q || s.name.toLowerCase().includes(q.toLowerCase())))
@@ -56,14 +59,15 @@ export function SubjectLibrary({ data, dnd, onOpen, onAll, fit }: { data: any; d
           const dp = s.status === 'studied' ? undefined : dragProps(dnd, { type: 'library', subjectId: s.subjectId, from: '', name: s.name });
           const date = s.nextScheduledDate as string | null;
           return (
-            <li key={s.subjectId} {...dp?.li} data-testid="library-item"
-              className={clsx('group flex items-center gap-3 border-b border-line/60 py-2.5 last:border-0', dp?.className)}>
+            <SwipeRow key={s.subjectId} rest={dp?.li} testId="library-item"
+              gestures={actions?.gestures({ kind: 'library', subjectId: s.subjectId, name: s.name, area: s.area, from: date, done: s.status === 'studied' }) ?? {}}
+              className={clsx('border-b border-line/60 last:border-0', dp?.className)} rowClassName="group flex items-center gap-3 py-2.5">
               <span className={`h-2 w-2 shrink-0 rounded-full dot-${tintFor(s.area)}`} aria-hidden />
-              <button onClick={() => onOpen(s.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70">
+              <button onClick={() => onOpen(s.subjectId)} className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70 active:opacity-50">
                 <span className={clsx('block truncate text-[15px] leading-snug', s.status === 'studied' && 'text-ink-3 line-through decoration-1')}>{s.name}</span>
                 <span className="block truncate text-[11px] text-ink-3">{areaShort(s.area)} · {s.own ? 'seu assunto' : pct(s.percentage)}{date ? ` · ${date < today ? 'atrasado' : shortDate(date, false)}` : ' · sem dia'}</span>
               </button>
-            </li>
+            </SwipeRow>
           );
         })}
         {!list.length && <li className="py-3 text-[14px] text-ink-3">{data.subjects.length ? 'Nada por aqui.' : 'Use “+ adicionar assunto” em qualquer dia para montar seu planner.'}</li>}

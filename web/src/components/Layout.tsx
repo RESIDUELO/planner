@@ -8,6 +8,7 @@ import { clock, usePomodoro } from '../lib/pomodoro';
 import { FocusOverlay } from '../pages/Focus';
 import { LogoMark } from './Logo';
 import { Menu } from './ui';
+import { Toaster } from '../lib/toast';
 
 // Só no app Android: mantém o widget da tela inicial em dia
 const WidgetSync = IS_LOCAL ? lazy(() => import('../local/widget').then((m) => ({ default: m.WidgetSync }))) : null;
@@ -174,6 +175,7 @@ export function Layout() {
         </main>
       </div>
       <FocusOverlay />
+      <Toaster />
       {WidgetSync && <Suspense fallback={null}><WidgetSync /></Suspense>}
     </div>
   );

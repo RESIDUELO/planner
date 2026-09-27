@@ -14,6 +14,7 @@ import { useWide } from '../lib/zoom';
 import { longDate, weekdayLong, type AgendaRange, type AgendaTask } from '../lib/agenda';
 import { AddLine, AgendaRow, TaskEditor, useQuickAdd } from '../components/Agenda';
 import { Eyebrow, Note, Spinner } from '../components/ui';
+import { usePageSwipe } from '../components/Gestures';
 import { Marks, MonthCalendar, monthEnd, monthStart, type Mark } from '../components/MonthCalendar';
 import { addDays, weekday } from '../../../shared/dates';
 import type { StepType } from '../../../shared/residency';
@@ -39,6 +40,8 @@ export function AgendaPage() {
   const [open, setOpen] = useState<AgendaTask | null>(null);
   const desktop = useWide();
   const quickAdd = useQuickAdd();
+  // Dia anterior/seguinte também deslizando, pelo trackpad e com ← →
+  const swipe = usePageSwipe((dir) => setDay(addDays(day, dir)));
 
   // Uma consulta cobre o mês do calendário e a semana do dia escolhido
   const mon = mondayOf(day);
@@ -86,14 +89,14 @@ export function AgendaPage() {
   if (q.error && !q.data) return <AgendaError error={q.error} />;
   return (
     <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-var(--chrome-h))] fit:grid-cols-[minmax(0,1fr)_320px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
-      <section aria-label="Dia" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
+      <section ref={swipe.ref} aria-label="Dia" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
         <div className="fit:shrink-0">
           <Eyebrow>Agenda · {weekdayLong(day)}{day === today ? ' · hoje' : ''}</Eyebrow>
           <div className="mt-3 mb-8 flex items-center justify-between gap-3">
             <button onClick={() => setDay(addDays(day, -1))} aria-label="Dia anterior" className="flex items-center gap-1.5 rounded-full py-1.5 pr-2 text-[13px] text-ink-2 transition hover:text-ink">
               <ChevronLeft className="h-5 w-5" strokeWidth={1.5} /><span className="hidden sm:inline">dia anterior</span>
             </button>
-            <div className="text-center">
+            <div key={swipe.content.key} className={clsx('text-center', swipe.content.className)} style={swipe.content.style}>
               <h1 className="font-display text-[40px] leading-none sm:text-[52px]">{longDate(day)}</h1>
               {day !== today && <button onClick={() => setDay(today)} className="mt-2 text-[12px] text-ink-2 underline underline-offset-4 hover:text-ink">voltar para hoje</button>}
             </div>

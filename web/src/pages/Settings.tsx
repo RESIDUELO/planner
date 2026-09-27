@@ -7,6 +7,7 @@ import { IS_LOCAL } from '../lib/platform';
 import { getTheme, setTheme, type ThemePref } from '../lib/theme';
 import { Button, Disclosure, Note, Segmented, Sheet, Title } from '../components/ui';
 import { REVIEW_OPTIONS } from './Planner';
+import { PalettePicker } from '../components/Customize';
 
 const WD = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
@@ -110,6 +111,11 @@ export function SettingsPage() {
             <span className="text-[17px]">Tema</span>
             <Segmented value={theme} onChange={(v) => { setThemeState(v); setTheme(v); }}
               options={[{ value: 'system', label: 'Automático' }, { value: 'light', label: 'Claro' }, { value: 'dark', label: 'Escuro' }]} />
+          </div>
+          <div className="py-4">
+            <span className="text-[17px]">Design</span>
+            <p className="mb-3 text-[13px] text-ink-3">Só as cores mudam. O que aparece no Planner: menu “…” → Personalizar.</p>
+            <PalettePicker />
           </div>
         </Group>
 
