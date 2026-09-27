@@ -534,6 +534,21 @@ describe('SUS-SP (planilha questão a questão, troca de banca em 2026)', () => 
   });
 });
 
+describe('Avisos do Security Advisor', () => {
+  it('admin_users não roda sem login e as funções auxiliares têm search_path fixo', async () => {
+    const r = await dbQuery(`select has_function_privilege('anon', 'public.admin_users()', 'execute') as anon,
+      has_function_privilege('authenticated', 'public.admin_users()', 'execute') as auth`);
+    expect(r.rows[0]).toEqual({ anon: false, auth: true });
+    const f = await dbQuery(`select p.proname, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname in ('is_privileged_session', 'touch_updated_at', 'require_admin') order by 1`);
+    expect(f.rows.map((x: any) => [x.proname, x.proconfig])).toEqual([
+      ['is_privileged_session', ['search_path=public, pg_temp']],
+      ['require_admin', ['search_path=public, pg_temp']],
+      ['touch_updated_at', ['search_path=public, pg_temp']],
+    ]);
+  });
+});
+
 describe('Desfazer questões e zerar o perfil', () => {
   it('registro de questões errado pode ser desfeito', async () => {
     const g = new Client();
