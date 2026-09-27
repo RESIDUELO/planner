@@ -120,6 +120,8 @@ Provas já preparadas: **FAMERP** R1 (480 questões, 2021–2026), **HU-UEL** R1
 
 Cada instituição nomeia os assuntos de um jeito ("Saúde do Trabalhador" × "Saúde do trabalhador (CAT, NR, …)"). Os que são o mesmo tema ficam listados em `data/subject_merges.json` (decididos pelo administrador): ao gerar o SQL, as questões dessas provas passam para um assunto só, que conta para as duas. Os arquivos de `data/import/` continuam como os relatórios, e rodar o SQL de novo tira do banco a classificação antiga.
 
+**Troca de banca.** Em `data/exams.json`, `boards` diz a banca de cada ano (ex.: SUS-SP: VUNESP em 2026 e 2027). Quando a banca da próxima prova é a de só parte das provas anteriores, as provas da banca atual pesam 1 e as da banca anterior pesam `PRIORITY.previousBoardWeight` (0,25). Os assuntos vêm por nível: 1 núcleo confirmado (caiu na banca atual e em ao menos 60% das provas antigas), 2 assinatura da banca atual, 3 núcleo da banca antiga (80% das provas antigas, nada na atual), 4 o resto. Dentro de cada nível manda a quantidade ponderada. Precisa de `supabase/parts/16_edition_boards.sql` no banco.
+
 ## Testes
 
 ```bash

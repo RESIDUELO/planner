@@ -494,6 +494,46 @@ describe('Santa Casa Araçatuba (anexo questão a questão, sem gabarito)', () =
   });
 });
 
+describe('SUS-SP (planilha questão a questão, troca de banca em 2026)', () => {
+  it('entra com 600 questões, 21 anuladas e a VUNESP pesando mais', async () => {
+    await runDataFile('sus_sp_r1');
+    await runDataFile('sus_sp_r1');
+    const r = await dbQuery(`select count(distinct q.id)::int as n, count(distinct qs.question_id)::int as c,
+      count(distinct q.id) filter (where q.annulled)::int as a from questions q
+      join exam_editions ed on ed.id = q.exam_edition_id join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
+      left join question_subjects qs on qs.question_id = q.id where i.abbreviation = 'SUS-SP'`);
+    expect(r.rows[0]).toEqual({ n: 600, c: 600, a: 21 });
+    const list = await student.ok('GET', '/api/exams');
+    const sus = list.find((e: any) => e.institution === 'SUS-SP');
+    const h = await student.ok('GET', `/api/exams/${sus.exam_id}/history`);
+    expect(h.editionsAnalyzed).toBe(6);
+    expect(h.boardChange).toEqual({ board: 'VUNESP', currentYears: [2026], previousYears: [2021, 2022, 2023, 2024, 2025] });
+    const at = (name: string) => h.subjects.find((x: any) => x.name === name);
+    expect(at('Hemorragia digestiva')).toMatchObject({ tier: 2, questions: 7, board: { currentQuestions: 4, currentEditions: 1, previousEditions: 2 } });
+    // UTI (3 questões só em 2026) vem antes de SCA (4 provas antigas, nenhuma em 2026) e do mecanismo de parto (8 em 2025)
+    expect(at('Terapia intensiva').rank).toBeLessThan(at('Cardiologia - SCA').rank);
+    expect(at('Cardiologia - SCA').rank).toBeLessThan(at('Obstetrícia - mecanismo de parto').rank);
+    expect(h.subjects.map((x: any) => x.tier)).toEqual([...h.subjects.map((x: any) => x.tier)].sort());
+
+    // No planner: a explicação do assunto conta a troca de banca
+    const g = new Client();
+    g.today = '2026-09-27';
+    await g.ok('POST', '/api/auth/guest');
+    const st = await g.ok('GET', '/api/me/study-settings');
+    await g.ok('PUT', '/api/me/study-settings', {
+      profile: { ...st.profile, preferred_start_time: null, preferred_end_time: null },
+      methods: st.methods.map((m: any) => ({ id: m.id, enabled: ['video', 'flashcards'].includes(m.code), minutes: m.estimated_minutes })),
+    });
+    await g.ok('PUT', `/api/me/editions/${sus.edition_id}`, { selected: true, isPrimary: true, examDate: '2026-12-13', keepPlanner: true });
+    await g.ok('POST', '/api/planner/generate', { editionIds: [sus.edition_id], primaryEditionId: sus.edition_id, startDate: '2026-09-27' });
+    const p = await g.ok('GET', '/api/planner');
+    const hda = p.subjects.find((x: any) => x.name === 'Hemorragia digestiva');
+    const d = await g.ok('GET', `/api/planner/subjects/${hda.subjectId}`);
+    expect(d.explanation).toContain('trocou de banca (VUNESP desde 2026)');
+    expect(d.explanation).toContain('caiu 4 vezes na prova de 2026');
+  });
+});
+
 describe('Desfazer questões e zerar o perfil', () => {
   it('registro de questões errado pode ser desfeito', async () => {
     const g = new Client();

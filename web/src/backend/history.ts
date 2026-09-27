@@ -18,7 +18,7 @@ export async function loadExamHistories(ctx: Ctx, examIds: string[], includeDraf
     const eds = data.editions.filter((e) => e.exam_id === examId);
     const ls = data.links.filter((l) => l[2] === examId);
     const stats = computeExamStats(
-      eds.map((e) => ({ id: e.id, year: e.year, questionCount: e.question_count })),
+      eds.map((e) => ({ id: e.id, year: e.year, questionCount: e.question_count, board: e.board ?? null })),
       ls.map((l) => ({ questionId: l[0], editionId: l[1], subjectId: l[3], weight: Number(l[4]) })),
     );
     out.set(examId, {

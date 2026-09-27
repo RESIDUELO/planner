@@ -1,5 +1,5 @@
 {
-  "_comment": "Provas cadastradas (somente por aqui, pelo administrador). Cada entrada vira supabase/data/<id>.sql (npm run data:sql). upcoming.exam_date = data oficial (fixa); sem ela, cada aluno informa a data no site. Inscrição e valor são sempre do aluno.",
+  "_comment": "Provas cadastradas (somente por aqui, pelo administrador). Cada entrada vira supabase/data/<id>.sql (npm run data:sql). upcoming.exam_date = data oficial (fixa); sem ela, cada aluno informa a data no site. Inscrição e valor são sempre do aluno. boards = banca por ano: quando a banca da próxima prova é a de só parte dos anos, esses anos pesam mais.",
   "exams": [
     {
       "id": "famerp_r1",
@@ -113,6 +113,32 @@
       "upcoming": {
         "year": 2027,
         "notes": "Próxima prova. Data oficial ainda não divulgada: cada aluno informa a data."
+      }
+    },
+    {
+      "id": "sus_sp_r1",
+      "institution": {
+        "abbreviation": "SUS-SP",
+        "name": "Processo Seletivo Unificado SUS-SP (Secretaria de Estado da Saúde de São Paulo)",
+        "state": "SP",
+        "city": "São Paulo"
+      },
+      "exam": {
+        "name": "R1 Acesso Direto",
+        "total_questions": 100
+      },
+      "file": "sus_sp_r1_2021-2026.json",
+      "source": {
+        "name": "Relatório \"Análise das provas R1 da SUS-SP (2021-2026)\" e planilha de classificação questão a questão; reponderação para 2027 (\"SUS-SP R1 - análise reponderada para 2027 (banca VUNESP)\")",
+        "checked_at": "2026-09-27"
+      },
+      "boards": {
+        "2026": "VUNESP",
+        "2027": "VUNESP"
+      },
+      "upcoming": {
+        "year": 2027,
+        "notes": "Próxima prova. Banca VUNESP (a mesma de 2026; 2021-2025 foram de outra banca). Data oficial ainda não divulgada: cada aluno informa a data."
       }
     }
   ]

@@ -1,5 +1,5 @@
 /**
- * priority_v3 - ranking e prioridade dos assuntos.
+ * priority_v4 - ranking e prioridade dos assuntos.
  *
  * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE - em quantas
  *    provas o assunto caiu, contando a partir da primeira em que apareceu (um
@@ -8,6 +8,9 @@
  *    últimas provas) -, depois a QUANTIDADE de questões nesse mesmo período e,
  *    por fim, a recência. Com várias provas, os rankings de cada uma são
  *    intercalados na proporção do peso (principal e mais próxima pesam mais).
+ *    Prova que trocou de banca: as provas da banca atual pesam mais e os
+ *    assuntos vêm por nível (núcleo confirmado → assinatura da banca nova →
+ *    núcleo antigo → resto); ver shared/stats.ts.
  *
  * 2) Score dinâmico (0–100), usado para "O que estudar hoje" e para a
  *    explicação de cada assunto:
@@ -56,6 +59,8 @@ export interface PerExamSubject {
   rank: number | null;
   level: PriorityLevel | null;
   byYear: { year: number; questions: number }[];
+  /** Prova que trocou de banca: nível do assunto e presença em cada banca. */
+  board?: { name: string; tier: number; currentQuestions: number; currentEditions: number; previousEditions: number; currentYears: number[]; previousYears: number[] };
 }
 
 export interface RankedSubject {
@@ -77,6 +82,8 @@ export interface RankedSubject {
   proximity: number;
   /** Questões esperadas somando as provas selecionadas (ponderado por prova). */
   estimatedQuestions: number;
+  /** Nível pela troca de banca (0 = sem troca de banca). */
+  tier: number;
   perExam: PerExamSubject[];
 }
 
@@ -168,6 +175,7 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
     let percentage = 0, presence = 0, regularity = 0, active = 0, recent = 0, estimated = 0, proximity = 0;
     let questions = 0, weighted = 0, present = 0, analyzed = 0, annual = 0;
     let lastYear: number | null = null;
+    let tier: number | null = null;
     const perExam: PerExamSubject[] = [];
     for (const e of exams) {
       const w = wById.get(e.editionId)!;
@@ -186,6 +194,9 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
         rank,
         level: rank ? levelForRank(rank, nSubjects) : null,
         byYear: s?.byYear ?? e.stats.years.map((year) => ({ year, questions: 0 })),
+        ...(s?.board && e.stats.boardChange
+          ? { board: { name: e.stats.boardChange.board, tier: s.tier, ...s.board, currentYears: e.stats.boardChange.currentYears, previousYears: e.stats.boardChange.previousYears } }
+          : {}),
       });
       if (!s) continue;
       percentage += w.weight * s.percentage;
@@ -199,6 +210,7 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
       analyzed += s.editionsAnalyzed;
       annual += w.weight * s.annualAverage;
       if (w.weight > 0) {
+        tier = Math.min(tier ?? Infinity, s.tier ?? 0);
         estimated += est;
         proximity = Math.max(proximity, w.proximity);
       }
@@ -207,7 +219,7 @@ export function rankSubjects(exams: ExamInput[], today: ISODate): { weights: Exa
     return {
       subjectId, percentage, presenceRate: presence, regularity, activePercentage: active, recentPercentage: recent, questions, weighted,
       editionsPresent: present, editionsAnalyzed: analyzed, annualAverage: annual, lastYear,
-      estimatedQuestions: estimated, proximity, perExam,
+      estimatedQuestions: estimated, proximity, tier: tier ?? 0, perExam,
     };
   });
 

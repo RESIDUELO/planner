@@ -119,6 +119,13 @@ values (${examRef}, ${u.year}, 'published', now(), ${lit(u.notes)}, ${u.exam_dat
 on conflict (exam_id, year) do update set notes = excluded.notes, exam_date = excluded.exam_date;
 `);
 
+  // Banca por edição (troca de banca: a análise pesa mais as provas da banca atual)
+  if (entry.boards) out.push(`-- Banca de cada edição (precisa de supabase/parts/16_edition_boards.sql)
+update public.exam_editions ed set board = v.board
+from (values ${Object.entries(entry.boards).map(([y, b]) => `(${Number(y)}, ${lit(b)})`).join(', ')}) as v(year, board)
+where ed.exam_id = ${examRef} and ed.year = v.year;
+`);
+
   // Questões
   const qsrc = doc.source ?? src.name;
   if (qs.some((q) => !q.annulled && !q.correct_answer)) out.push(`-- O relatório não traz o gabarito questão a questão: a resposta pode ficar em branco

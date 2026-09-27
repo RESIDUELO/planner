@@ -50,7 +50,7 @@ test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async
   await expect(page.getByText('Qual prova você vai fazer?')).toBeVisible();
   await expect(page.getByText('Receba seu planner')).toHaveCount(0);
   await page.goto('provas');
-  await expect(page.locator('article')).toHaveCount(5);
+  await expect(page.locator('article')).toHaveCount(6);
   for (const i of ['FAMERP', 'FAMEMA', 'HU-UEL', 'UNOESTE/HRPP', 'Santa Casa Araçatuba']) await expect(page.getByTestId(`exam-${i}`)).toBeVisible();
   await page.getByTestId('exam-FAMERP').locator('button').first().click();
   await expect(page.getByTestId('exam-FAMERP')).toContainText('Análise baseada em 6 edições cadastradas.');
@@ -213,7 +213,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(page).toHaveURL(HOME);
   await expect(page.getByText('Você está no modo visitante')).toBeVisible();
   await page.goto('provas');
-  await expect(page.locator('article')).toHaveCount(5);
+  await expect(page.locator('article')).toHaveCount(6);
   // A escolha da outra aluna não aparece para o visitante
   await expect(page.getByText('Você ainda não escolheu uma prova.')).toBeVisible();
   await expect(page.getByTestId('exam-FAMERP')).toContainText('Adicionar');

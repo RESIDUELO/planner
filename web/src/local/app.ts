@@ -12,6 +12,8 @@ import ownSubjectsSql from '../../../supabase/parts/14_own_subjects.sql?raw';
 import residenciesSql from '../../../supabase/parts/15_residencies.sql?raw';
 import santaCasaSql from '../../../supabase/data/santa_casa_aracatuba_r1.sql?raw';
 import unoesteSql from '../../../supabase/data/unoeste_r1.sql?raw';
+import boardsSql from '../../../supabase/parts/16_edition_boards.sql?raw';
+import susSpSql from '../../../supabase/data/sus_sp_r1.sql?raw';
 // Fontes dentro do app (sem internet não há Google Fonts)
 import '@fontsource/tinos/latin-400.css';
 import '@fontsource/tinos/latin-400-italic.css';
@@ -23,10 +25,12 @@ import '@fontsource/patrick-hand/latin-400.css';
 const DATA_DIR = 'idb://residencia-planner';
 const READY_KEY = 'rp-local-db';
 /** Versão do schema local; quem instalou uma versão anterior recebe as migrações que faltam. */
-export const LOCAL_DB_VERSION = '6';
+export const LOCAL_DB_VERSION = '7';
 const MIGRATIONS: Record<string, string> = { '2': agendaSql, '3': ownSubjectsSql, '4': residenciesSql, '5': santaCasaSql,
   // Assuntos juntados entre UNOESTE e Santa Casa (data/subject_merges.json)
-  '6': `${unoesteSql}\n${santaCasaSql}` };
+  '6': `${unoesteSql}\n${santaCasaSql}`,
+  // SUS-SP, com a banca de cada ano (troca para a VUNESP em 2026)
+  '7': `${boardsSql}\n${susSpSql}` };
 
 /** Cliente local e `flush` (grava no disco o que mudou; o app chama uma vez ao fim de cada ação). */
 export async function initLocal(): Promise<{ client: SupabaseClient; flush: () => Promise<void> }> {

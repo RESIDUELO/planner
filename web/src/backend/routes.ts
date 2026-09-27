@@ -320,7 +320,8 @@ route('GET', '/api/planner/subjects/:id', async ({ ctx, params }) => {
   const explanation = subj.own ? 'Assunto criado por você: não vem da análise das provas e não muda a base de assuntos de ninguém.' : tpl ? templateExplanation(subj, tpl, primary?.institution)
     : extras.length ? `${subj.name} vem ${extras.length === 1 ? `da prova ${extras[0]}` : `das provas ${extras.join(', ')}`} e entra depois do seu cronograma: está em #${subj.rank - (planTpl.offset ?? 0)} entre os assuntos ${extras.length === 1 ? 'dela' : 'delas'} porque representou ${pct}% das questões ${extras.length === 1 ? `das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'}` : 'em média ponderada'}.`
     : s.exams.length === 1
-    ? `${subj.name} está em #${subj.rank} porque representou ${pct}% das questões das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'} de ${primary?.institution ?? 'sua prova'}.`
+    ? subj.perExam?.[0]?.board ? `${subj.name} está em #${subj.rank}. ${boardText(subj.perExam[0].board, primary?.institution ?? 'a prova')}`
+      : `${subj.name} está em #${subj.rank} porque representou ${pct}% das questões das ${n} ${n === 1 ? 'edição cadastrada' : 'edições cadastradas'} de ${primary?.institution ?? 'sua prova'}.`
     : `${subj.name} está em #${subj.rank}: com várias provas, os assuntos de cada uma se intercalam na proporção do peso (maior para a prova principal e para as mais próximas). ${inExams(subj, s.exams)}`;
   const areaId = subj.own ? (await loadSubjectsInfo(ctx, [id])).get(id)?.area_id ?? null : null;
   return {
@@ -415,9 +416,26 @@ route('POST', '/api/planner/generate-template', async ({ ctx, body }) => {
 function inExams(subj: any, exams: any[]) {
   const parts = (subj.perExam ?? []).filter((p: any) => p.rank).map((p: any) => {
     const inst = exams.find((e: any) => e.exam_edition_id === p.editionId)?.institution ?? 'prova';
-    return `o #${p.rank} da ${inst} (${(p.percentage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das questões)`;
+    return `o #${p.rank} da ${inst} (${(p.percentage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das questões${p.board ? ', contando mais a banca atual' : ''})`;
   });
-  return parts.length ? `É ${parts.join(' e ')}.` : '';
+  const board = (subj.perExam ?? []).find((p: any) => p.board);
+  const inst = board && exams.find((e: any) => e.exam_edition_id === board.editionId)?.institution;
+  return (parts.length ? `É ${parts.join(' e ')}.` : '') + (board ? ` ${boardText(board.board, inst ?? 'a prova')}` : '');
+}
+
+const TIER_TEXT: Record<number, string> = {
+  1: 'Núcleo confirmado: a banca atual cobrou e a anterior também cobrava com frequência.',
+  2: 'Assinatura da banca atual: ela cobrou e a anterior pouco cobrava. Vale estudar o tema e os vizinhos dele.',
+  3: 'Tema forte da banca anterior que a banca atual ainda não cobrou: revisão sólida, depois dos temas da banca atual.',
+  4: 'Pouca evidência: a banca atual não cobrou e a anterior cobrou pouco. Revisão mínima.',
+};
+
+/** Prova que trocou de banca: por que o assunto está nesse nível. */
+function boardText(b: any, inst: string) {
+  const yrs = (ys: number[]) => (ys.length === 1 ? String(ys[0]) : `${ys[0]}-${ys[ys.length - 1]}`);
+  const cur = b.currentQuestions ? `caiu ${b.currentQuestions} ${b.currentQuestions === 1 ? 'vez' : 'vezes'} na prova de ${yrs(b.currentYears)}` : `não caiu na prova de ${yrs(b.currentYears)}`;
+  const prev = `${b.previousEditions} de ${b.previousYears.length} provas de ${yrs(b.previousYears)}`;
+  return `A ${inst} trocou de banca (${b.name} desde ${b.currentYears[0]}): as provas da banca atual pesam mais e as antigas servem para confirmar os temas. Este assunto ${cur} e apareceu em ${prev}. ${TIER_TEXT[b.tier] ?? ''}`;
 }
 
 function templateExplanation(subj: any, t: any, inst = 'UNOESTE') {

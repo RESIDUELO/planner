@@ -7,7 +7,7 @@
  * versão os gerou.
  */
 
-export const PRIORITY_VERSION = 'priority_v3';
+export const PRIORITY_VERSION = 'priority_v4';
 export const MEMORY_VERSION = 'fsrs_v1';
 export const SCHEDULER_VERSION = 'scheduler_v2';
 
@@ -29,6 +29,8 @@ export const PRIORITY = {
   recentEditions: 2,
   /** Regularidade: conta no mínimo as últimas N edições (um tema de uma única prova recente não vira "todo ano"). */
   regularityMinSpan: 3,
+  /** Troca de banca: peso de cada prova da banca anterior (as da banca atual pesam 1). */
+  previousBoardWeight: 0.25,
   /** Peso extra da prova principal no modo multiprova. */
   primaryBoost: 2,
   /** Meia-vida (dias) do fator de proximidade da prova. */

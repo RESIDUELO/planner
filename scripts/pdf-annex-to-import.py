@@ -11,6 +11,7 @@ Uso:
   pip install pymupdf
   python3 scripts/pdf-annex-to-import.py <famerp.pdf> <uel.pdf> <unoeste.pdf>
   python3 scripts/pdf-annex-to-import.py --santa-casa-aracatuba <santa_casa.pdf>
+  python3 scripts/pdf-annex-to-import.py --sus-sp <classificacao_questoes.xlsx>   (pip install openpyxl)
 
 Hierarquia gerada: area (grande área) → specialty (especialidade, opcional) →
 subject (assunto, unidade do planner) → subsubject (subassunto, opcional).
@@ -179,10 +180,36 @@ def santa_casa_aracatuba(pdf):
     }, qs)
 
 
+def sus_sp(xlsx):
+    # Planilha que acompanha o relatório (aba "Questões"): Tema = assunto, Subtema = subassunto
+    import openpyxl
+    ws = openpyxl.load_workbook(xlsx, read_only=True, data_only=True)['Questões']
+    qs = []
+    for r in ws.iter_rows(min_row=2, values_only=True):
+        if not r[0]:
+            continue
+        year, n, gab, anul, grande, tema, subtema, cobra, tipo, dif, dir_ = r[:11]
+        ans, annulled = answer(str(gab))
+        qs.append({
+            'year': int(year), 'question_number': int(n), 'area': area(grande),
+            'specialty': None, 'subject': fix(tema.strip()), 'subsubject': fix(subtema.strip()) if subtema else None,
+            'summary': fix(cobra.strip()) if cobra else None, 'statement': None,
+            'correct_answer': ans, 'annulled': annulled or anul == 'Sim',
+            'difficulty': DIFF.get(dif), 'question_type': tipo or None,
+            'guideline': 'Depende de diretriz' if dir_ == 'Sim' else None,
+        })
+    write('sus_sp_r1_2021-2026.json', {
+        'exam_hint': {'institution': 'SUS-SP', 'exam': 'R1 Acesso Direto'},
+        'source': 'Planilha "SUS-SP R1 2021-2026 - classificação das questões" (aba Questões), que acompanha o relatório "Análise das provas R1 da SUS-SP (2021-2026)"',
+    }, qs)
+
+
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     # Uso: python3 scripts/pdf-annex-to-import.py --santa-casa-aracatuba <pdf>
     if sys.argv[1] == '--santa-casa-aracatuba':
         santa_casa_aracatuba(sys.argv[2])
+    elif sys.argv[1] == '--sus-sp':
+        sus_sp(sys.argv[2])
     else:
         famerp(sys.argv[1]); uel(sys.argv[2]); unoeste(sys.argv[3])

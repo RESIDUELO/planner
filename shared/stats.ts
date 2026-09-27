@@ -9,6 +9,15 @@
  *  - presenceRate      → editionsPresent / editionsAnalyzed
  *  - annualAverage     → questões por edição
  *  - recentPercentage  → fração nas edições mais recentes
+ *
+ * Troca de banca: quando a banca da próxima prova (edição mais recente) é a
+ * de só parte das provas anteriores, as provas da banca atual pesam 1 e as
+ * da banca anterior pesam PRIORITY.previousBoardWeight nas frações acima, e
+ * cada assunto ganha um nível (`tier`) que vem antes de tudo na ordem:
+ *   1 caiu na banca atual e em boa parte das provas antigas (núcleo confirmado)
+ *   2 caiu na banca atual (assinatura da banca nova)
+ *   3 caiu em quase todas as provas antigas, mas não na banca atual
+ *   4 o resto
  */
 import { DATA_SUFFICIENCY, PRIORITY } from './config';
 
@@ -17,6 +26,8 @@ export interface EditionInput {
   year: number;
   /** Questões cadastradas (ativas) na edição, classificadas ou não. */
   questionCount: number;
+  /** Banca da edição (null = não informada). */
+  board?: string | null;
 }
 
 export interface LinkInput {
@@ -54,6 +65,16 @@ export interface SubjectHistStats {
   recentPercentage: number;
   lastYear: number | null;
   byYear: SubjectYearCount[];
+  /** Nível pela troca de banca (1 a 4; 0 = prova sem troca de banca). */
+  tier: number;
+  /** Só com troca de banca: presença na banca atual e na anterior. */
+  board?: { currentQuestions: number; currentEditions: number; previousEditions: number };
+}
+
+export interface BoardChange {
+  board: string;
+  currentYears: number[];
+  previousYears: number[];
 }
 
 export type Sufficiency = 'none' | 'insufficient' | 'limited' | 'good';
@@ -66,6 +87,7 @@ export interface ExamHistStats {
   averageQuestionsPerEdition: number;
   sufficiency: Sufficiency;
   subjects: SubjectHistStats[];
+  boardChange: BoardChange | null;
 }
 
 export function sufficiencyOf(editions: number): Sufficiency {
@@ -108,20 +130,31 @@ export function computeExamStats(
   const totalQuestions = analyzed.reduce((s, e) => s + e.questionCount, 0);
   const recent = analyzed.slice(-recentN);
   const recentIds = new Set(recent.map((e) => e.id));
-  const recentTotal = recent.reduce((s, e) => s + e.questionCount, 0);
 
-  type Acc = { weighted: number; recent: number; qs: Set<string>; eds: Set<string>; byYear: Map<number, Set<string>> };
+  // Troca de banca: a banca da próxima prova é a da edição mais recente
+  const board = [...editions].sort((a, b) => a.year - b.year).at(-1)?.board ?? null;
+  const current = new Set(analyzed.filter((e) => board && e.board === board).map((e) => e.id));
+  const change = current.size > 0 && current.size < analyzed.length;
+  const ew = (id: string) => (!change || current.has(id) ? 1 : PRIORITY.previousBoardWeight);
+  const sumW = (eds: EditionInput[]) => eds.reduce((s, e) => s + ew(e.id) * e.questionCount, 0);
+  const weightedTotal = sumW(analyzed);
+  const recentTotal = sumW(recent);
+  const editionsWeight = analyzed.reduce((s, e) => s + ew(e.id), 0);
+  const previousN = analyzed.length - current.size;
+
+  type Acc = { weighted: number; bw: number; recent: number; qs: Set<string>; eds: Set<string>; byYear: Map<number, Set<string>> };
   const acc = new Map<string, Acc>();
   for (const l of links) {
     if (!analyzedIds.has(l.editionId)) continue;
     const w = l.weight / (weightSum.get(l.questionId) || 1);
     let a = acc.get(l.subjectId);
     if (!a) {
-      a = { weighted: 0, recent: 0, qs: new Set(), eds: new Set(), byYear: new Map() };
+      a = { weighted: 0, bw: 0, recent: 0, qs: new Set(), eds: new Set(), byYear: new Map() };
       acc.set(l.subjectId, a);
     }
     a.weighted += w;
-    if (recentIds.has(l.editionId)) a.recent += w;
+    a.bw += w * ew(l.editionId);
+    if (recentIds.has(l.editionId)) a.recent += w * ew(l.editionId);
     a.qs.add(l.questionId);
     a.eds.add(l.editionId);
     const y = yearOf.get(l.editionId)!;
@@ -134,22 +167,40 @@ export function computeExamStats(
   const subjects: SubjectHistStats[] = [...acc.entries()].map(([subjectId, a]) => {
     const years = [...a.byYear.keys()].sort();
     const firstIdx = analyzed.findIndex((e) => a.eds.has(e.id));
-    const span = Math.max(minSpan, n - firstIdx);
-    const spanTotal = analyzed.slice(n - span).reduce((s, e) => s + e.questionCount, 0);
+    // Com troca de banca a regularidade olha todas as provas, cada uma com o seu peso
+    const spanEds = change ? analyzed : analyzed.slice(n - Math.max(minSpan, n - firstIdx));
+    const spanTotal = sumW(spanEds);
+    const spanWeight = spanEds.reduce((s, e) => s + ew(e.id), 0);
+    const presentWeight = spanEds.filter((e) => a.eds.has(e.id)).reduce((s, e) => s + ew(e.id), 0);
+    const byYear = analyzed.map((e) => ({ year: e.year, questions: a.byYear.get(e.year)?.size ?? 0 }));
+    let tier = 0;
+    let boardInfo: SubjectHistStats['board'];
+    if (change) {
+      const cur = analyzed.filter((e) => current.has(e.id));
+      const currentQuestions = cur.reduce((s, e) => s + (a.byYear.get(e.year)?.size ?? 0), 0);
+      const currentEditions = cur.filter((e) => a.eds.has(e.id)).length;
+      const previousEditions = a.eds.size - currentEditions;
+      tier = currentEditions && previousEditions >= Math.max(1, Math.ceil(previousN * 0.6)) ? 1
+        : currentEditions ? 2
+        : previousEditions >= Math.max(1, Math.ceil(previousN * 0.8)) ? 3 : 4;
+      boardInfo = { currentQuestions, currentEditions, previousEditions };
+    }
     return {
       subjectId,
       questions: a.qs.size,
       weighted: round(a.weighted, 3),
-      percentage: totalQuestions ? a.weighted / totalQuestions : 0,
+      percentage: weightedTotal ? a.bw / weightedTotal : 0,
       editionsPresent: a.eds.size,
       editionsAnalyzed: n,
       presenceRate: n ? a.eds.size / n : 0,
-      regularity: span ? a.eds.size / span : 0,
-      activePercentage: spanTotal ? a.weighted / spanTotal : 0,
-      annualAverage: n ? a.weighted / n : 0,
+      regularity: spanWeight ? presentWeight / spanWeight : 0,
+      activePercentage: spanTotal ? a.bw / spanTotal : 0,
+      annualAverage: editionsWeight ? a.bw / editionsWeight : 0,
       recentPercentage: recentTotal ? a.recent / recentTotal : 0,
       lastYear: years.length ? years[years.length - 1] : null,
-      byYear: analyzed.map((e) => ({ year: e.year, questions: a.byYear.get(e.year)?.size ?? 0 })),
+      byYear,
+      tier,
+      ...(boardInfo ? { board: boardInfo } : {}),
     };
   });
   subjects.sort(compareHistorical);
@@ -163,17 +214,26 @@ export function computeExamStats(
     averageQuestionsPerEdition: n ? totalQuestions / n : 0,
     sufficiency: sufficiencyOf(n),
     subjects,
+    boardChange: change
+      ? { board: board!, currentYears: analyzed.filter((e) => current.has(e.id)).map((e) => e.year), previousYears: analyzed.filter((e) => !current.has(e.id)).map((e) => e.year) }
+      : null,
   };
 }
 
-type Comparable = { percentage: number; activePercentage: number; regularity: number; recentPercentage: number; subjectId: string };
-/** Ordem histórica: regularidade (desde a 1ª aparição) → quantidade no mesmo período → recência. */
+type Comparable = { percentage: number; activePercentage: number; regularity: number; recentPercentage: number; subjectId: string; tier?: number };
+/**
+ * Ordem histórica: regularidade (desde a 1ª aparição) → quantidade no mesmo período → recência.
+ * Com troca de banca: nível → quantidade (com as provas da banca atual pesando mais) → regularidade.
+ */
 export function compareHistorical(a: Comparable, b: Comparable): number {
-  const regular = Math.round((b.regularity - a.regularity) * 1e6);
+  // O nível já diz a presença em cada banca; dentro dele vale a quantidade
+  const regular = a.tier ? 0 : Math.round((b.regularity - a.regularity) * 1e6);
   return (
+    (a.tier ?? 0) - (b.tier ?? 0) ||
     regular ||
     b.activePercentage - a.activePercentage ||
     b.percentage - a.percentage ||
+    b.regularity - a.regularity ||
     b.recentPercentage - a.recentPercentage ||
     a.subjectId.localeCompare(b.subjectId)
   );

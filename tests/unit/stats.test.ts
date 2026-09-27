@@ -82,3 +82,38 @@ describe('computeExamStats', () => {
     expect(sufficiencyMessage(2)).toBe('Análise baseada em 2 edições cadastradas.');
   });
 });
+
+describe('troca de banca', () => {
+  // 2021-2025 banca antiga, 2026 e a próxima (2027) com a banca nova
+  const eds = [2021, 2022, 2023, 2024, 2025, 2026].map((y) => ({ id: `e${y}`, year: y, questionCount: 100, board: y === 2026 ? 'VUNESP' : null }));
+  const links = [] as { questionId: string; editionId: string; subjectId: string; weight: number }[];
+  let n = 0;
+  const add = (subject: string, perYear: number[]) => perYear.forEach((c, i) => {
+    for (let k = 0; k < c; k++) links.push({ questionId: `q${n++}`, editionId: `e${2021 + i}`, subjectId: subject, weight: 1 });
+  });
+  add('nucleo', [1, 1, 1, 0, 0, 1]);   // banca nova + 3 antigas
+  add('uti', [0, 0, 0, 0, 0, 3]);      // só a banca nova
+  add('parto', [2, 6, 5, 2, 8, 0]);    // muito na antiga, nada na nova
+  add('scA', [0, 1, 1, 1, 1, 0]);      // 4 antigas
+  add('raro', [1, 0, 0, 0, 0, 0]);
+
+  it('sem a banca da próxima prova, nada muda', () => {
+    const st = computeExamStats(eds.map((e) => ({ ...e, board: null })), links);
+    expect(st.boardChange).toBeNull();
+    expect(st.subjects.every((s) => s.tier === 0)).toBe(true);
+    expect(st.subjects[0].subjectId).toBe('parto');
+  });
+
+  it('pesa mais a banca atual e ordena por nível', () => {
+    const st = computeExamStats([...eds, { id: 'e2027', year: 2027, questionCount: 0, board: 'VUNESP' }], links);
+    expect(st.boardChange).toEqual({ board: 'VUNESP', currentYears: [2026], previousYears: [2021, 2022, 2023, 2024, 2025] });
+    expect(st.subjects.map((s) => [s.subjectId, s.tier])).toEqual([['nucleo', 1], ['uti', 2], ['parto', 3], ['scA', 3], ['raro', 4]]);
+    const uti = st.subjects.find((s) => s.subjectId === 'uti')!;
+    const parto = st.subjects.find((s) => s.subjectId === 'parto')!;
+    // Cada prova antiga pesa 0,25: total ponderado = 5 × 100 × 0,25 + 100 = 225
+    expect(uti.percentage).toBeCloseTo(3 / 225);
+    expect(parto.percentage).toBeCloseTo((23 * 0.25) / 225);
+    expect(uti.board).toEqual({ currentQuestions: 3, currentEditions: 1, previousEditions: 0 });
+    expect(parto.questions).toBe(23);
+  });
+});

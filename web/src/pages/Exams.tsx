@@ -185,6 +185,11 @@ function ExamDetails({ exam, update, showHistory }: { exam: any; update: (id: st
   );
 }
 
+const span = (ys: number[]) => (ys.length === 1 ? String(ys[0]) : `${ys[0]}-${ys[ys.length - 1]}`);
+function tierLabel(tier: number, board: string) {
+  return tier === 1 ? 'núcleo confirmado' : tier === 2 ? `assinatura da ${board}` : tier === 3 ? 'só da banca antiga' : 'pouca evidência';
+}
+
 function HistorySheet({ exam, onClose }: { exam: any; onClose: () => void }) {
   const q = useQuery({ queryKey: ['history', exam.exam_id], queryFn: () => api.get(`/api/exams/${exam.exam_id}/history`) });
   const [showAll, setShowAll] = useState(false);
@@ -194,15 +199,20 @@ function HistorySheet({ exam, onClose }: { exam: any; onClose: () => void }) {
       {q.isLoading ? <Spinner /> : !h ? null : (
         <>
           <p className="-mt-3 mb-6 text-[15px] text-ink-2">
-            {h.message}{h.editionsAnalyzed > 0 && ` ${h.years[0]}–${h.years[h.years.length - 1]}, ${h.totalQuestions} questões.`}
+            {h.message}{h.editionsAnalyzed > 0 && ` ${h.years[0]}-${h.years[h.years.length - 1]}, ${h.totalQuestions} questões.`}
           </p>
+          {h.boardChange && (
+            <p data-testid="board-change" className="-mt-3 mb-6 text-[15px] text-ink-2">
+              A banca mudou: {h.boardChange.board} desde {h.boardChange.currentYears[0]}, e continua na próxima prova. As provas da {h.boardChange.board} pesam mais; as de {span(h.boardChange.previousYears)} servem para confirmar os temas. Os assuntos vêm por nível: núcleo confirmado, assinatura da {h.boardChange.board}, núcleo da banca antiga e o resto.
+            </p>
+          )}
           <ol className="divide-y divide-line border-y border-line">
             {(showAll ? h.subjects : h.subjects.slice(0, 15)).map((s: any) => (
               <li key={s.subjectId} className="flex items-center gap-4 py-3.5">
                 <span className="tabular w-6 text-[14px] text-ink-3">{s.rank}</span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[17px]">{s.name}</div>
-                  <div className="truncate text-[13px] text-ink-2">{s.area}</div>
+                  <div className="truncate text-[13px] text-ink-2">{s.area}{s.tier > 0 && ` · ${tierLabel(s.tier, h.boardChange.board)}`}</div>
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="tabular text-[17px]">{pct(s.percentage)}</div>
@@ -214,7 +224,7 @@ function HistorySheet({ exam, onClose }: { exam: any; onClose: () => void }) {
           {h.subjects.length > 15 && (
             <Button variant="plain" className="mt-4" onClick={() => setShowAll(!showAll)}>{showAll ? 'Mostrar menos' : `Mostrar todos (${h.subjects.length})`}</Button>
           )}
-          <p className="mt-6 text-[13px] text-ink-3">% = fração das questões da prova. "6/6" = edições em que o assunto apareceu. Tudo calculado a partir das questões cadastradas.</p>
+          <p className="mt-6 text-[13px] text-ink-3">% = fração das questões da prova{h.boardChange && ` (com as provas da ${h.boardChange.board} pesando mais)`}. "6/6" = edições em que o assunto apareceu. Tudo calculado a partir das questões cadastradas.</p>
         </>
       )}
     </Sheet>
