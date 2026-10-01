@@ -39,4 +39,12 @@ on conflict (id) do update set name = excluded.name, city = excluded.city, edita
   specialties = excluded.specialties, institutions = excluded.institutions, steps = excluded.steps,
   exam_edition_id = excluded.exam_edition_id, published = true, updated_at = now();
 
+insert into public.residency_catalog (id, name, city, edital_url, fee, specialties, institutions, steps, exam_edition_id, published, updated_at)
+values (md5('residency:usp_sp_2027')::uuid, 'USP-SP', 'São Paulo', '', null,
+  '[]'::jsonb, '[]'::jsonb, '[{"id":"edital","key":"edital","label":"Edital publicado","type":"inscricao","date":null,"end":null,"done":false},{"id":"reducao","key":"reducao","label":"Pedido de redução da taxa","type":"inscricao","date":null,"end":null,"done":false},{"id":"inscricao","key":"inscricao","label":"Inscrição","type":"inscricao","date":null,"end":null,"done":false},{"id":"boleto","key":"boleto","label":"Pagamento do boleto","type":"inscricao","date":null,"end":null,"done":false},{"id":"local","key":"local","label":"Local de prova divulgado","type":"prova","date":null,"end":null,"done":false},{"id":"prova","key":"prova","label":"Prova","type":"prova","date":"2026-12-06","end":null,"done":false},{"id":"gabarito","key":"gabarito","label":"Gabarito","type":"prova","date":null,"end":null,"done":false},{"id":"recurso","key":"recurso","label":"Prazo de recurso","type":"prova","date":null,"end":null,"done":false},{"id":"resultado1","key":"resultado1","label":"Resultado da 1ª fase","type":"resultado","date":null,"end":null,"done":false},{"id":"fase2","key":"fase2","label":"2ª fase (currículo/entrevista)","type":"resultado","date":null,"end":null,"done":false},{"id":"final","key":"final","label":"Resultado final","type":"resultado","date":null,"end":null,"done":false}]'::jsonb, (select ed.id from exam_editions ed join exams e on e.id = ed.exam_id join institutions i on i.id = e.institution_id
+      where i.abbreviation = 'USP-SP' and e.name = 'R1 Acesso Direto' and ed.year = 2027 limit 1), true, now())
+on conflict (id) do update set name = excluded.name, city = excluded.city, edital_url = excluded.edital_url, fee = excluded.fee,
+  specialties = excluded.specialties, institutions = excluded.institutions, steps = excluded.steps,
+  exam_edition_id = excluded.exam_edition_id, published = true, updated_at = now();
+
 select name, jsonb_array_length(steps) as etapas from public.residency_catalog order by name;

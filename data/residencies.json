@@ -544,6 +544,18 @@
           "cutoff": ""
         }
       ]
+    },
+    {
+      "id": "usp_sp_2027",
+      "name": "USP-SP",
+      "city": "São Paulo",
+      "edital": "",
+      "fee": null,
+      "exam": "usp_sp_r1",
+      "specialties": [],
+      "dates": {
+        "prova": "2026-12-06"
+      }
     }
   ]
 }

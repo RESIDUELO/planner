@@ -140,6 +140,29 @@
         "year": 2027,
         "notes": "Próxima prova. Banca VUNESP (a mesma de 2026; 2021-2025 foram de outra banca). Data oficial ainda não divulgada: cada aluno informa a data."
       }
+    },
+    {
+      "id": "usp_sp_r1",
+      "institution": {
+        "abbreviation": "USP-SP",
+        "name": "Universidade de São Paulo (USP-SP)",
+        "state": "SP",
+        "city": "São Paulo"
+      },
+      "exam": {
+        "name": "R1 Acesso Direto",
+        "total_questions": 120
+      },
+      "file": "usp_sp_r1_2022-2026.json",
+      "source": {
+        "name": "Relatório \"Análise das provas de R1 (Acesso Direto) da USP-SP, 2022 a 2026\" (Anexo - classificação das 580 questões)",
+        "checked_at": "2026-10-01"
+      },
+      "upcoming": {
+        "year": 2027,
+        "notes": "Próxima prova. Data oficial: 06/12/2026.",
+        "exam_date": "2026-12-06"
+      }
     }
   ]
 }

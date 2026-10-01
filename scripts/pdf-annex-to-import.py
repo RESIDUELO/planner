@@ -12,6 +12,7 @@ Uso:
   python3 scripts/pdf-annex-to-import.py <famerp.pdf> <uel.pdf> <unoeste.pdf>
   python3 scripts/pdf-annex-to-import.py --santa-casa-aracatuba <santa_casa.pdf>
   python3 scripts/pdf-annex-to-import.py --sus-sp <classificacao_questoes.xlsx>   (pip install openpyxl)
+  python3 scripts/pdf-annex-to-import.py --usp-sp <analise_usp.pdf>
 
 Hierarquia gerada: area (grande área) → specialty (especialidade, opcional) →
 subject (assunto, unidade do planner) → subsubject (subassunto, opcional).
@@ -38,7 +39,7 @@ AREAS = {
     'PREV': 'Medicina Preventiva e Social', 'Preventiva/Saúde Coletiva': 'Medicina Preventiva e Social',
     'Preventiva/SaúdeColetiva': 'Medicina Preventiva e Social',
 }
-DIFF = {'F': 'easy', 'Fácil': 'easy', 'M': 'medium', 'Média': 'medium', 'D': 'hard', 'Difícil': 'hard'}
+DIFF = {'F': 'easy', 'Direta': 'easy', 'Intermediária': 'medium', 'Elaborada': 'hard', 'Fácil': 'easy', 'M': 'medium', 'Média': 'medium', 'D': 'hard', 'Difícil': 'hard'}
 
 
 def join(cell, bold=None):
@@ -204,6 +205,60 @@ def sus_sp(xlsx):
     }, qs)
 
 
+def usp_sp(pdf):
+    """USP-SP: Subárea = especialidade, Tema = assunto. Sem gabarito; a anulada vem marcada em "O que cobra".
+    As colunas são estreitas e o PDF quebra palavras sem hífen ("líquo r"): a quebra é desfeita quando a
+    palavra inteira aparece no corpo do relatório e um dos pedaços não é palavra."""
+    import pymupdf
+    d = pymupdf.open(pdf)
+    start = next(i for i, p in enumerate(d) if 'Colunas: Q = número' in p.get_text())
+    vocab = set()
+    for p in d.pages(0, start):
+        vocab.update(w.lower() for w in re.findall(r'[\wÀ-ÿ]+', p.get_text()))
+
+    def cell(c):
+        s = ''
+        for t, _ in c:
+            if not s:
+                s = t
+                continue
+            a, b = re.search(r'[\wÀ-ÿ]*$', s).group(0).lower(), re.match(r'[\wÀ-ÿ]*', t).group(0).lower()
+            glue = s.endswith(('-', '/')) or (a and b and (a + b) in vocab and (a not in vocab or b not in vocab))
+            s += t if glue else ' ' + t
+        s = re.sub(r'\s+', ' ', s).strip()
+        for a, b in (('Bioes t.', 'Bioest.'), ('toxicidad e', 'toxicidade')):  # palavras que não aparecem no relatório
+            s = s.replace(a, b)
+        return fix(s)
+
+    rows = parse(pdf, start, 'Q', r'USP-SP R1 Acesso Direto', r'^Prova (20\d\d)$')
+    qs, last = [], 0
+    for r in rows:
+        c = r['cells']
+        n = int(cell(c[0]))
+        year = int(r['label'].split()[-1])
+        # "Prova 2025" fica no pé da página anterior à tabela e o parser não a vê: a numeração recomeçar marca o ano novo
+        if qs and year <= qs[-1]['year']:
+            year = qs[-1]['year'] + (1 if n < last else 0)
+        last = n
+        summary = cell(c[4])
+        annulled = '(ANULADA)' in summary.upper()
+        summary = re.sub(r'\s*\(ANULADA\)', '', summary, flags=re.I).strip()
+        dif = cell(c[8]).split(' ')[0]  # o número da página às vezes cai na última coluna
+        qs.append({
+            'year': year, 'question_number': n, 'area': area(cell(c[1])),
+            'specialty': cell(c[2]) or None, 'subject': cell(c[3]), 'subsubject': None,
+            'summary': summary or None, 'statement': None,
+            'correct_answer': None, 'annulled': annulled,
+            'difficulty': {'D': 'easy', 'I': 'medium', 'E': 'hard'}.get(dif), 'question_type': cell(c[5]) or None,
+            'guideline': 'Depende de diretriz' if cell(c[7]) == 'S' else None,
+            'notes': 'Depende de imagem, tabela ou gráfico' if cell(c[6]) == 'S' else None,
+        })
+    write('usp_sp_r1_2022-2026.json', {
+        'exam_hint': {'institution': 'USP-SP', 'exam': 'R1 Acesso Direto'},
+        'source': 'Relatório "Análise das provas de R1 (Acesso Direto) da USP-SP, 2022 a 2026", Anexo - classificação das 580 questões (sem gabarito)',
+    }, qs)
+
+
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     # Uso: python3 scripts/pdf-annex-to-import.py --santa-casa-aracatuba <pdf>
@@ -211,5 +266,7 @@ if __name__ == '__main__':
         santa_casa_aracatuba(sys.argv[2])
     elif sys.argv[1] == '--sus-sp':
         sus_sp(sys.argv[2])
+    elif sys.argv[1] == '--usp-sp':
+        usp_sp(sys.argv[2])
     else:
         famerp(sys.argv[1]); uel(sys.argv[2]); unoeste(sys.argv[3])
