@@ -687,13 +687,212 @@
       "id": "usp_sp_2027",
       "name": "USP-SP",
       "city": "São Paulo",
-      "edital": "",
-      "fee": null,
+      "edital": "https://www.fuvest.br",
+      "fee": 620,
       "exam": "usp_sp_r1",
-      "specialties": [],
+      "specialties": [
+        {
+          "name": "Acupuntura",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Anestesiologia",
+          "vacancies": 35,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Cardiovascular",
+          "vacancies": 8,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Geral",
+          "vacancies": 23,
+          "cutoff": ""
+        },
+        {
+          "name": "Clínica Médica",
+          "vacancies": 59,
+          "cutoff": ""
+        },
+        {
+          "name": "Dermatologia",
+          "vacancies": 12,
+          "cutoff": ""
+        },
+        {
+          "name": "Genética Médica",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Infectologia",
+          "vacancies": 8,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Emergência",
+          "vacancies": 21,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Família e Comunidade",
+          "vacancies": 12,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina do Trabalho",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Esportiva",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Física e Reabilitação",
+          "vacancies": 10,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Intensiva",
+          "vacancies": 10,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Legal e Perícia Médica",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Nuclear",
+          "vacancies": 4,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Preventiva e Social",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurocirurgia",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurologia",
+          "vacancies": 18,
+          "cutoff": ""
+        },
+        {
+          "name": "Obstetrícia e Ginecologia",
+          "vacancies": 18,
+          "cutoff": ""
+        },
+        {
+          "name": "Oftalmologia",
+          "vacancies": 14,
+          "cutoff": ""
+        },
+        {
+          "name": "Ortopedia e Traumatologia",
+          "vacancies": 16,
+          "cutoff": ""
+        },
+        {
+          "name": "Otorrinolaringologia",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Patologia",
+          "vacancies": 9,
+          "cutoff": ""
+        },
+        {
+          "name": "Patologia Clínica/Medicina Laboratorial",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Pediatria",
+          "vacancies": 39,
+          "cutoff": ""
+        },
+        {
+          "name": "Psiquiatria",
+          "vacancies": 20,
+          "cutoff": ""
+        },
+        {
+          "name": "Radiologia e Diagnóstico por Imagem",
+          "vacancies": 24,
+          "cutoff": ""
+        },
+        {
+          "name": "Radioterapia",
+          "vacancies": 5,
+          "cutoff": ""
+        }
+      ],
       "dates": {
-        "prova": "2026-12-06"
-      }
+        "edital": "2026-09-18",
+        "reducao": [
+          "2026-09-23",
+          "2026-09-24"
+        ],
+        "inscricao": [
+          "2026-10-06",
+          "2026-10-26"
+        ],
+        "boleto": "2026-10-26",
+        "local": "2026-11-20",
+        "prova": "2026-12-06",
+        "gabarito": "2026-12-07",
+        "recurso": "2026-12-08",
+        "resultado1": "2027-01-04",
+        "fase2": "2027-01-13",
+        "final": "2027-02-11"
+      },
+      "extra": [
+        {
+          "label": "Resultado da redução/isenção da taxa",
+          "type": "inscricao",
+          "date": "2026-09-28"
+        },
+        {
+          "label": "Resultado do recurso da redução/isenção",
+          "type": "inscricao",
+          "date": "2026-10-01"
+        },
+        {
+          "label": "Gabarito definitivo e número de acertos",
+          "type": "prova",
+          "date": "2026-12-14"
+        },
+        {
+          "label": "Recurso de recontagem da 1ª fase (até 18/12)",
+          "type": "prova",
+          "date": "2026-12-14"
+        },
+        {
+          "label": "Envio do currículo (até 12/01)",
+          "type": "resultado",
+          "date": "2027-01-04"
+        },
+        {
+          "label": "Nota da 2ª fase",
+          "type": "resultado",
+          "date": "2027-01-28"
+        },
+        {
+          "label": "Matrícula (1ª chamada, até 15/02)",
+          "type": "resultado",
+          "date": "2027-02-11"
+        }
+      ]
     }
   ]
 }
