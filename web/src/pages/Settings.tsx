@@ -8,6 +8,7 @@ import { getTheme, setTheme, type ThemePref } from '../lib/theme';
 import { Button, Disclosure, Note, Segmented, Sheet, Title } from '../components/ui';
 import { REVIEW_OPTIONS } from './Planner';
 import { PalettePicker } from '../components/Customize';
+import { AccessCodes } from '../components/AccessCodes';
 
 const WD = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
@@ -31,7 +32,6 @@ export function SettingsPage() {
   const settings = useQuery({ queryKey: ['study-settings'], queryFn: () => api.get('/api/me/study-settings') });
   const algo = useQuery({ queryKey: ['algorithm'], queryFn: () => api.get('/api/algorithm') });
   const [name, setName] = useState(user?.name ?? '');
-  const [upg, setUpg] = useState({ name: '', email: '', password: '' });
   const [theme, setThemeState] = useState<ThemePref>(getTheme());
   const [msg, setMsg] = useState<{ tone: 'positive' | 'negative'; text: string } | null>(null);
 
@@ -69,42 +69,23 @@ export function SettingsPage() {
     e.preventDefault();
     try { await api.patch('/api/auth/profile', { name }); await refresh(); setMsg({ tone: 'positive', text: 'Nome atualizado.' }); } catch (err) { setMsg({ tone: 'negative', text: errorMessage(err) }); }
   };
-  const upgrade = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      const r = await api.post('/api/auth/upgrade', upg);
-      await refresh();
-      setMsg({ tone: 'positive', text: r.needsConfirmation ? 'Quase lá: confirme o e-mail que enviamos. Seu progresso já está mantido.' : 'Conta criada. Seu progresso foi mantido.' });
-    } catch (err) { setMsg({ tone: 'negative', text: errorMessage(err) }); }
-  };
   const s = settings.data;
 
   return (
     <div className="mx-auto max-w-xl">
       <Title>Configurações</Title>
       <div className="space-y-12">
-        {user?.isGuest ? (
-          <section className="animate-in">
-            <h2 className="font-display text-[30px]">Criar conta</h2>
-            <p className="mt-1 text-[15px] text-ink-2">Guarde seu progresso e acesse de qualquer dispositivo.</p>
-            <form onSubmit={upgrade} className="mt-5 space-y-3">
-              <input className="field" aria-label="Nome" placeholder="Nome" required value={upg.name} onChange={(e) => setUpg({ ...upg, name: e.target.value })} />
-              <input className="field" aria-label="E-mail" placeholder="E-mail" type="email" required value={upg.email} onChange={(e) => setUpg({ ...upg, email: e.target.value })} />
-              <input className="field" aria-label="Senha" placeholder="Senha (mínimo 8 caracteres)" type="password" minLength={8} required value={upg.password} onChange={(e) => setUpg({ ...upg, password: e.target.value })} />
-              <Button type="submit" className="mt-2">Criar conta mantendo meu progresso</Button>
-            </form>
-          </section>
-        ) : (
-          <Group label="Conta">
-            <form onSubmit={saveName} className="flex items-center justify-between gap-6 py-2">
-              <label htmlFor="rp-name" className="text-[17px]">Nome</label>
-              <input id="rp-name" className="min-w-0 flex-1 bg-transparent py-1.5 text-right text-[17px] text-ink-2 outline-none focus:text-ink"
-                value={name} onChange={(e) => setName(e.target.value)} onBlur={(e) => e.currentTarget.form?.requestSubmit()} />
-            </form>
-            {!IS_LOCAL && <Item label="E-mail" value={user?.email} />}
-          </Group>
-        )}
+        <Group label="Conta">
+          <form onSubmit={saveName} className="flex items-center justify-between gap-6 py-2">
+            <label htmlFor="rp-name" className="text-[17px]">Nome</label>
+            <input id="rp-name" className="min-w-0 flex-1 bg-transparent py-1.5 text-right text-[17px] text-ink-2 outline-none focus:text-ink"
+              value={name} onChange={(e) => setName(e.target.value)} onBlur={(e) => e.currentTarget.form?.requestSubmit()} />
+          </form>
+          {!IS_LOCAL && <Item label="E-mail" value={user?.email} />}
+        </Group>
         {msg && <Note tone={msg.tone} className="-mt-8">{msg.text}</Note>}
+
+        {user?.role === 'admin' && !IS_LOCAL && <AccessCodes />}
 
         <Group label="Aparência">
           <div className="flex items-center justify-between gap-4 py-2.5">

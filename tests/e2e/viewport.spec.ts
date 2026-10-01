@@ -3,6 +3,7 @@
  * só a lista de Assuntos e os dias da semana rolam por dentro, sem barra visível.
  */
 import { expect, test } from '@playwright/test';
+import { nextCode, register } from './access';
 
 const user = { name: 'Tela E2E', email: `tela${Date.now()}@e2e.test`, password: 'senha-tela-123' };
 // Computadores e tablets deitados
@@ -10,12 +11,7 @@ const SIZES = [[1366, 768], [1280, 800], [1440, 900], [1536, 864], [1920, 1080],
 
 test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
-  await page.goto('login');
-  await page.getByRole('tab', { name: 'Criar conta' }).click();
-  await page.getByLabel('Nome').fill(user.name);
-  await page.getByLabel('E-mail').fill(user.email);
-  await page.getByLabel('Senha').fill(user.password);
-  await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
+  await register(page, user, nextCode('VIE'));
   await page.locator('label', { has: page.getByLabel('Selecionar FAMERP') }).click();
   await expect(page.getByLabel('Selecionar FAMERP')).toBeChecked();
   for (const step of ['exams', 'start', 'methods']) await page.getByTestId(`setup-${step}`).getByRole('button', { name: 'Confirmar' }).click();

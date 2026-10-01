@@ -22,7 +22,7 @@ Site estático no **GitHub Pages** + **Supabase** (PostgreSQL, Auth e API REST).
 | Camada | Tecnologia |
 |---|---|
 | Banco e segurança | Supabase (PostgreSQL) com Row Level Security, funções e triggers de auditoria |
-| Login | Supabase Auth (e-mail e senha; visitante = login anônimo do Supabase) |
+| Login | Supabase Auth (e-mail e senha) + código de acesso para liberar cada conta nova |
 | Site | React 19, React Router, TanStack Query, Tailwind CSS 4, Vite (publicado no GitHub Pages) |
 | Algoritmos | TypeScript puro em `shared/`, sem dependências, rodando no navegador |
 | Testes | Vitest (unidade e integração contra um Supabase local) e Playwright (E2E) |
@@ -42,7 +42,7 @@ scripts/              Supabase local para testes, conversor PDF → importação
 
 1. **Supabase**: crie um projeto em https://supabase.com. Recomendo um projeto novo, separado do jogo.
 2. **Banco**: em **SQL Editor → New query**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**. Rode só uma vez.
-3. **Login**: em **Authentication → Sign In / Providers**, ative **Allow anonymous sign-ins** (necessário para o botão "Continuar como visitante").
+3. **Login**: em **Authentication → Sign In / Providers**, deixe **Allow anonymous sign-ins** desativado (não há modo visitante).
    - Se quiser cadastro sem confirmação por e-mail, desative **Confirm email** em **Email**.
    - Em **Authentication → URL Configuration**, coloque a URL do site em **Site URL** (ex.: `https://residuelo.github.io/planner/`).
 4. **Chaves**: em **Project Settings → API**, copie a **Project URL** e a chave **anon public**. Depois escolha uma forma de entregá-las ao site:
@@ -63,6 +63,17 @@ npm run dev                   # site em http://localhost:5173
 ```
 
 `scripts/local-supabase.mjs` usa um PostgreSQL existente (`PG_ADMIN_URL`, padrão `postgres://rp_owner:rp_owner@localhost:5432/postgres`) e baixa os binários oficiais do Supabase Auth e do PostgREST na primeira execução.
+
+## Acesso pago (códigos de acesso)
+
+Cada conta nova só usa o site depois de digitar um **código de acesso**, vendido fora do site. Cada código libera uma conta, para sempre.
+
+- **Gerar e vender**: entre com a conta de administrador → **Configurações → Códigos de acesso** → escolha quantos (até 100 por vez), uma anotação (ex.: nome do comprador) e **Gerar**. Envie o código (ex.: `7ND2-HC43-7Z9P`) para a pessoa.
+- **Usar**: a pessoa digita o código em **Criar conta**. Se errar, ou se a conta foi criada com confirmação de e-mail, o site pede o código no próximo login. Cinco erros seguidos bloqueiam novas tentativas por 15 minutos.
+- **Cancelar**: na mesma lista. Um código livre deixa de funcionar; um código já usado também tira o acesso da conta que o usou.
+- **Onde fica a trava**: no banco (`supabase/parts/18_access_tokens.sql`). Conta nova nasce inativa e nada é lido sem um perfil ativo, nem mesmo chamando a API do Supabase direto. Contas que já existiam continuam ativas; visitantes antigos são desativados.
+
+Num projeto que já está no ar, rode `supabase/parts/18_access_tokens.sql` no SQL Editor (pode rodar de novo sem problema).
 
 ## Segurança (seção 47)
 
@@ -132,7 +143,8 @@ PW_CHROMIUM_PATH=/caminho/chrome npm run test:e2e  # navegador, com o site compi
 
 | Seção 58 | Onde |
 |---|---|
-| 1 criar usuário · 2 visitante · 20 sem área administrativa no site | `e2e/app.spec.ts`, `api/flow.test.ts` |
+| 1 criar usuário · 2 outra conta · 20 sem área administrativa no site | `e2e/app.spec.ts`, `api/flow.test.ts` |
+| Código de acesso: sem código não entra, um código por conta, limite de tentativas, cancelar | `api/flow.test.ts`, `e2e/app.spec.ts` |
 | 3–4 uma e três provas | `api/flow.test.ts` (multiprova com FAMERP + UEL + UNOESTE) e E2E |
 | 5–8 métodos, planner, checklist | API + E2E |
 | 9–12 20 questões / 17 acertos, domínio, 1ª revisão | API + E2E |

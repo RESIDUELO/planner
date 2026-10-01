@@ -43,6 +43,7 @@ grant execute on function app.current_user_id(), app.current_role_name(), app.is
 
 -- ---------------------------------------------------------------------
 -- Perfis criados/atualizados a partir do Supabase Auth
+-- (18_access_tokens.sql substitui estas funções: conta nova precisa de código)
 -- ---------------------------------------------------------------------
 create or replace function app.on_auth_user_created() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$

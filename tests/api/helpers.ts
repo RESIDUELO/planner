@@ -26,6 +26,13 @@ export async function dbQuery(sql: string, params: unknown[] = []) {
   try { return await c.query(sql, params); } finally { await c.end(); }
 }
 
+/** Código de acesso novo, como a administração gera (sem passar pela tela). */
+export async function newAccessCode(note = '') {
+  return (await dbQuery(`insert into access_tokens(code, note) values (app.new_access_code(), $1) returning code`, [note])).rows[0].code as string;
+}
+
+let members = 0;
+
 export class Client {
   today: string | null = null;
   sb = createClient(sbEnv.url, sbEnv.anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -44,6 +51,17 @@ export class Client {
     const r = await this.req<T>(method, url, body);
     if (r.status >= 400) throw new Error(`${method} ${url} → ${r.status}: ${JSON.stringify(r.body)}`);
     return r.body;
+  }
+
+  /** Cria uma conta nova já liberada (com um código de acesso). */
+  async member(name = 'Aluno') {
+    const email = `membro-${++members}-${Date.now()}@teste.com`;
+    await this.ok('POST', '/api/auth/register', { name, email, password: 'senha-membro-123', code: await newAccessCode() });
+    return email;
+  }
+
+  async login(email: string, password: string) {
+    await this.ok('POST', '/api/auth/login', { email, password });
   }
 
   async accessToken() {

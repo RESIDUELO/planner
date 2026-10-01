@@ -138,20 +138,20 @@ export function Layout() {
   const home = loc.pathname === '/planner';
   const [collapsed, toggle] = useCollapsed();
   const profileItems = [
-    { label: user?.isGuest ? 'Criar conta' : 'Meu perfil', onClick: () => nav('/configuracoes') },
+    { label: 'Meu perfil', onClick: () => nav('/configuracoes') },
     { label: 'Provas', onClick: () => nav('/provas') },
     { label: 'Revisões', onClick: () => nav('/revisoes') },
     { label: 'Configurações', onClick: () => nav('/configuracoes') },
     { label: 'Sair', onClick: async () => { await logout(); nav('/login'); }, destructive: true, divider: true, hidden: IS_LOCAL },
   ];
-  const avatar = <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line text-[13px] font-medium text-ink hover:border-ink">{initials(user?.isGuest ? 'Visitante' : user?.name)}</span>;
+  const avatar = <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line text-[13px] font-medium text-ink hover:border-ink">{initials(user?.name)}</span>;
 
   // O limite de largura acompanha a barra: recolher sempre dá esse espaço ao conteúdo
   const width = 'max-w-[calc(1504px-var(--sb-w))] fit:max-w-[calc(1664px-var(--sb-w))]';
   return (
     // Computador e tablet: barra lateral (aberta ou só ícones); celular: o topo de sempre
     <div className={clsx('min-h-full', collapsed ? '[--sb-w:64px]' : '[--sb-w:200px] lg:[--sb-w:224px]')}>
-      <Sidebar collapsed={collapsed} onToggle={toggle} profileItems={profileItems} avatar={avatar} name={user?.isGuest ? 'Visitante' : user?.name?.split(' ')[0] ?? 'Perfil'} />
+      <Sidebar collapsed={collapsed} onToggle={toggle} profileItems={profileItems} avatar={avatar} name={user?.name?.split(' ')[0] ?? 'Perfil'} />
       <header className="sticky top-0 z-30 bg-canvas/90 backdrop-blur-md md:hidden">
         <div className="relative flex h-16 items-center justify-between gap-3 px-4 sm:gap-4 sm:px-8">
           <Link to="/planner" className="flex shrink-0 items-center transition-opacity hover:opacity-70" aria-label="Início"><LogoMark /></Link>

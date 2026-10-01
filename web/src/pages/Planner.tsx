@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../lib/auth';
-import { ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal, Timer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Plus, Search, SlidersHorizontal, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
 import { daysBetween, pct, relativeDays, shortDate, todayBR } from '../lib/format';
@@ -25,24 +24,25 @@ import { finePointer, SwipeRow, usePageSwipe } from '../components/Gestures';
 import { toast } from '../lib/toast';
 import { useWidgets } from '../lib/widgets';
 import { CustomizeSheet } from '../components/Customize';
+import { PlannerPdfSheet } from '../components/PlannerPdf';
 import { addDays, weekday } from '../../../shared/dates';
 
 export function PlannerPage() {
   const q = useQuery({ queryKey: ['planner'], queryFn: () => api.get('/api/planner') });
-  const { user } = useAuth();
   const [setup, setSetup] = useState(false);
+  // Planner recém-montado: o aviso oferece baixar o PDF (abre a folha do PDF)
+  const [pdf, setPdf] = useState(0);
+  const done = (created: boolean) => {
+    setSetup(false);
+    if (created) toast('✓ Planner pronto', { action: { label: 'Baixar PDF', onClick: () => setPdf((n) => n + 1) }, ms: 8000 });
+  };
   if (q.isLoading) return <Spinner />;
   return (
     <>
       {/* Primeira vez: escolher uma prova (cronograma automático) ou montar do zero, à mão */}
       {setup || !q.data?.plan
-        ? <PlannerSetup onDone={() => setSetup(false)} canCancel={!!q.data?.plan} />
-        : <PlannerView data={q.data} onReconfigure={() => setSetup(true)} />}
-      {user?.isGuest && (
-        <p className="mx-auto mt-20 max-w-3xl text-[13px] text-ink-3">
-          Você está no modo visitante. <Link to="/configuracoes" className="text-ink underline underline-offset-4">Crie uma conta</Link> para acessar de outros dispositivos.
-        </p>
-      )}
+        ? <PlannerSetup onDone={done} canCancel={!!q.data?.plan} />
+        : <PlannerView data={q.data} onReconfigure={() => setSetup(true)} pdfSignal={pdf} />}
     </>
   );
 }
@@ -56,7 +56,7 @@ export const REVIEW_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
 type SetupStep = 'exams' | 'start' | 'methods';
 const STEP_OUT_MS = 220;
 
-function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: boolean }) {
+function PlannerSetup({ onDone, canCancel }: { onDone: (created: boolean) => void; canCancel: boolean }) {
   const qc = useQueryClient();
   const exams = useQuery({ queryKey: ['exams'], queryFn: () => api.get<any[]>('/api/exams') });
   const settings = useQuery({ queryKey: ['study-settings'], queryFn: () => api.get('/api/me/study-settings') });
@@ -119,7 +119,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
       if (tplId) return api.post('/api/planner/generate-template', { templateId: tplId, editionIds: chosen.map((e) => e.edition_id), primaryEditionId: primary });
       return api.post('/api/planner/generate', { editionIds: sel, primaryEditionId: primary, startDate: profile.start_date });
     },
-    onSuccess: () => { qc.invalidateQueries(); onDone(); },
+    onSuccess: () => { qc.invalidateQueries(); onDone(true); },
     onError: (e) => setError(errorMessage(e)),
   });
 
@@ -148,7 +148,7 @@ function PlannerSetup({ onDone, canCancel }: { onDone: () => void; canCancel: bo
 
   return (
     <div className="mx-auto max-w-2xl" ref={top}>
-      <Title eyebrow="Seu planner começa aqui" trailing={canCancel ? <Button variant="plain" size="sm" onClick={onDone}>Cancelar</Button> : undefined}>Planner</Title>
+      <Title eyebrow="Seu planner começa aqui" trailing={canCancel ? <Button variant="plain" size="sm" onClick={() => onDone(false)}>Cancelar</Button> : undefined}>Planner</Title>
 
       <div className="-mt-4 mb-10 flex items-center gap-4">
         <span className="sr-only">Etapa {stepIndex + 1} de 3</span>
@@ -344,9 +344,10 @@ const WD = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const mondayOf = (d: string) => addDays(d, -((weekday(d) + 6) % 7));
 
-function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => void }) {
+function PlannerView({ data, onReconfigure, pdfSignal = 0 }: { data: any; onReconfigure: () => void; pdfSignal?: number }) {
   const [open, setOpen] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<null | 'about' | 'subjects' | 'multi' | 'reconfigure' | 'customize'>(null);
+  const [sheet, setSheet] = useState<null | 'about' | 'subjects' | 'multi' | 'reconfigure' | 'customize' | 'pdf'>(null);
+  useEffect(() => { if (pdfSignal) setSheet('pdf'); }, [pdfSignal]);
   const w = useWidgets();
   const qc = useQueryClient();
   const replan = useMutation({ mutationFn: () => api.post('/api/planner/replan'), onSuccess: () => qc.invalidateQueries() });
@@ -369,16 +370,21 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
       { label: 'Todos os assuntos', onClick: () => setSheet('subjects'), hidden: !data.subjects.length },
       { label: 'Tabela combinada das provas', onClick: () => setSheet('multi'), hidden: data.exams.length < 2 },
       { label: 'Escolher prova para montar cronograma', onClick: onReconfigure, hidden: !noExam },
+      { label: 'Baixar em PDF (com a agenda)', onClick: () => setSheet('pdf') },
       { label: 'Personalizar', onClick: () => setSheet('customize') },
       { label: 'Sobre este plano', onClick: () => setSheet('about'), hidden: noExam },
     ]} />
   );
   // Reconfigurar à vista no topo; antes, um aviso (para um clique sem querer não refazer o planner)
+  const pill = 'flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px] font-medium tracking-[0.16em] text-ink-2 uppercase transition hover:border-ink hover:text-ink';
   const actions = (
     <>
+      <button type="button" onClick={() => setSheet('pdf')} data-testid="download-pdf" aria-label="Baixar o planner em PDF" title="Baixar o planner em PDF" className={pill}>
+        <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <span className="hidden sm:inline">PDF</span>
+      </button>
       {!noExam && (
-        <button type="button" onClick={() => setSheet('reconfigure')} data-testid="reconfigure" aria-label="Reconfigurar planner"
-          className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px] font-medium tracking-[0.16em] text-ink-2 uppercase transition hover:border-ink hover:text-ink">
+        <button type="button" onClick={() => setSheet('reconfigure')} data-testid="reconfigure" aria-label="Reconfigurar planner" className={pill}>
           <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.75} />
           <span className="hidden sm:inline">Reconfigurar</span>
         </button>
@@ -416,6 +422,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
 
       {sheet === 'about' && <AboutPlan data={data} onClose={() => setSheet(null)} />}
       {sheet === 'customize' && <CustomizeSheet onClose={() => setSheet(null)} />}
+      {sheet === 'pdf' && <PlannerPdfSheet data={data} onClose={() => setSheet(null)} />}
       {sheet === 'reconfigure' && (
         <Sheet open onClose={() => setSheet(null)} title="Reconfigurar o planner?">
           <p className="text-[16px] text-ink-2">Você vai escolher de novo as provas, a data de início e como estuda, e o cronograma é montado outra vez a partir disso.</p>

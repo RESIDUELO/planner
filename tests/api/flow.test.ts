@@ -8,7 +8,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { Client, dbQuery, rest, setStack, startStack, type LocalSupabase } from './helpers';
+import { Client, dbQuery, newAccessCode, rest, setStack, startStack, type LocalSupabase } from './helpers';
 
 let stack: LocalSupabase;
 let student: Client;
@@ -29,9 +29,9 @@ afterAll(async () => stack?.stop());
 
 describe('Base de provas (somente pelo administrador)', () => {
   it('sem cadastro, o sistema não conhece nenhuma prova', async () => {
-    const guest = new Client();
-    await guest.ok('POST', '/api/auth/guest');
-    expect(await guest.ok('GET', '/api/exams')).toEqual([]);
+    const m = new Client();
+    await m.member();
+    expect(await m.ok('GET', '/api/exams')).toEqual([]);
   });
 
   it('os arquivos de dados cadastram as 3 provas e podem ser rodados de novo sem duplicar', async () => {
@@ -47,7 +47,7 @@ describe('Base de provas (somente pelo administrador)', () => {
   it('o aluno vê apenas as provas cadastradas, sem as edições históricas', async () => {
     student = new Client();
     student.today = TODAY;
-    await student.ok('POST', '/api/auth/register', { name: 'Aluna Teste', email: 'aluna@teste.com', password: 'senha-aluna-123' });
+    await student.ok('POST', '/api/auth/register', { name: 'Aluna Teste', email: 'aluna@teste.com', password: 'senha-aluna-123', code: await newAccessCode() });
     const list = await student.ok('GET', '/api/exams');
     expect(list.map((e: any) => e.institution).sort()).toEqual(['FAMERP', 'HU-UEL', 'UNOESTE/HRPP']);
     const f = list.find((e: any) => e.institution === 'FAMERP');
@@ -108,7 +108,7 @@ describe('Segurança (RLS contra requisições forjadas)', () => {
     await student.ok('PUT', `/api/me/editions/${ids.uel}`, { registrationFee: 450 });
     other = new Client();
     other.today = TODAY;
-    await other.ok('POST', '/api/auth/register', { name: 'Outro', email: 'outro@teste.com', password: 'senha-outro-123' });
+    await other.ok('POST', '/api/auth/register', { name: 'Outro', email: 'outro@teste.com', password: 'senha-outro-123', code: await newAccessCode() });
     const f = (await other.ok('GET', '/api/exams')).find((e: any) => e.institution === 'HU-UEL');
     expect(f.exam_date).toBe('2026-11-08');
     expect(f.registration_fee).toBeNull();
@@ -282,23 +282,101 @@ describe('Aluno (testes 1–19)', () => {
   });
 });
 
-describe('Visitante (teste 2)', () => {
-  it('usa o planner e pode criar conta mantendo o progresso', async () => {
+describe('Acesso por código (conta nova só entra com um código)', () => {
+  const pass = 'senha-codigo-123';
+
+  it('sem código não cria conta; código errado deixa a conta aguardando, sem acesso a nada', async () => {
+    const c = new Client();
+    expect((await c.req('POST', '/api/auth/register', { name: 'Sem Código', email: 'semcodigo@teste.com', password: pass })).status).toBe(400);
+
+    const r = await c.req('POST', '/api/auth/register', { name: 'Errou', email: 'errou@teste.com', password: pass, code: 'NAO-EXISTE' });
+    expect(r).toMatchObject({ status: 400, body: { error: 'Código inválido ou já usado.' } });
+    expect(await c.ok('GET', '/api/auth/me')).toEqual({ user: null, awaitingToken: { email: 'errou@teste.com', name: 'Errou' } });
+
+    // Chamando o Supabase direto (como pelo console do navegador): nada da base nem dados próprios
+    const token = await c.accessToken();
+    for (const t of ['exam_editions', 'questions', 'subjects', 'study_methods']) {
+      expect((await rest(token, 'GET', `/${t}?select=id&limit=1`)).body).toEqual([]);
+    }
+    expect((await rest(token, 'POST', '/study_profiles', { user_id: (await c.sb.auth.getUser()).data.user!.id })).status).toBe(403);
+    expect((await rest(token, 'PATCH', '/user_profiles?email=neq.x', { active: true, awaiting_token: false })).status).toBeGreaterThanOrEqual(400);
+    expect((await rest(token, 'GET', '/access_tokens?select=code')).status).toBeGreaterThanOrEqual(400);
+    expect((await rest(token, 'POST', '/rpc/admin_create_access_tokens', { p_count: 1 })).status).toBe(403);
+  });
+
+  it('o código certo libera a conta (para sempre) e não serve para uma segunda conta', async () => {
+    const c = new Client();
+    await c.req('POST', '/api/auth/register', { name: 'Comprou', email: 'comprou@teste.com', password: pass, code: 'ERRADO' });
+    const code = await newAccessCode('venda 1');
+    // Aceita minúsculas, espaços e traços
+    const typed = code.toLowerCase().replace(/(.{4})(?!$)/g, '$1- ');
+    await c.ok('POST', '/api/auth/redeem', { code: typed });
+    expect((await c.ok('GET', '/api/auth/me')).user).toMatchObject({ role: 'user', name: 'Comprou' });
+
+    const c2 = new Client();
+    await c2.login('comprou@teste.com', pass);
+    expect((await c2.ok('GET', '/api/auth/me')).user.email).toBe('comprou@teste.com');
+
+    const other = new Client();
+    expect((await other.req('POST', '/api/auth/register', { name: 'Segundo', email: 'segundo@teste.com', password: pass, code })).status).toBe(400);
+    expect((await other.ok('GET', '/api/auth/me')).awaitingToken).toBeTruthy();
+  });
+
+  it('limita as tentativas erradas', async () => {
+    const c = new Client();
+    await c.req('POST', '/api/auth/register', { name: 'Chutador', email: 'chute@teste.com', password: pass, code: 'X1' });
+    for (let i = 0; i < 4; i++) await c.req('POST', '/api/auth/redeem', { code: `X${i + 2}` });
+    const code = await newAccessCode();
+    expect(await c.req('POST', '/api/auth/redeem', { code })).toMatchObject({ status: 400, body: { error: expect.stringContaining('Muitas tentativas') } });
+    await dbQuery(`update access_token_attempts set attempted_at = now() - interval '16 minutes'`);
+    await c.ok('POST', '/api/auth/redeem', { code });
+  });
+
+  it('visitante (login anônimo) não acessa nada', async () => {
     const g = new Client();
-    g.today = TODAY;
-    await g.ok('POST', '/api/auth/guest');
-    expect((await g.ok('GET', '/api/auth/me')).user.role).toBe('visitor');
-    const s = await g.ok('GET', '/api/me/study-settings');
-    await g.ok('PUT', '/api/me/study-settings', {
-      profile: { start_date: TODAY, daily_hours: 2, study_days_per_week: 5, questions_per_day: 10, study_saturday: false, study_sunday: false },
-      methods: s.methods.map((m: any) => ({ id: m.id, enabled: m.code === 'summary', minutes: 30 })),
-    });
-    await g.ok('POST', '/api/planner/generate', { editionIds: [ids.uel], primaryEditionId: ids.uel, startDate: TODAY });
-    await g.ok('POST', '/api/auth/upgrade', { name: 'Ex-visitante', email: 'exvisitante@teste.com', password: 'senha-exvis-123' });
-    const g2 = new Client();
-    await g2.ok('POST', '/api/auth/login', { email: 'exvisitante@teste.com', password: 'senha-exvis-123' });
-    expect((await g2.ok('GET', '/api/auth/me')).user.role).toBe('user');
-    expect((await g2.ok('GET', '/api/planner')).subjects[0].checklist.map((c: any) => c.code)).toEqual(['summary']);
+    const { error } = await g.sb.auth.signInAnonymously();
+    expect(error).toBeNull();
+    expect((await rest(await g.accessToken(), 'GET', '/exam_editions?select=id')).body).toEqual([]);
+    expect((await g.req('POST', '/api/auth/redeem', { code: await newAccessCode() })).status).toBe(403);
+    expect(await g.ok('GET', '/api/auth/me')).toEqual({ user: null, blocked: true });
+  });
+
+  it('a administração gera, lista e cancela códigos; cancelar um código usado tira o acesso', async () => {
+    const adm = new Client();
+    const email = await adm.member('Administração');
+    await dbQuery('select public.make_admin($1)', [email]);
+    const user = new Client();
+    expect((await user.req('POST', '/api/auth/register', { name: 'Xavier', email: 'x@teste.com', password: pass, code: 'A' })).status).toBe(400);
+    expect((await user.req('GET', '/api/admin/access-tokens')).status).toBe(403);
+
+    const codes = await adm.ok('POST', '/api/admin/access-tokens', { count: 3, note: 'Lote outubro' });
+    expect(codes).toHaveLength(3);
+    for (const c of codes) expect(c).toMatch(/^[A-HJ-NP-Z2-9]{12}$/);
+    expect(new Set(codes).size).toBe(3);
+
+    await user.ok('POST', '/api/auth/redeem', { code: codes[0] });
+    const list = await adm.ok('GET', '/api/admin/access-tokens');
+    const used = list.find((t: any) => t.code === codes[0]);
+    expect(used).toMatchObject({ note: 'Lote outubro', used_by_email: 'x@teste.com', user_active: true, revoked_at: null });
+
+    // Cancela um livre: não serve mais
+    const free = list.find((t: any) => t.code === codes[1]);
+    await adm.ok('POST', `/api/admin/access-tokens/${free.id}/revoke`);
+    const late = new Client();
+    expect((await late.req('POST', '/api/auth/register', { name: 'Atrasado', email: 'atrasado@teste.com', password: pass, code: codes[1] })).status).toBe(400);
+
+    // Cancela o usado: a conta perde o acesso e não se libera com outro código
+    await adm.ok('POST', `/api/admin/access-tokens/${used.id}/revoke`);
+    const again = new Client();
+    await again.login('x@teste.com', pass);
+    expect(await again.ok('GET', '/api/auth/me')).toEqual({ user: null, blocked: true });
+    const back = new Client();
+    await back.login('x@teste.com', pass);
+    expect((await back.req('POST', '/api/auth/redeem', { code: codes[2] })).status).toBe(403);
+  });
+
+  it('contas que já existiam continuam com acesso', async () => {
+    expect((await student.ok('GET', '/api/auth/me')).user.role).toBe('user');
   });
 });
 
@@ -518,7 +596,7 @@ describe('SUS-SP (planilha questão a questão, troca de banca em 2026)', () => 
     // No planner: a explicação do assunto conta a troca de banca
     const g = new Client();
     g.today = '2026-09-27';
-    await g.ok('POST', '/api/auth/guest');
+    await g.member();
     const st = await g.ok('GET', '/api/me/study-settings');
     await g.ok('PUT', '/api/me/study-settings', {
       profile: { ...st.profile, preferred_start_time: null, preferred_end_time: null },
@@ -553,7 +631,7 @@ describe('Desfazer questões e zerar o perfil', () => {
   it('registro de questões errado pode ser desfeito', async () => {
     const g = new Client();
     g.today = '2026-09-25';
-    await g.ok('POST', '/api/auth/guest');
+    await g.member();
     const s = await g.ok('GET', '/api/me/study-settings');
     await g.ok('PUT', '/api/me/study-settings', {
       profile: { ...s.profile, preferred_start_time: null, preferred_end_time: null },
@@ -606,7 +684,7 @@ describe('Cronograma pessoal (só administradores)', () => {
   it('o administrador gera o planner com as datas do cronograma e o que já estudou concluído', async () => {
     admin = new Client();
     admin.today = '2026-09-28';
-    await admin.ok('POST', '/api/auth/register', { name: 'Admin', email: 'admin-cronograma@teste.com', password: 'senha-admin-123' });
+    await admin.ok('POST', '/api/auth/register', { name: 'Admin', email: 'admin-cronograma@teste.com', password: 'senha-admin-123', code: await newAccessCode() });
     await dbQuery(`update user_profiles set role = 'admin' where user_id = (select id from auth.users where email = 'admin-cronograma@teste.com')`);
     const list = await admin.ok('GET', '/api/templates');
     expect(list).toHaveLength(1);
@@ -728,7 +806,7 @@ describe('Atividades do mesmo assunto no mesmo dia', () => {
   it('planner antigo com o assunto dividido em dias é reorganizado sozinho', async () => {
     const g = new Client();
     g.today = '2026-09-28';
-    await g.ok('POST', '/api/auth/guest');
+    await g.member();
     const s = await g.ok('GET', '/api/me/study-settings');
     await g.ok('PUT', '/api/me/study-settings', {
       profile: { ...s.profile, preferred_start_time: null, preferred_end_time: null },
@@ -855,7 +933,7 @@ describe('Residências', () => {
   it('catálogo: a administração cadastra, a pessoa só marca e as datas novas aparecem sozinhas', async () => {
     const admin = new Client();
     admin.today = TODAY;
-    await admin.ok('POST', '/api/auth/register', { name: 'Adm', email: 'adm-catalogo@teste.com', password: 'senha-adm-12345' });
+    await admin.ok('POST', '/api/auth/register', { name: 'Adm', email: 'adm-catalogo@teste.com', password: 'senha-adm-12345', code: await newAccessCode() });
     await dbQuery('select public.make_admin($1)', ['adm-catalogo@teste.com']);
 
     // Só a administração cadastra (pela API e direto na tabela)
