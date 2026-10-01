@@ -4,7 +4,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 
-export const E2E_CODE_GROUPS = ['APP', 'GES', 'VIE'] as const;
+export const E2E_CODE_GROUPS = ['APP', 'GES', 'VIE', 'PDF'] as const;
 export const e2eCode = (group: (typeof E2E_CODE_GROUPS)[number], n: number) => `E2E${group}${String(n).padStart(4, '0')}`;
 
 const used: Record<string, number> = {};

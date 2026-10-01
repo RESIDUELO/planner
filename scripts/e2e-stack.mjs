@@ -28,7 +28,7 @@ await c.query(`insert into residency_catalog (name, city, fee, specialties, step
   [JSON.stringify([{ name: 'Pediatria', vacancies: 6, cutoff: '' }]), JSON.stringify(catalogSteps)]);
 // Códigos de acesso para as contas criadas nos testes (tests/e2e/access.ts)
 await c.query(`insert into access_tokens (code, note)
-  select 'E2E' || g || lpad(n::text, 4, '0'), 'e2e' from unnest(array['APP', 'GES', 'VIE']) g, generate_series(1, 100) n`);
+  select 'E2E' || g || lpad(n::text, 4, '0'), 'e2e' from unnest(array['APP', 'GES', 'VIE', 'PDF']) g, generate_series(1, 100) n`);
 // Administração (gera códigos na tela de Configurações)
 const signup = await fetch(`${sb.url}/auth/v1/signup`, {
   method: 'POST', headers: { apikey: sb.anonKey, 'content-type': 'application/json' },
