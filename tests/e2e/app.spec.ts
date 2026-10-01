@@ -3,6 +3,7 @@
  * no GitHub Pages e as provas carregadas pelos arquivos supabase/data/*.sql.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { member, nextCode, register } from './access';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -46,23 +47,18 @@ async function login(page: Page, email: string, password: string) {
   await expect(page).toHaveURL(HOME);
 }
 
-test('tela de login mostra as três opções', async ({ page }) => {
+test('tela de login: entrar ou criar conta (sem modo visitante)', async ({ page }) => {
   await page.goto('./');
   await expect(page).toHaveURL(/\/planner\/login/);
   await expect(page.getByRole('heading', { name: 'Planner', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Entrar' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Criar conta' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continuar como visitante' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continuar como visitante' })).toHaveCount(0);
   await expect(page).toHaveTitle('Planner Pablo e Samêla');
 });
 
 test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async ({ page }) => {
-  await page.goto('login');
-  await page.getByRole('tab', { name: 'Criar conta' }).click();
-  await page.getByLabel('Nome').fill(student.name);
-  await page.getByLabel('E-mail').fill(student.email);
-  await page.getByLabel('Senha').fill(student.password);
-  await page.locator('form').getByRole('button', { name: 'Criar conta' }).click();
+  await register(page, student, nextCode('APP'));
   await expect(page).toHaveURL(HOME);
   // Primeira vez: as provas (cronograma automático) ou montar do zero
   await expect(page.getByRole('heading', { name: 'Planner' })).toBeVisible();
@@ -74,6 +70,50 @@ test('TESTE 1 — criar conta leva direto ao Planner, sem tela de passos', async
   for (const i of ['FAMERP', 'FAMEMA', 'HU-UEL', 'UNOESTE/HRPP', 'Santa Casa Araçatuba']) await expect(page.getByTestId(`exam-${i}`)).toBeVisible();
   await page.getByTestId('exam-FAMERP').locator('button').first().click();
   await expect(page.getByTestId('exam-FAMERP')).toContainText('Análise baseada em 6 edições cadastradas.');
+});
+
+test('código de acesso: errado pede de novo, certo libera; a administração gera e cancela códigos', async ({ page, browser }) => {
+  const buyer = { name: 'Compradora E2E', email: `compra${Date.now()}@e2e.test`, password: 'senha-compra-123' };
+  await register(page, buyer, 'ERRADO-0000');
+  await expect(page.getByRole('heading', { name: 'Código de acesso' })).toBeVisible();
+  await expect(page.getByText('Código inválido ou já usado.')).toBeVisible();
+  // Sair e entrar de novo: continua pedindo o código, e nada do planner abre
+  await page.goto('planner');
+  await expect(page).toHaveURL(/\/planner\/login/);
+  await expect(page.getByRole('heading', { name: 'Código de acesso' })).toBeVisible();
+
+  // A administração gera o código na tela de Configurações
+  const adminCtx = await browser.newContext();
+  const admin = await adminCtx.newPage();
+  await login(admin, 'admin@e2e.test', 'senha-admin-123');
+  await admin.goto('configuracoes');
+  const panel = admin.getByTestId('access-codes');
+  await panel.getByLabel('Quantidade de códigos').fill('2');
+  await panel.getByLabel('Anotação').fill('Venda E2E');
+  await panel.getByRole('button', { name: 'Gerar' }).click();
+  const codes = (await panel.getByTestId('access-codes-new').innerText()).trim().split('\n');
+  expect(codes).toHaveLength(2);
+  for (const c of codes) expect(c).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+
+  await page.getByLabel('Código de acesso').fill(codes[0].toLowerCase());
+  await page.getByRole('button', { name: 'Liberar acesso' }).click();
+  await expect(page).toHaveURL(HOME);
+
+  // Na lista: usado por quem; o outro, cancelado, deixa de valer
+  await admin.reload();
+  await panel.getByRole('button', { name: /Usados/ }).click();
+  await expect(panel.getByText(`usado por ${buyer.name} (${buyer.email})`)).toBeVisible();
+  await panel.getByRole('button', { name: /Livres/ }).click();
+  admin.once('dialog', (d) => d.accept());
+  await panel.locator('li', { hasText: codes[1] }).getByRole('button', { name: 'Cancelar' }).click();
+  await expect(panel.locator('li', { hasText: codes[1] })).toHaveCount(0);
+  await adminCtx.close();
+
+  const late = await browser.newContext();
+  const p2 = await late.newPage();
+  await register(p2, { name: 'Atrasada E2E', email: `atrasada${Date.now()}@e2e.test`, password: 'senha-atrasada-1' }, codes[1]);
+  await expect(p2.getByText('Código inválido ou já usado.')).toBeVisible();
+  await late.close();
 });
 
 test('TESTE 20 — não existe área administrativa no site', async ({ page }) => {
@@ -249,14 +289,11 @@ test('TESTES 15, 17–19 — calendário e persistência após fechar o navegado
   await again.close();
 });
 
-test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => {
-  await page.goto('login');
-  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
-  await expect(page).toHaveURL(HOME);
-  await expect(page.getByText('Você está no modo visitante')).toBeVisible();
+test('TESTE 2 — outra conta escolhe prova e usa o sistema', async ({ page }) => {
+  await member(page, 'APP');
   await page.goto('provas');
   await expect(page.locator('article')).toHaveCount(6);
-  // A escolha da outra aluna não aparece para o visitante
+  // A escolha da outra aluna não aparece para esta conta
   await expect(page.getByText('Você ainda não escolheu uma prova.')).toBeVisible();
   await expect(page.getByTestId('exam-FAMERP')).toContainText('Adicionar');
 
@@ -357,9 +394,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
 });
 
 test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Planner tem Dia | Semana', async ({ page }) => {
-  await page.goto('login');
-  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
-  await expect(page).toHaveURL(HOME);
+  await member(page, 'APP');
   await openSetup(page);
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
   await finishSetup(page);
@@ -410,9 +445,7 @@ test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Pl
 });
 
 test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no mesmo dia', async ({ page }) => {
-  await page.goto('login');
-  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
-  await expect(page).toHaveURL(HOME);
+  await member(page, 'APP');
   await expect(page.getByText('Quais provas você quer fazer?')).toBeVisible();
   await page.getByTestId('scratch').click();
   await finishSetup(page, 'start');
@@ -463,9 +496,7 @@ test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no 
 });
 
 test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no fim', async ({ page }) => {
-  await page.goto('login');
-  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
-  await expect(page).toHaveURL(HOME);
+  await member(page, 'APP');
   await page.getByTestId('scratch').click();
   await finishSetup(page, 'start');
   await expect(page.getByTestId('choose-exam')).toBeVisible();

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../lib/auth';
 import { ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal, Timer } from 'lucide-react';
 import { clsx } from 'clsx';
 import { api, errorMessage } from '../lib/api';
@@ -29,7 +28,6 @@ import { addDays, weekday } from '../../../shared/dates';
 
 export function PlannerPage() {
   const q = useQuery({ queryKey: ['planner'], queryFn: () => api.get('/api/planner') });
-  const { user } = useAuth();
   const [setup, setSetup] = useState(false);
   if (q.isLoading) return <Spinner />;
   return (
@@ -38,11 +36,6 @@ export function PlannerPage() {
       {setup || !q.data?.plan
         ? <PlannerSetup onDone={() => setSetup(false)} canCancel={!!q.data?.plan} />
         : <PlannerView data={q.data} onReconfigure={() => setSetup(true)} />}
-      {user?.isGuest && (
-        <p className="mx-auto mt-20 max-w-3xl text-[13px] text-ink-3">
-          Você está no modo visitante. <Link to="/configuracoes" className="text-ink underline underline-offset-4">Crie uma conta</Link> para acessar de outros dispositivos.
-        </p>
-      )}
     </>
   );
 }

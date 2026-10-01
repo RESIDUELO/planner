@@ -3,8 +3,8 @@
  * deslizar fora dos assuntos troca de semana; Personalizar e paleta.
  */
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { member } from './access';
 
-const HOME = /\/planner\/planner$/;
 const inDays = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + n * 86_400_000));
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -24,9 +24,7 @@ async function touch(el: Locator, dx: number, holdMs = 0) {
 }
 
 async function setup(page: Page) {
-  await page.goto('login');
-  await page.getByRole('button', { name: 'Continuar como visitante' }).click();
-  await expect(page).toHaveURL(HOME);
+  await member(page, 'GES');
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
   await page.getByTestId('setup-exams').getByRole('button', { name: 'Confirmar' }).click();
   await page.getByTestId('setup-start').getByRole('button', { name: 'Confirmar' }).click();

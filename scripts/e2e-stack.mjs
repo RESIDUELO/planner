@@ -26,6 +26,16 @@ const catalogSteps = [
 ];
 await c.query(`insert into residency_catalog (name, city, fee, specialties, steps) values ('HC Botucatu', 'Botucatu', 450, $1, $2)`,
   [JSON.stringify([{ name: 'Pediatria', vacancies: 6, cutoff: '' }]), JSON.stringify(catalogSteps)]);
+// Códigos de acesso para as contas criadas nos testes (tests/e2e/access.ts)
+await c.query(`insert into access_tokens (code, note)
+  select 'E2E' || g || lpad(n::text, 4, '0'), 'e2e' from unnest(array['APP', 'GES', 'VIE']) g, generate_series(1, 100) n`);
+// Administração (gera códigos na tela de Configurações)
+const signup = await fetch(`${sb.url}/auth/v1/signup`, {
+  method: 'POST', headers: { apikey: sb.anonKey, 'content-type': 'application/json' },
+  body: JSON.stringify({ email: 'admin@e2e.test', password: 'senha-admin-123', data: { name: 'Administração' } }),
+});
+if (!signup.ok) throw new Error(`cadastro do admin E2E: ${signup.status} ${await signup.text()}`);
+await c.query(`select public.make_admin('admin@e2e.test')`);
 await c.end();
 console.log(`E2E pronto em ${sb.url}/planner/`);
 process.on('SIGTERM', async () => { await sb.stop(); process.exit(0); });

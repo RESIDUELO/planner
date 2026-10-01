@@ -79,13 +79,19 @@ const credentials = z.object({
   password: z.string().min(8, 'A senha precisa ter pelo menos 8 caracteres.').max(200),
 });
 const registration = credentials.extend({ name: z.string().trim().min(2, 'Informe seu nome.').max(120) });
+const accessCode = z.string().trim().min(1, 'Informe o código de acesso.').max(64);
+
+/** Usa o código de acesso (a checagem e o limite de tentativas ficam no banco). */
+async function redeem(ctx: Ctx, code: string) {
+  const r = await rpc<{ ok: boolean; error?: string }>(ctx, 'redeem_access_token', { p_code: code });
+  if (!r.ok) throw badRequest(r.error ?? 'Código inválido.');
+}
 
 function authError(e: any): ApiError {
   const msg = String(e?.message ?? '');
   if (/invalid login credentials/i.test(msg)) return new ApiError(401, 'E-mail ou senha incorretos.');
   if (/email not confirmed/i.test(msg)) return new ApiError(401, 'Confirme seu e-mail (veja a mensagem que enviamos) antes de entrar.');
   if (/already registered|already been registered|exists/i.test(msg)) return new ApiError(409, 'Este e-mail já está cadastrado.');
-  if (/anonymous sign-ins are disabled/i.test(msg)) return new ApiError(400, 'O modo visitante não está habilitado no Supabase (Authentication → Sign In / Providers → Allow anonymous sign-ins).');
   if (/rate limit/i.test(msg)) return new ApiError(429, 'Muitas tentativas. Aguarde alguns minutos.');
   if (/password/i.test(msg)) return new ApiError(400, msg);
   return new ApiError(e?.status ?? 400, msg || 'Falha na autenticação.');
@@ -96,6 +102,10 @@ route('GET', '/api/auth/me', async ({ ctx }) => {
   const u = data.session?.user;
   if (!u) return { user: null };
   const p = await profileOf(ctx, u.id);
+  if (p && !p.active && !u.is_anonymous && (await rpc<string>(ctx, 'my_access')) === 'awaiting_token') {
+    // Conta criada, falta o código de acesso: a sessão continua para a pessoa digitá-lo
+    return { user: null, awaitingToken: { email: u.email ?? null, name: p.name } };
+  }
   if (!p || !p.active) {
     await ctx.sb.auth.signOut();
     return { user: null, blocked: !!p && !p.active };
@@ -104,11 +114,20 @@ route('GET', '/api/auth/me', async ({ ctx }) => {
 });
 
 route('POST', '/api/auth/register', async ({ ctx, body }) => {
-  const b = registration.parse(body);
+  const b = registration.extend({ code: accessCode }).parse(body);
   const { data, error } = await ctx.sb.auth.signUp({ email: b.email, password: b.password, options: { data: { name: b.name } } });
   if (error) throw authError(error);
   if (data.user && data.user.identities?.length === 0) throw new ApiError(409, 'Este e-mail já está cadastrado.');
-  return { ok: true, needsConfirmation: !data.session };
+  // Com confirmação de e-mail ligada não há sessão ainda: o código é pedido no primeiro login
+  if (!data.session) return { ok: true, needsConfirmation: true };
+  await redeem(ctx, b.code);
+  return { ok: true, needsConfirmation: false };
+});
+
+route('POST', '/api/auth/redeem', async ({ ctx, body }) => {
+  await currentUserId(ctx);
+  await redeem(ctx, z.object({ code: accessCode }).parse(body).code);
+  return { ok: true };
 });
 
 route('POST', '/api/auth/login', async ({ ctx, body }) => {
@@ -116,23 +135,6 @@ route('POST', '/api/auth/login', async ({ ctx, body }) => {
   const { error } = await ctx.sb.auth.signInWithPassword({ email: b.email, password: b.password });
   if (error) throw authError(error);
   return { ok: true };
-});
-
-route('POST', '/api/auth/guest', async ({ ctx }) => {
-  const { error } = await ctx.sb.auth.signInAnonymously();
-  if (error) throw authError(error);
-  return { ok: true };
-});
-
-route('POST', '/api/auth/upgrade', async ({ ctx, body }) => {
-  const b = registration.parse(body);
-  const { data } = await ctx.sb.auth.getSession();
-  if (!data.session?.user.is_anonymous) throw badRequest('Sua conta já está registrada.');
-  const { data: upd, error } = await ctx.sb.auth.updateUser({ email: b.email, password: b.password, data: { name: b.name } });
-  if (error) throw authError(error);
-  await ctx.sb.from('user_profiles').update({ name: b.name }).eq('user_id', data.session.user.id);
-  await ctx.sb.auth.refreshSession();
-  return { ok: true, needsConfirmation: !!upd.user?.new_email };
 });
 
 route('POST', '/api/auth/logout', async ({ ctx }) => {
@@ -534,4 +536,17 @@ route('GET', '/api/areas', async ({ ctx }) => {
   await currentUserId(ctx);
   const rows = await q<any[]>(ctx.sb.from('medical_areas').select('id, name, slug, sort_order').is('parent_id', null).eq('active', true).order('sort_order').order('name'));
   return rows.map((r) => ({ id: r.id, name: r.name, other: r.slug === 'outros' }));
+});
+
+// ============================================================================
+// Códigos de acesso (só administradores; o banco confere)
+// ============================================================================
+route('GET', '/api/admin/access-tokens', async ({ ctx }) => rpc(ctx, 'admin_access_tokens'));
+route('POST', '/api/admin/access-tokens', async ({ ctx, body }) => {
+  const b = z.object({ count: z.number().int().min(1).max(100), note: z.string().trim().max(200).default('') }).parse(body);
+  return rpc<string[]>(ctx, 'admin_create_access_tokens', { p_count: b.count, p_note: b.note });
+});
+route('POST', '/api/admin/access-tokens/:id/revoke', async ({ ctx, params }) => {
+  await rpc(ctx, 'admin_revoke_access_token', { p_id: uuid.parse(params.id) });
+  return { ok: true };
 });
