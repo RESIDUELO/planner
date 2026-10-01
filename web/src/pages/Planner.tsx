@@ -439,7 +439,7 @@ function PlannerView({ data, onReconfigure }: { data: any; onReconfigure: () => 
   );
 }
 
-/** Calendário do mês (igual ao da Agenda): escolhe o dia e recebe aulas, revisões e assuntos arrastados. */
+/** Calendário do mês: escolhe o dia e recebe aulas, revisões e assuntos arrastados. */
 function PlannerCalendar({ dnd, picked, onPick }: { dnd: DnD; picked: string; onPick: (d: string) => void }) {
   const [month, setMonth] = useState(monthStart(picked));
   useEffect(() => setMonth(monthStart(picked)), [picked]);

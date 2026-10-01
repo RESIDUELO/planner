@@ -95,7 +95,7 @@ export function ResidenciesPage() {
             <div className="py-10">
               <p className="font-display text-[26px] italic">Nenhuma residência ainda.</p>
               <p className="mt-2 max-w-md text-[15px] text-ink-2">
-                Escolha as residências em que você vai se inscrever: as datas de cada etapa já vêm preenchidas, vão para a Agenda, e o prazo mais próximo aparece no Planner.
+                Escolha as residências em que você vai se inscrever: as datas de cada etapa já vêm preenchidas e aparecem no Planner.
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
                 <Button onClick={pick}>Escolher residências</Button>
@@ -335,7 +335,7 @@ function VisibleStepsSheet({ count, onClose }: { count: number; onClose: () => v
       <Button onClick={confirm} loading={save.isPending} data-testid="steps-save">Salvar</Button>
     </>}>
       <p className="-mt-3 mb-6 text-[15px] text-ink-2">
-        Desligue as etapas que você não quer ver. Elas saem da Agenda, dos prazos e do Planner, em todas as residências{count ? ' da sua lista' : ''} e nas que você escolher depois.
+        Desligue as etapas que você não quer ver. Elas saem dos prazos e do Planner, em todas as residências{count ? ' da sua lista' : ''} e nas que você escolher depois.
       </p>
       {q.isLoading ? <Spinner /> : (
         <ul className="divide-y divide-line border-y border-line">
