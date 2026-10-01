@@ -1,4 +1,4 @@
-/** Peças das Residências usadas também na Agenda e no Planner. */
+/** Peças das Residências usadas também no Planner. */
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { shortDate } from '../lib/format';

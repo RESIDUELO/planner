@@ -33,10 +33,10 @@ test('workspace cabe na viewport em várias alturas, só Assuntos e dias rolam',
     await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeLessThan(70);
     await expect.poll(async () => (await page.locator('section[aria-label="Semana"]').first().boundingBox())!.width).toBeGreaterThan(wideBefore + 100);
     // Só ícones, clicáveis, com o nome ao passar o mouse
-    await sidebar.getByRole('link', { name: 'Agenda' }).hover();
-    await expect(sidebar.getByText('Agenda', { exact: true }).last()).toBeVisible();
-    await sidebar.getByRole('link', { name: 'Agenda' }).click();
-    await expect(page).toHaveURL(/agenda/);
+    await sidebar.getByRole('link', { name: 'Residências' }).hover();
+    await expect(sidebar.getByText('Residências', { exact: true }).last()).toBeVisible();
+    await sidebar.getByRole('link', { name: 'Residências' }).click();
+    await expect(page).toHaveURL(/residencias/);
     await sidebar.getByRole('link', { name: 'Planner' }).click();
     await sidebar.getByRole('button', { name: 'Perfil' }).click();
     for (const item of ['Meu perfil', 'Provas', 'Revisões', 'Configurações', 'Sair']) await expect(page.getByRole('menuitem', { name: item })).toBeVisible();

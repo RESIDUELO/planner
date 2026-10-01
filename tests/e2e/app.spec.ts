@@ -356,7 +356,7 @@ test('TESTE 2 — visitante escolhe prova e usa o sistema', async ({ page }) => 
   await expect(page.getByLabel(/Selecionar FAMERP/)).not.toBeChecked();
 });
 
-test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Planner tem Dia | Semana', async ({ page }) => {
+test('Planner tem Dia | Semana; a aba Agenda saiu do site', async ({ page }) => {
   await page.goto('login');
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
   await expect(page).toHaveURL(HOME);
@@ -364,36 +364,9 @@ test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Pl
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
   await finishSetup(page);
   await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
-
-  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
-  await expect(page).toHaveURL(/\/agenda$/);
-  await page.getByTestId('add-day-task').click();
-  await page.keyboard.type('Enviar documentação da residência');
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Escape');
-  await page.getByTestId('add-general').click();
-  await page.keyboard.type('Comprar jaleco novo');
-  await page.keyboard.press('Enter');
-  const row = page.getByRole('group', { name: 'Tarefas do dia' }).getByTestId('agenda-task');
-  await expect(row).toHaveCount(1);
-  await expect(page.getByRole('region', { name: 'Tarefas a fazer' }).getByTestId('agenda-task')).toHaveCount(1);
-
-  // Sem a opção, não aparece no Planner
-  await page.getByRole('link', { name: 'Planner', exact: true }).click();
-  await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
-  await expect(page.getByTestId('planner-agenda')).toHaveCount(0);
-
-  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
-  await row.getByRole('button', { name: 'Enviar documentação da residência' }).click();
-  await page.locator('label', { hasText: 'Mostrar no Planner' }).click();
-  await page.getByRole('button', { name: 'Salvar' }).click();
-
-  await page.getByRole('link', { name: 'Planner', exact: true }).click();
-  const inPlanner = page.getByTestId(`day-${inDays(0)}`).getByTestId('planner-agenda');
-  await expect(inPlanner).toContainText('Enviar documentação da residência');
-  await expect(page.getByTestId(`day-${inDays(0)}`).getByTestId('task-name')).not.toContainText(['Enviar documentação da residência']);
-  await inPlanner.getByRole('checkbox').click();
-  await expect(inPlanner.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('link', { name: 'Agenda', exact: true })).toHaveCount(0);
+  await page.goto('agenda');
+  await expect(page).toHaveURL(HOME);
 
   // Dia | Semana
   await page.getByRole('tab', { name: 'Dia' }).click();
@@ -404,9 +377,6 @@ test('Agenda — tarefa com "Mostrar no Planner" é a mesma nos dois lugares; Pl
   await expect(page.getByTestId(`day-${inDays(0)}`)).toBeVisible();
   await page.getByRole('tab', { name: 'Semana' }).click();
   await expect(page.getByTestId(/^day-/)).toHaveCount(7);
-
-  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
-  await expect(row.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true');
 });
 
 test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no mesmo dia', async ({ page }) => {
@@ -462,7 +432,7 @@ test('Planner sem prova: montar à mão com "+", assunto próprio e da prova no 
   await expect(day2.getByTestId('task-name').filter({ hasText: 'ECG' })).toHaveCount(0);
 });
 
-test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no fim', async ({ page }) => {
+test('Residências: cadastro, selo, prazos no Planner, "não vou" no fim', async ({ page }) => {
   await page.goto('login');
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
   await expect(page).toHaveURL(HOME);
@@ -514,15 +484,7 @@ test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no
   await expect(page.getByTestId('residency-ENARE')).toContainText('1 instituição');
   await expect(page.locator('article[data-testid^="residency-"]')).toHaveCount(2);
 
-  // Agenda: marcador no dia e a lista do dia; Próximos prazos ao lado
-  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Próximos prazos' })).toContainText('FAMEMA - fim da inscrição');
-  const cal = page.getByRole('region', { name: 'Calendário' });
   const end = inDays(3);
-  if (!(await cal.locator(`[data-date="${end}"]`).count())) await cal.getByRole('button', { name: 'Próximo mês' }).click();
-  await expect(cal.locator(`[data-date="${end}"] [data-mark="residency-inscricao"]`)).toHaveCount(1);
-  await cal.locator(`[data-date="${end}"]`).click();
-  await expect(page.getByRole('group', { name: 'Residências do dia' })).toContainText('FAMEMA - fim da inscrição');
 
   // Planner: linha discreta com o prazo mais próximo; clicar leva à residência
   await page.getByRole('link', { name: 'Planner', exact: true }).click();

@@ -99,22 +99,4 @@ test('celular: toque longo, deslizar e Desfazer; semana por gesto; Personalizar 
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'lavanda');
   await expect(page.getByTestId('col-reviews')).toHaveCount(0);
-
-  // Agenda: o mesmo padrão (direita conclui, esquerda exclui com Desfazer)
-  await page.getByRole('link', { name: 'Agenda', exact: true }).click();
-  await page.getByTestId('add-day-task').click();
-  await page.keyboard.type('Comprar livro de GO');
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Escape');
-  const task = page.getByTestId('agenda-task').filter({ hasText: 'Comprar livro de GO' });
-  await expect(task).toHaveCount(1);
-  await touch(task.getByTestId('agenda-title'), 160);
-  await expect(toast).toContainText('✓ Comprar livro de GO concluída');
-  await expect(task.getByRole('checkbox', { name: 'Concluir Comprar livro de GO' })).toHaveAttribute('aria-checked', 'true');
-  await touch(task.getByTestId('agenda-title'), -140);
-  await task.getByRole('button', { name: 'Excluir' }).click();
-  await expect(toast).toContainText('Tarefa excluída');
-  await expect(task).toHaveCount(0);
-  await toast.getByRole('button', { name: 'Desfazer' }).click();
-  await expect(page.getByTestId('agenda-task').filter({ hasText: 'Comprar livro de GO' })).toHaveCount(1);
 });
