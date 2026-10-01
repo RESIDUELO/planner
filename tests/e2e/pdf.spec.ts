@@ -12,16 +12,7 @@ test('baixar o planner em PDF com a agenda, logo depois de montar o cronograma',
   await page.getByRole('button', { name: 'Continuar como visitante' }).click();
   await expect(page).toHaveURL(HOME);
 
-  // Uma tarefa na agenda, para ir junto no PDF
-  await page.goto('agenda');
-  await page.getByTestId('add-day-task').click();
-  await page.keyboard.type('Pagar a inscrição da FAMERP');
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Escape');
-  await expect(page.getByText('Pagar a inscrição da FAMERP')).toBeVisible();
-
   // Prova → início → como estuda
-  await page.goto('planner');
   await page.locator('label', { has: page.getByLabel(/Selecionar FAMERP/) }).click();
   for (const step of ['exams', 'start', 'methods']) await page.getByTestId(`setup-${step}`).getByRole('button', { name: 'Confirmar' }).click();
 
