@@ -1,0 +1,4 @@
+{
+  "_comment": "Catálogo de residências (cadastrado por aqui). npm run data:sql gera supabase/data/residencias_catalogo.sql; rode-o no SQL Editor depois de supabase/parts/17_residency_catalog.sql. Rodar de novo atualiza as datas (para quem já escolheu, aparecem sozinhas). dates: chave da etapa → 'AAAA-MM-DD', ou [início, fim] em reducao e inscricao; etapa sem data fica 'a divulgar'. Etapas: edital, reducao, inscricao, boleto, local, prova, gabarito, recurso, resultado1, fase2, final. skip: etapas que esta residência não tem. extra: etapas a mais [{label, type: inscricao|prova|resultado, date}]. exam: id de data/exams.json para ligar à prova (a data da prova fica a mesma nos dois lugares).",
+  "residencies": []
+}

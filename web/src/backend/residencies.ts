@@ -4,7 +4,9 @@
  * aí a data da prova é uma só: a de Provas (a oficial, quando cadastrada).
  */
 import { z } from 'zod';
-import { catalogDated, defaultSteps, RANGE_KEYS, withCatalog, type CatalogEntry, type Residency, type Step } from '../../../shared/residency';
+import {
+  applyHidden, catalogDates, DEFAULT_STEPS, defaultSteps, RANGE_KEYS, withCatalog, type CatalogEntry, type Residency, type Step, type StepKey,
+} from '../../../shared/residency';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
 
 const BASE_COLS = 'id, name, city, edital_url, specialties, institutions, fee, reduction_requested, reduction_granted, paid, decision, enrolled, notes, steps, exam_edition_id, created_at';
@@ -46,6 +48,8 @@ const step = z.object({
   date: isoDate.nullable(),
   end: isoDate.nullable(),
   done: z.boolean(),
+  hidden: z.boolean().optional(),
+  own: z.boolean().optional(),
 });
 const fields = {
   name: text(120).min(1, 'Escreva o nome da residência.'),
@@ -118,15 +122,15 @@ async function examDates(ctx: Ctx, uid: string, ids: string[]) {
 
 type Linked = Residency & {
   exam: { institution: string; name: string; official: boolean } | null;
-  /** Do catálogo: as etapas com data cadastrada lá (fixas para a pessoa). */
-  catalog: { id: string; dated: string[] } | null;
+  /** Do catálogo: as datas oficiais de cada etapa. */
+  catalog: { id: string; official: Record<string, { date: string | null; end: string | null }> } | null;
 };
 
 async function withExams(ctx: Ctx, uid: string, raw: Residency[]): Promise<Linked[]> {
   const cat = await catalogByIds(ctx, [...new Set(raw.map((r) => r.catalogId).filter(Boolean) as string[])]);
   const list = raw.map((r) => {
     const c = r.catalogId ? cat.get(r.catalogId) : undefined;
-    return c ? { ...withCatalog(r, c), catalog: { id: c.id, dated: catalogDated(c) } } : { ...r, catalog: null };
+    return c ? { ...withCatalog(r, c), catalog: { id: c.id, official: catalogDates(c) } } : { ...r, catalog: null };
   });
   const dates = await examDates(ctx, uid, [...new Set(list.map((r) => r.examEditionId).filter(Boolean) as string[])]);
   return list.map((r) => {
@@ -278,6 +282,7 @@ export async function listCatalog(ctx: Ctx) {
 export async function addFromCatalog(ctx: Ctx, body: unknown) {
   const uid = await currentUserId(ctx);
   const { ids } = z.object({ ids: z.array(z.string().uuid()).min(1, 'Escolha pelo menos uma residência.').max(100) }).parse(body);
+  const hidden = await hiddenPref(ctx, uid);
   if (!(await cols(ctx)).includes('catalog_id')) {
     throw new ApiError(503, 'O banco do site está desatualizado: rode no Supabase o arquivo supabase/parts/17_residency_catalog.sql.');
   }
@@ -289,7 +294,7 @@ export async function addFromCatalog(ctx: Ctx, body: unknown) {
     if (!c || have.has(id)) continue;
     const r = await createResidency(ctx, {
       catalogId: c.id, name: c.name, city: c.city, editalUrl: c.editalUrl, specialties: c.specialties, institutions: c.institutions,
-      fee: c.fee, steps: c.steps, examEditionId: c.examEditionId, decision: 'yes',
+      fee: c.fee, steps: applyHidden(c.steps, hidden), examEditionId: c.examEditionId, decision: 'yes',
     });
     added.push(r.id);
   }
@@ -344,4 +349,53 @@ export async function deleteCatalogEntry(ctx: Ctx, id: string) {
   await requireAdmin(ctx);
   await q(ctx.sb.from('residency_catalog').delete().eq('id', id));
   return { ok: true };
+}
+
+// ============================================================================
+// Datas que a pessoa quer ver (ex.: sem isenção) e "resetar todas"
+// ============================================================================
+const STEP_KEYS = DEFAULT_STEPS.map((s) => s.key);
+
+/** Etapas que a pessoa prefere não ver (vale para as residências que ela escolher depois). */
+async function hiddenPref(ctx: Ctx, uid: string): Promise<StepKey[]> {
+  const { data, error } = await ctx.sb.from('user_profiles').select('residency_hidden_steps').eq('user_id', uid).maybeSingle();
+  if (error) return []; // coluna ainda não criada (17_residency_catalog.sql)
+  return ((data as any)?.residency_hidden_steps ?? []).filter((k: any) => STEP_KEYS.includes(k));
+}
+
+export async function getVisibleSteps(ctx: Ctx) {
+  const uid = await currentUserId(ctx);
+  return { hidden: await hiddenPref(ctx, uid) };
+}
+
+/** Salva a preferência e esconde/mostra essas etapas em todas as residências da lista. */
+export async function setVisibleSteps(ctx: Ctx, body: unknown) {
+  const uid = await currentUserId(ctx);
+  const b = z.object({ hidden: z.array(z.enum(STEP_KEYS as [StepKey, ...StepKey[]])).max(20) }).parse(body);
+  // Só muda o que mudou na preferência: etapa escondida numa residência só continua escondida
+  const before = await hiddenPref(ctx, uid);
+  const hide = b.hidden.filter((k) => !before.includes(k));
+  const show = before.filter((k) => !b.hidden.includes(k));
+  await ctx.sb.from('user_profiles').update({ residency_hidden_steps: b.hidden }).eq('user_id', uid);
+  const rows = await selectAll((a, z2) => ctx.sb.from('residencies').select('*').eq('user_id', uid).range(a, z2));
+  const entries = await catalogByIds(ctx, [...new Set((rows as any[]).map((r) => r.catalog_id).filter(Boolean))]);
+  for (const r of rows as any[]) {
+    let steps: Step[] = Array.isArray(r.steps) && r.steps.length ? r.steps : defaultSteps();
+    // Etapa do catálogo que ainda não está guardada na residência dela: entra para guardar o "escondida"
+    const c = r.catalog_id ? entries.get(r.catalog_id) : undefined;
+    if (c) {
+      const have = new Set(steps.map((x) => x.id));
+      steps = [...steps, ...c.steps.filter((x) => !have.has(x.id)).map((x) => ({ ...x, date: null, end: null }))];
+    }
+    await q(ctx.sb.from('residencies').update({ steps: applyHidden(steps, hide, show) }).eq('id', r.id).eq('user_id', uid));
+  }
+  return { ok: true, hidden: b.hidden };
+}
+
+/** Tira todas as residências da lista (para escolher de novo). */
+export async function deleteAllResidencies(ctx: Ctx) {
+  const uid = await currentUserId(ctx);
+  const rows = await q<any[]>(ctx.sb.from('residencies').select('id').eq('user_id', uid));
+  await q(ctx.sb.from('residencies').delete().eq('user_id', uid));
+  return { ok: true, removed: rows.length };
 }

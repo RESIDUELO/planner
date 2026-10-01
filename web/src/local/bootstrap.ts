@@ -37,7 +37,9 @@ create or replace function auth.role() returns text language sql stable as
 
 /** Ordem: schema, provas e, por último, o cronograma (que aponta para as provas). */
 export function orderDataFiles(names: string[]) {
-  return [...names].sort((a, b) => Number(a.startsWith('cronograma')) - Number(b.startsWith('cronograma')) || a.localeCompare(b));
+  // Cronograma e catálogo de residências usam as provas: vão por último
+  const last = (n: string) => Number(n.startsWith('cronograma') || n.startsWith('residencias'));
+  return [...names].sort((a, b) => last(a) - last(b) || a.localeCompare(b));
 }
 
 /** Cria tudo num banco vazio. `data` já na ordem de orderDataFiles. */

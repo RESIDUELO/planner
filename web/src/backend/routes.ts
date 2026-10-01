@@ -14,7 +14,8 @@ import { calendarView, dashboardView, performanceView, todayView } from './agend
 import { generateFromTemplate, listTemplates } from './templates';
 import { agendaView, createTask, deleteTask, plannerTasks, saveNote, updateTask } from './personal';
 import {
-  addFromCatalog, createCatalogEntry, createResidency, deleteCatalogEntry, deleteResidency, listCatalog, listResidencies, updateCatalogEntry, updateResidency,
+  addFromCatalog, createCatalogEntry, createResidency, deleteAllResidencies, deleteCatalogEntry, deleteResidency, getVisibleSteps, listCatalog, listResidencies,
+  setVisibleSteps, updateCatalogEntry, updateResidency,
 } from './residencies';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
@@ -506,6 +507,9 @@ route('POST', '/api/planner/days/:date/subjects', async ({ ctx, params, body }) 
 // "Continuar sem escolher uma prova": planner vazio, sem prova (os assuntos entram pelo "+" de cada dia)
 // Residências
 route('GET', '/api/residencies', async ({ ctx }) => listResidencies(ctx));
+route('DELETE', '/api/residencies', async ({ ctx }) => deleteAllResidencies(ctx));
+route('GET', '/api/residencies/hidden-steps', async ({ ctx }) => getVisibleSteps(ctx));
+route('PUT', '/api/residencies/hidden-steps', async ({ ctx, body }) => setVisibleSteps(ctx, body));
 route('POST', '/api/residencies', async ({ ctx, body }) => createResidency(ctx, body));
 route('PATCH', '/api/residencies/:id', async ({ ctx, params, body }) => updateResidency(ctx, uuid.parse(params.id), body));
 route('DELETE', '/api/residencies/:id', async ({ ctx, params }) => deleteResidency(ctx, uuid.parse(params.id)));

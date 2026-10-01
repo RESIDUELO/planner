@@ -18,6 +18,10 @@ export interface Step {
   /** Fim do período (inscrição, pedido de redução). */
   end: ISODate | null;
   done: boolean;
+  /** A pessoa não quer ver esta etapa (ex.: não vai pedir isenção): sai da Agenda, dos prazos e do Planner. */
+  hidden?: boolean;
+  /** Residência do catálogo: a pessoa mudou a data desta etapa e vale a dela. */
+  own?: boolean;
 }
 
 export interface Specialty { name: string; vacancies: number | null; cutoff: string }
@@ -72,7 +76,8 @@ export function withCatalog<T extends Residency>(r: T, c: CatalogEntry): T {
   const ids = new Set(c.steps.map((s) => s.id));
   const steps: Step[] = c.steps.map((s) => {
     const u = mine.get(s.id);
-    return { ...s, date: s.date ?? u?.date ?? null, end: s.end ?? u?.end ?? null, done: u?.done ?? false };
+    const dates = u?.own ? { date: u.date, end: u.end, own: true } : { date: s.date ?? u?.date ?? null, end: s.end ?? u?.end ?? null };
+    return { ...s, ...dates, done: u?.done ?? false, ...(u?.hidden ? { hidden: true } : {}) };
   });
   // Etapas que ela criou entram depois das do mesmo tipo
   for (const u of r.steps) {
@@ -86,8 +91,14 @@ export function withCatalog<T extends Residency>(r: T, c: CatalogEntry): T {
   };
 }
 
-/** Etapas com data cadastrada no catálogo (a pessoa não muda). */
-export const catalogDated = (c: Pick<CatalogEntry, 'steps'>) => c.steps.filter((s) => s.date || s.end).map((s) => s.id);
+/** Datas oficiais de cada etapa do catálogo (para "voltar à data oficial"). */
+export const catalogDates = (c: Pick<CatalogEntry, 'steps'>): Record<string, { date: ISODate | null; end: ISODate | null }> =>
+  Object.fromEntries(c.steps.map((s) => [s.id, { date: s.date, end: s.end }]));
+
+/** Esconde as etapas de `hide` e mostra as de `show`; as demais ficam como a pessoa deixou. */
+export function applyHidden(steps: Step[], hide: StepKey[], show: StepKey[] = []): Step[] {
+  return steps.map((s) => (hide.includes(s.key) ? { ...s, hidden: true } : show.includes(s.key) ? { ...s, hidden: false } : s));
+}
 
 export const STEP_TYPES: Record<StepType, string> = { inscricao: 'Inscrição', prova: 'Prova', resultado: 'Resultado' };
 
@@ -142,6 +153,7 @@ function eventLabel(s: Step, edge: 'start' | 'end' | null) {
 export function residencyEvents(r: Pick<Residency, 'id' | 'name' | 'steps'>): ResidencyEvent[] {
   const out: ResidencyEvent[] = [];
   for (const s of r.steps) {
+    if (s.hidden) continue;
     const base = { residencyId: r.id, residency: r.name, stepId: s.id, key: s.key, type: s.type, done: s.done };
     const range = RANGE_KEYS.includes(s.key);
     if (s.date) out.push({ ...base, date: s.date, edge: range ? 'start' : null, label: eventLabel(s, range ? 'start' : null) });

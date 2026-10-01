@@ -4,11 +4,12 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import { nextEvent, residencyEvents, type CatalogEntry, type Residency, type ResidencyEvent, type StatusTone, type StepType } from '../../../shared/residency';
+import { nextEvent, residencyEvents, type CatalogEntry, type Residency, type ResidencyEvent, type StatusTone, type StepKey, type StepType } from '../../../shared/residency';
 
 export type ResidencyView = Residency & {
   exam: { institution: string; name: string; official: boolean } | null;
-  catalog: { id: string; dated: string[] } | null;
+  /** Do catálogo: as datas oficiais de cada etapa. */
+  catalog: { id: string; official: Record<string, { date: string | null; end: string | null }> } | null;
 };
 export type ResidencyPatch = Partial<Omit<Residency, 'id' | 'createdAt'>>;
 
@@ -60,7 +61,38 @@ export function useResidencyActions() {
     },
     onSettled: settle,
   });
-  return { create, patch, remove };
+  /** Volta uma residência excluída (o "Desfazer"), com tudo o que ela tinha. */
+  const restore = useMutation({
+    mutationFn: async (list: ResidencyView[]) => {
+      for (const r of list) {
+        const { id: _id, createdAt: _c, exam: _e, catalog: _k, ...body } = r;
+        await api.post('/api/residencies', body);
+      }
+    },
+    onSettled: settle,
+  });
+  const removeAll = useMutation({
+    mutationFn: () => api.del<{ ok: boolean; removed: number }>('/api/residencies'),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ['residencies'] });
+      set(() => []);
+    },
+    onSettled: settle,
+  });
+  return { create, patch, remove, restore, removeAll };
+}
+
+/** Datas que a pessoa não quer ver (ex.: pedido de redução). */
+export const useHiddenSteps = () =>
+  useQuery({ queryKey: ['residency-hidden'], queryFn: () => api.get<{ hidden: StepKey[] }>('/api/residencies/hidden-steps'), retry: false, staleTime: 60_000 });
+
+export function useSetHiddenSteps() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (hidden: StepKey[]) => api.put<{ ok: boolean; hidden: StepKey[] }>('/api/residencies/hidden-steps', { hidden }),
+    onSuccess: (r) => qc.setQueryData(['residency-hidden'], { hidden: r.hidden }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['residencies'] }),
+  });
 }
 
 // ---------------------------------------------------------------- Catálogo

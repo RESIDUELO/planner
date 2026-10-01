@@ -1857,5 +1857,9 @@ grant select, insert, update, delete on public.residency_catalog to authenticate
 alter table public.residencies add column if not exists catalog_id uuid references public.residency_catalog(id) on delete set null;
 create unique index if not exists residencies_user_catalog_idx on public.residencies (user_id, catalog_id) where catalog_id is not null;
 
+-- Datas que a pessoa não quer ver (ex.: pedido de isenção); vale para as residências que ela escolher
+alter table public.user_profiles add column if not exists residency_hidden_steps text[] not null default '{}';
+grant update (residency_hidden_steps) on public.user_profiles to authenticated;
+
 -- Conferência: deve mostrar 4 linhas
 select policyname, cmd from pg_policies where schemaname = 'public' and tablename = 'residency_catalog';

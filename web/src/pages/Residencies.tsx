@@ -16,13 +16,15 @@ import { useAuth } from '../lib/auth';
 import { IS_LOCAL } from '../lib/platform';
 import { toast } from '../lib/toast';
 import {
-  TONE_TINT, upcoming, useCatalog, useCatalogActions, useResidencies, useResidencyActions, type ResidencyPatch, type ResidencyView,
+  TONE_TINT, upcoming, useCatalog, useCatalogActions, useHiddenSteps, useResidencies, useResidencyActions, useSetHiddenSteps,
+  type ResidencyPatch, type ResidencyView,
 } from '../lib/residency';
 import { TypeDot, UpcomingList } from '../components/Residencies';
-import { Button, CheckSquare, Eyebrow, Field, Note, Segmented, Sheet, Spinner, SquareButton } from '../components/ui';
+import { ActionMenu, SwipeRow, type Anchor } from '../components/Gestures';
+import { Button, CheckSquare, Eyebrow, Field, Menu, Note, Segmented, Sheet, Spinner, SquareButton, Toggle } from '../components/ui';
 import {
   DEFAULT_STEPS, defaultSteps, nextEvent, RANGE_KEYS, residencyStatus, sortResidencies, stepOf, STEP_TYPES,
-  type CatalogEntry, type Institution, type Specialty, type Step, type StepType,
+  type CatalogEntry, type Institution, type Specialty, type Step, type StepKey, type StepType,
 } from '../../../shared/residency';
 
 export function ResidenciesPage() {
@@ -33,6 +35,24 @@ export function ResidenciesPage() {
   const desktop = useWide();
   const picking = params.has('escolher');
   const pick = () => setParams({ escolher: '1' }, { replace: true });
+  const [sheet, setSheet] = useState<'steps' | 'reset' | null>(null);
+  const [menu, setMenu] = useState<{ r: ResidencyView; anchor: Anchor } | null>(null);
+  const { remove, restore, removeAll } = useResidencyActions();
+  const drop = (r: ResidencyView) => {
+    remove.mutate(r.id);
+    toast(`${r.name} excluída`, { action: { label: 'Desfazer', onClick: () => restore.mutate([r]) } });
+  };
+  const resetAll = () => {
+    const before = q.data ?? [];
+    setSheet(null);
+    removeAll.mutate(undefined, {
+      onSuccess: () => {
+        toast('Todas as residências saíram da lista', { action: { label: 'Desfazer', onClick: () => restore.mutate(before) } });
+        pick();
+      },
+      onError: (e) => toast(errorMessage(e), { tone: 'negative' }),
+    });
+  };
   useEffect(() => {
     document.documentElement.classList.add('rp-fit');
     return () => document.documentElement.classList.remove('rp-fit');
@@ -63,6 +83,10 @@ export function ResidenciesPage() {
                 className="flex items-center gap-2 text-[14px] text-ink-2 transition hover:text-ink">
                 <Plus className="h-[18px] w-[18px]" strokeWidth={1.25} /><span className="hidden sm:inline">Nova residência</span>
               </button>
+              <Menu label="Mais opções das residências" items={[
+                { label: 'Datas que aparecem', onClick: () => setSheet('steps') },
+                { label: 'Resetar todas as residências', onClick: () => setSheet('reset'), destructive: true, hidden: list.length === 0 },
+              ]} />
             </div>
           </div>
         </div>
@@ -81,7 +105,16 @@ export function ResidenciesPage() {
               </div>
             </div>
           ) : (
-            list.map((r) => <ResidencyCard key={r.id} r={r} today={today} onOpen={() => setParams({ r: r.id }, { replace: true })} />)
+            <ul>
+              {list.map((r) => (
+                <SwipeRow key={r.id} gestures={{
+                  onMenu: (anchor) => setMenu({ r, anchor }),
+                  left: { label: 'Excluir', run: () => drop(r) },
+                }}>
+                  <ResidencyCard r={r} today={today} onOpen={() => setParams({ r: r.id }, { replace: true })} />
+                </SwipeRow>
+              ))}
+            </ul>
           )}
         </div>
       </section>
@@ -99,7 +132,25 @@ export function ResidenciesPage() {
         </div>
       </aside>
 
-      {picking && <CatalogPicker mine={q.data ?? []} today={today} onClose={close} onManual={() => { close(); setCreating(true); }} />}
+      {picking && <CatalogPicker onSteps={() => setSheet('steps')} mine={q.data ?? []} today={today} onClose={close} onManual={() => { close(); setCreating(true); }} />}
+      {menu && (
+        <ActionMenu title={menu.r.name} anchor={menu.anchor} onClose={() => setMenu(null)} items={[
+          { label: 'Abrir e editar datas', onClick: () => setParams({ r: menu.r.id }, { replace: true }) },
+          { label: 'Excluir da minha lista', onClick: () => drop(menu.r), destructive: true, hint: 'dá para desfazer' },
+        ]} />
+      )}
+      {sheet === 'steps' && <VisibleStepsSheet count={list.length} onClose={() => setSheet(null)} />}
+      {sheet === 'reset' && (
+        <Sheet open onClose={() => setSheet(null)} title="Resetar todas as residências?">
+          <p className="text-[15px] text-ink-2">
+            {list.length === 1 ? 'A residência da sua lista sai' : `As ${list.length} residências da sua lista saem`}, inclusive as cadastradas à mão, com o que você marcou nelas. Depois você escolhe de novo.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Button variant="destructive" onClick={resetAll} data-testid="reset-all">Resetar todas</Button>
+            <Button variant="plain" onClick={() => setSheet(null)}>Manter como está</Button>
+          </div>
+        </Sheet>
+      )}
       {creating && <ResidencyEditor onClose={() => setCreating(false)} />}
       {open && <ResidencyEditor key={open.id} residency={open} onClose={close} />}
     </div>
@@ -169,8 +220,10 @@ function ResidencyCard({ r, today, onOpen }: { r: ResidencyView; today: string; 
 const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 /** Escolher residências do catálogo: marcar e adicionar; as datas já vêm prontas. */
-function CatalogPicker({ mine, today, onClose, onManual }: { mine: ResidencyView[]; today: string; onClose: () => void; onManual: () => void }) {
+function CatalogPicker({ mine, today, onClose, onManual, onSteps }: { mine: ResidencyView[]; today: string; onClose: () => void; onManual: () => void; onSteps: () => void }) {
   const { user } = useAuth();
+  const hiddenQ = useHiddenSteps();
+  const hidden = hiddenQ.data?.hidden ?? [];
   const admin = user?.role === 'admin' && !IS_LOCAL;
   const cat = useCatalog();
   const { add } = useCatalogActions();
@@ -253,10 +306,49 @@ function CatalogPicker({ mine, today, onClose, onManual }: { mine: ResidencyView
             })}
             {shown.length === 0 && <li className="py-4 text-[15px] text-ink-3">Nada encontrado.</li>}
           </ul>
-          <button onClick={onManual} className="mt-5 text-[13px] text-ink-3 underline-offset-4 hover:text-ink hover:underline">Não achou? Cadastrar à mão</button>
+          <p className="mt-5 text-[13px] text-ink-3" data-testid="picker-steps">
+            Datas que aparecem: {hidden.length ? `todas, menos ${DEFAULT_STEPS.filter((x) => hidden.includes(x.key)).map((x) => x.label.toLowerCase()).join(', ')}` : 'todas'}.{' '}
+            <button onClick={onSteps} className="text-ink-2 underline underline-offset-4 hover:text-ink">Escolher</button>
+          </p>
+          <button onClick={onManual} className="mt-3 text-[13px] text-ink-3 underline-offset-4 hover:text-ink hover:underline">Não achou? Cadastrar à mão</button>
         </>
       )}
       {error && <Note tone="negative" className="mt-4">{error}</Note>}
+    </Sheet>
+  );
+}
+
+/** Quais datas aparecem (ex.: sem o pedido de isenção): vale para todas as residências da lista e as próximas. */
+function VisibleStepsSheet({ count, onClose }: { count: number; onClose: () => void }) {
+  const q = useHiddenSteps();
+  const save = useSetHiddenSteps();
+  const [hidden, setHidden] = useState<StepKey[] | null>(null);
+  const cur = hidden ?? q.data?.hidden ?? [];
+  const toggle = (k: StepKey, show: boolean) => setHidden(show ? cur.filter((x) => x !== k) : [...cur, k]);
+  const confirm = () => save.mutate(cur, {
+    onSuccess: () => { toast(count ? 'Datas atualizadas em todas as residências' : 'Preferência salva'); onClose(); },
+    onError: (e) => toast(errorMessage(e), { tone: 'negative' }),
+  });
+  return (
+    <Sheet open onClose={onClose} title="Datas que aparecem" footer={<>
+      <Button variant="plain" onClick={onClose}>Cancelar</Button>
+      <Button onClick={confirm} loading={save.isPending} data-testid="steps-save">Salvar</Button>
+    </>}>
+      <p className="-mt-3 mb-6 text-[15px] text-ink-2">
+        Desligue as etapas que você não quer ver. Elas saem da Agenda, dos prazos e do Planner, em todas as residências{count ? ' da sua lista' : ''} e nas que você escolher depois.
+      </p>
+      {q.isLoading ? <Spinner /> : (
+        <ul className="divide-y divide-line border-y border-line">
+          {DEFAULT_STEPS.map((x) => (
+            <li key={x.key} className="flex items-center gap-3 py-3">
+              <TypeDot type={x.type} />
+              <span className="min-w-0 flex-1 text-[15px]">{x.label}</span>
+              <Toggle label={`Mostrar ${x.label}`} checked={!cur.includes(x.key)} onChange={(v) => toggle(x.key, v)} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-4 text-[12px] text-ink-3">Em cada residência você ainda pode esconder ou mostrar uma etapa só (no X ao lado da data).</p>
     </Sheet>
   );
 }
@@ -357,7 +449,11 @@ function ResidencyEditor({ residency, entry, catalogMode, onClose }: { residency
   const current = catalogMode ? entry : residency;
   // Da pessoa, vindo do catálogo: o que está lá não se muda aqui
   const fixed = !catalogMode && !!residency?.catalog;
-  const fixedSteps = new Set(residency?.catalog?.dated ?? []);
+  // Datas oficiais (catálogo): a pessoa pode mudar; aí vale a dela, com "voltar à oficial"
+  const official = (fixed && residency?.catalog?.official) || {};
+  const setDates = (s: Step, p: Partial<Step>) => setStep(s.id, { ...p, ...(official[s.id] ? { own: true } : {}) });
+  const isOfficial = (s: Step) => { const o = official[s.id]; return !o || (o.date === s.date && o.end === s.end); };
+  const backToOfficial = (s: Step) => setStep(s.id, { date: official[s.id].date, end: official[s.id].end, own: false });
   const [error, setError] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const [newStep, setNewStep] = useState<{ label: string; type: StepType }>({ label: '', type: 'inscricao' });
@@ -435,7 +531,7 @@ function ResidencyEditor({ residency, entry, catalogMode, onClose }: { residency
           <input className="w-full border-b border-line bg-transparent pb-2 font-display text-[32px] leading-tight outline-none placeholder:text-ink-3 focus:border-ink read-only:border-transparent"
             aria-label="Nome da residência" placeholder={current ? 'Nome' : 'Nova residência'} autoFocus={!current} readOnly={fixed}
             value={d.name ?? ''} onChange={(e) => set({ name: e.target.value })} />
-          {fixed && <p className="text-[12px] text-ink-3" data-testid="from-catalog">Do catálogo: nome, edital, vagas, taxa e as datas já divulgadas vêm prontos e se atualizam sozinhos. O resto é seu.</p>}
+          {fixed && <p className="text-[12px] text-ink-3" data-testid="from-catalog">Do catálogo: nome, edital, vagas, taxa e datas vêm prontos e se atualizam sozinhos. Você pode mudar qualquer data (aí vale a sua) ou esconder as que não quer ver.</p>}
           <div className="grid gap-4 sm:grid-cols-[1fr_1.4fr]">
             <Field label="Cidade"><input className="field" value={d.city ?? ''} readOnly={fixed} onChange={(e) => set({ city: e.target.value })} /></Field>
             <Field label="Link do edital">
@@ -503,12 +599,12 @@ function ResidencyEditor({ residency, entry, catalogMode, onClose }: { residency
               <input className="field" type="number" min={0} step="0.01" placeholder="0,00" value={d.fee ?? ''} readOnly={fixed}
                 onChange={(e) => set({ fee: e.target.value === '' ? null : Number(e.target.value) })} />
             </Field>
-            {reducao && (
+            {reducao && !reducao.hidden && (
               <div>
                 <span className="mb-1.5 block text-[13px] text-ink-2">Período para pedir redução ou isenção</span>
                 <div className="flex min-h-[42px] flex-wrap items-center gap-2 text-[13px] text-ink-3">
-                  <DateInput label="Redução - início" value={reducao.date} onChange={(v) => setStep(reducao.id, { date: v })} disabled={fixedSteps.has(reducao.id)} />a
-                  <DateInput label="Redução - fim" value={reducao.end} onChange={(v) => setStep(reducao.id, { end: v })} disabled={fixedSteps.has(reducao.id)} />
+                  <DateInput label="Redução - início" value={reducao.date} onChange={(v) => setDates(reducao, { date: v })} />a
+                  <DateInput label="Redução - fim" value={reducao.end} onChange={(v) => setDates(reducao, { end: v })} />
                 </div>
               </div>
             )}
@@ -528,43 +624,62 @@ function ResidencyEditor({ residency, entry, catalogMode, onClose }: { residency
         <section>
           <Head>Linha do tempo</Head>
           <ol>
-            {d.steps.map((s) => {
+            {d.steps.filter((s) => !s.hidden).map((s) => {
               const range = RANGE_KEYS.includes(s.key);
-              const locked = (s.key === 'prova' && !!officialDate) || fixedSteps.has(s.id);
-              const fromCatalog = fixed && (fixedSteps.has(s.id) || s.key !== 'custom');
+              const locked = s.key === 'prova' && !!officialDate;
+              const fromCatalog = !!official[s.id];
+              // Etapa própria sai; etapa padrão ou do catálogo só fica escondida (dá para mostrar de novo)
+              const removable = catalogMode || (s.key === 'custom' && !fromCatalog);
               return (
                 <li key={s.id} data-testid="step" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line/70 py-2">
                   {!catalogMode && <SquareButton size="sm" on={s.done} onChange={(v) => setStep(s.id, { done: v })} label={`${s.label} - feito`} />}
                   <TypeDot type={s.type} />
                   {s.key === 'custom' && !fromCatalog
-                    ? <input className="min-w-0 flex-1 bg-transparent text-[15px] outline-none" value={s.label} aria-label="Nome da etapa" onChange={(e) => setStep(s.id, { label: e.target.value })} />
-                    : <span className={clsx('min-w-0 flex-1 text-[15px]', s.done && 'text-ink-3 line-through decoration-1')}>{s.label}</span>}
+                    ? <input className="min-w-[7rem] flex-1 bg-transparent text-[15px] outline-none" value={s.label} aria-label="Nome da etapa" onChange={(e) => setStep(s.id, { label: e.target.value })} />
+                    : <span className={clsx('min-w-[7rem] flex-1 text-[15px]', s.done && 'text-ink-3 line-through decoration-1')}>{s.label}</span>}
                   <span className="ml-auto flex items-center gap-1.5 text-[13px] text-ink-3">
                     {range ? (
                       <>
-                        <DateInput label={`${s.label} - início`} value={s.date} onChange={(v) => setStep(s.id, { date: v })} disabled={locked} />a
-                        <DateInput label={`${s.label} - fim`} value={s.end} onChange={(v) => setStep(s.id, { end: v })} disabled={locked} />
+                        <DateInput label={`${s.label} - início`} value={s.date} onChange={(v) => setDates(s, { date: v })} disabled={locked} />a
+                        <DateInput label={`${s.label} - fim`} value={s.end} onChange={(v) => setDates(s, { end: v })} disabled={locked} />
                       </>
                     ) : (
-                      <DateInput label={`${s.label} - dia`} value={locked ? officialDate! : s.date} onChange={(v) => setStep(s.id, { date: v })} disabled={locked} />
+                      <DateInput label={`${s.label} - dia`} value={locked ? officialDate! : s.date} onChange={(v) => setDates(s, { date: v })} disabled={locked} />
                     )}
-                    {fromCatalog ? <span className="w-[22px]" /> : (
+                    {removable ? (
                       <button type="button" onClick={() => set({ steps: d.steps.filter((x) => x.id !== s.id) })} aria-label={`Remover etapa ${s.label}`}
+                        className="rounded-full p-1 text-ink-3 hover:text-ink"><X className="h-3.5 w-3.5" /></button>
+                    ) : (
+                      <button type="button" onClick={() => setStep(s.id, { hidden: true })} aria-label={`Esconder etapa ${s.label}`} title="Esconder esta data"
                         className="rounded-full p-1 text-ink-3 hover:text-ink"><X className="h-3.5 w-3.5" /></button>
                     )}
                   </span>
+                  {!isOfficial(s) && (
+                    <button type="button" onClick={() => backToOfficial(s)} data-testid="back-official"
+                      className="basis-full text-right text-[11.5px] text-ink-3 underline-offset-4 hover:text-ink hover:underline">
+                      sua data · voltar à oficial ({official[s.id].date ? shortDate(official[s.id].date!, false) : 'a divulgar'})
+                    </button>
+                  )}
                 </li>
               );
             })}
           </ol>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 py-2">
             <Plus className="h-4 w-4 text-ink-3" strokeWidth={1.25} />
-            <input className="min-w-0 flex-1 border-b border-line bg-transparent py-1 text-[15px] outline-none placeholder:text-ink-3 focus:border-ink" placeholder="Nova etapa"
+            <input className="min-w-[9rem] flex-1 border-b border-line bg-transparent py-1 text-[15px] outline-none placeholder:text-ink-3 focus:border-ink" placeholder="Nova etapa"
               aria-label="Nova etapa" value={newStep.label} onChange={(e) => setNewStep({ ...newStep, label: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && addStep()} />
             <Segmented value={newStep.type} onChange={(t) => setNewStep({ ...newStep, type: t })} className="gap-3 [&>button]:py-0 [&>button]:text-[13px]"
               options={(Object.keys(STEP_TYPES) as StepType[]).map((t) => ({ value: t, label: STEP_TYPES[t] }))} />
             <button type="button" onClick={addStep} className="text-[13px] text-ink underline decoration-line underline-offset-4 hover:decoration-ink">Adicionar</button>
           </div>
+          {d.steps.some((s) => s.hidden) && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-3" data-testid="hidden-steps">
+              <span>Escondidas:</span>
+              {d.steps.filter((s) => s.hidden).map((s) => (
+                <button key={s.id} type="button" onClick={() => setStep(s.id, { hidden: false })} className="underline-offset-4 hover:text-ink hover:underline">+ {s.label}</button>
+              ))}
+            </div>
+          )}
           {removed.length > 0 && !fixed && (
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-3">
               <span>Etapas removidas:</span>

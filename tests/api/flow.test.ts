@@ -878,15 +878,17 @@ describe('Residências', () => {
     let mine = (await student.ok('GET', '/api/residencies')).find((r: any) => r.catalogId === hc.id);
     expect(mine).toMatchObject({ name: 'HC Botucatu', city: 'Botucatu', fee: 450, decision: 'yes', catalog: { id: hc.id } });
     expect(mine.steps.find((s: any) => s.key === 'inscricao')).toMatchObject({ date: '2026-10-05', end: '2026-10-30' });
-    expect(mine.catalog.dated.sort()).toEqual(['inscricao', 'prova']);
+    expect(mine.catalog.official.prova).toEqual({ date: '2026-11-29', end: null });
 
     // O que é dela continua dela: "feito", inscrito, observações, etapa própria e data que o catálogo ainda não tem
-    const own = mine.steps.map((s: any) => (s.key === 'inscricao' ? { ...s, done: true } : s.key === 'resultado1' ? { ...s, date: '2026-12-20' } : s));
+    const own = mine.steps.map((s: any) => (s.key === 'inscricao' ? { ...s, done: true } : s.key === 'resultado1' ? { ...s, date: '2026-12-20' }
+      : s.key === 'gabarito' ? { ...s, date: '2026-12-01', own: true } : s.key === 'boleto' ? { ...s, hidden: true } : s));
     own.push({ id: 'c-minha', key: 'custom', label: 'Pedir carta', type: 'inscricao', date: '2026-10-10', end: null, done: false });
     await student.ok('PATCH', `/api/residencies/${mine.id}`, { steps: own, enrolled: true, notes: 'levar RG' });
 
     // A administração publica datas novas e corrige uma: aparece sozinho na lista da pessoa
-    const later = steps.map((s: any) => (s.key === 'prova' ? { ...s, date: '2026-12-06' } : s.key === 'final' ? { ...s, date: '2027-01-15' } : s));
+    const later = steps.map((s: any) => (s.key === 'prova' ? { ...s, date: '2026-12-06' } : s.key === 'final' ? { ...s, date: '2027-01-15' }
+      : s.key === 'gabarito' ? { ...s, date: '2026-12-07' } : s));
     await admin.ok('PATCH', `/api/residency-catalog/${hc.id}`, { steps: later, fee: 480 });
     mine = (await student.ok('GET', '/api/residencies')).find((r: any) => r.catalogId === hc.id);
     const step = (k: string) => mine.steps.find((s: any) => s.key === k);
@@ -895,6 +897,24 @@ describe('Residências', () => {
     expect(step('inscricao').done).toBe(true);
     expect(step('resultado1').date).toBe('2026-12-20');
     expect(mine.steps.some((s: any) => s.id === 'c-minha')).toBe(true);
+    // Data que ela mudou continua a dela; etapa escondida continua escondida
+    expect(step('gabarito')).toMatchObject({ date: '2026-12-01', own: true });
+    expect(mine.catalog.official.gabarito.date).toBe('2026-12-07');
+    expect(step('boleto').hidden).toBe(true);
+
+    // Datas que aparecem: sem pedido de redução, em todas e nas próximas
+    await student.ok('PUT', '/api/residencies/hidden-steps', { hidden: ['reducao'] });
+    expect((await student.ok('GET', '/api/residencies/hidden-steps')).hidden).toEqual(['reducao']);
+    mine = (await student.ok('GET', '/api/residencies')).find((r: any) => r.catalogId === hc.id);
+    expect(mine.steps.find((s: any) => s.key === 'reducao').hidden).toBe(true);
+    expect(mine.steps.find((s: any) => s.key === 'boleto').hidden).toBe(true);
+    const unicamp = await admin.ok('POST', '/api/residency-catalog', { name: 'Unicamp' });
+    await student.ok('POST', '/api/residency-catalog/add', { ids: [unicamp.id] });
+    const u = (await student.ok('GET', '/api/residencies')).find((r: any) => r.catalogId === unicamp.id);
+    expect(u.steps.filter((s: any) => s.hidden).map((s: any) => s.key)).toEqual(['reducao']);
+    await student.ok('PUT', '/api/residencies/hidden-steps', { hidden: [] });
+    await student.ok('DELETE', `/api/residencies/${u.id}`);
+    await admin.ok('DELETE', `/api/residency-catalog/${unicamp.id}`);
     expect(mine).toMatchObject({ enrolled: true, notes: 'levar RG', fee: 480 });
 
     // Saiu do catálogo: a residência continua na lista dela, com o que tinha
@@ -902,6 +922,14 @@ describe('Residências', () => {
     mine = (await student.ok('GET', '/api/residencies')).find((r: any) => r.id === mine.id);
     expect(mine).toMatchObject({ name: 'HC Botucatu', catalog: null });
     await admin.ok('DELETE', `/api/residency-catalog/${draft.id}`);
-    await student.ok('DELETE', `/api/residencies/${mine.id}`);
+
+    // Resetar todas: a lista fica vazia (só a dela)
+    await other.ok('POST', '/api/residencies', { name: 'Da outra conta' });
+    await student.ok('POST', '/api/residencies', { name: 'À mão' });
+    const count = (await student.ok('GET', '/api/residencies')).length;
+    expect(count).toBeGreaterThanOrEqual(2);
+    expect((await student.ok('DELETE', '/api/residencies')).removed).toBe(count);
+    expect(await student.ok('GET', '/api/residencies')).toEqual([]);
+    expect((await other.ok('GET', '/api/residencies')).map((r: any) => r.name)).toEqual(['Da outra conta']);
   });
 });

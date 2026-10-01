@@ -487,7 +487,7 @@ test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no
   await sheet.getByLabel('Inscrição - início', { exact: true }).fill(inDays(-5));
   await sheet.getByLabel('Inscrição - fim', { exact: true }).fill(inDays(3));
   // Etapa que não existe nesta residência sai; etapa nova entra
-  await sheet.getByRole('button', { name: 'Remover etapa Gabarito' }).click();
+  await sheet.getByRole('button', { name: 'Esconder etapa Gabarito' }).click();
   await sheet.getByLabel('Nova etapa').fill('Entrega de documentos');
   await sheet.getByRole('tab', { name: 'Resultado' }).click();
   await sheet.getByRole('button', { name: 'Adicionar', exact: true }).click();
@@ -559,9 +559,35 @@ test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no
   await hc.getByRole('button').first().click();
   await expect(page.getByRole('dialog').getByTestId('from-catalog')).toBeVisible();
   await expect(page.getByRole('dialog').getByLabel('Nome da residência')).toHaveAttribute('readonly', '');
-  await expect(page.getByRole('dialog').getByLabel('Inscrição - fim', { exact: true })).toHaveCount(0);
-  await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
-  // Marcada de novo, aparece como já na lista
+  // A data oficial pode ser mudada (aí vale a dela, com "voltar à oficial"); a etapa que não quer ver some
+  const ed = page.getByRole('dialog');
+  await ed.getByLabel('Inscrição - fim', { exact: true }).fill(inDays(12));
+  await expect(ed.getByTestId('back-official')).toBeVisible();
+  await ed.getByRole('button', { name: 'Esconder etapa Resultado final' }).click();
+  await expect(ed.getByTestId('hidden-steps')).toContainText('Resultado final');
+  await ed.getByRole('button', { name: 'Salvar' }).click();
+  await expect(hc.getByTestId('status').first()).toHaveText('inscrições abertas · fecham em 12 dias');
+
+  // Marcada de novo, aparece como já na lista; datas que aparecem: sem redução
   await page.getByTestId('pick-residencies').click();
   await expect(page.getByRole('dialog').getByTestId('catalog-HC Botucatu')).toContainText('já está na sua lista');
+  await page.getByRole('dialog').getByTestId('picker-steps').getByRole('button', { name: 'Escolher' }).click();
+  await page.getByRole('dialog').getByRole('switch', { name: 'Mostrar Pedido de redução da taxa' }).click();
+  await page.getByTestId('steps-save').click();
+  await expect(page.getByTestId('toast')).toContainText('Datas atualizadas');
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
+
+  // Excluir pelo menu (botão direito) e desfazer
+  await hc.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: /Excluir da minha lista/ }).click();
+  await expect(hc).toHaveCount(0);
+  await page.getByTestId('toast').getByRole('button', { name: 'Desfazer' }).click();
+  await expect(page.getByTestId('residency-HC Botucatu')).toBeVisible();
+
+  // Resetar todas: lista vazia e o catálogo abre para escolher de novo
+  await page.getByRole('button', { name: 'Mais opções das residências' }).click();
+  await page.getByRole('menuitem', { name: 'Resetar todas as residências' }).click();
+  await page.getByTestId('reset-all').click();
+  await expect(page.locator('article[data-testid^="residency-"]')).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByTestId('catalog-HC Botucatu')).not.toContainText('já está na sua lista');
 });
