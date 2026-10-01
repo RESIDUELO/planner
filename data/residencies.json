@@ -544,6 +544,144 @@
           "cutoff": ""
         }
       ]
+    },
+    {
+      "id": "famema_2027",
+      "name": "FAMEMA",
+      "city": "Marília",
+      "edital": "https://www.vunesp.com.br",
+      "fee": 600,
+      "exam": "famema_r1",
+      "dates": {
+        "edital": "2026-09-24",
+        "reducao": [
+          "2026-10-09",
+          "2026-10-10"
+        ],
+        "inscricao": [
+          "2026-10-09",
+          "2026-10-27"
+        ],
+        "boleto": "2026-10-28",
+        "local": "2026-11-27",
+        "prova": "2026-12-08",
+        "gabarito": "2026-12-09",
+        "recurso": "2026-12-11",
+        "resultado1": "2027-01-11",
+        "final": "2027-01-27"
+      },
+      "skip": [
+        "fase2"
+      ],
+      "extra": [
+        {
+          "label": "Resultado da redução/isenção da taxa",
+          "type": "inscricao",
+          "date": "2026-10-19"
+        },
+        {
+          "label": "Pedido da pontuação adicional de 10% (até 27/10)",
+          "type": "inscricao",
+          "date": "2026-10-09"
+        },
+        {
+          "label": "Declaração de interesse na vaga (até 29/01)",
+          "type": "resultado",
+          "date": "2027-01-28"
+        },
+        {
+          "label": "Matrícula (1ª chamada, até 12/02)",
+          "type": "resultado",
+          "date": "2027-02-11"
+        }
+      ],
+      "specialties": [
+        {
+          "name": "Clínica Médica",
+          "vacancies": 12,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Geral",
+          "vacancies": 7,
+          "cutoff": ""
+        },
+        {
+          "name": "Ginecologia e Obstetrícia",
+          "vacancies": 7,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Família e Comunidade",
+          "vacancies": 10,
+          "cutoff": ""
+        },
+        {
+          "name": "Pediatria",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Anestesiologia",
+          "vacancies": 4,
+          "cutoff": ""
+        },
+        {
+          "name": "Dermatologia",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Infectologia",
+          "vacancies": 1,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Emergência",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Física e Reabilitação",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Intensiva",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Oftalmologia",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Ortopedia e Traumatologia",
+          "vacancies": 8,
+          "cutoff": ""
+        },
+        {
+          "name": "Otorrinolaringologia",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Psiquiatria",
+          "vacancies": 4,
+          "cutoff": ""
+        },
+        {
+          "name": "Radiologia e Diagnóstico por Imagem",
+          "vacancies": 3,
+          "cutoff": ""
+        }
+      ]
     }
   ]
 }
