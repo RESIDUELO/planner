@@ -462,6 +462,88 @@
           "cutoff": ""
         }
       ]
+    },
+    {
+      "id": "unitau_2027",
+      "name": "UNITAU",
+      "city": "Taubaté",
+      "edital": "https://unitau.br/concursos",
+      "fee": 480,
+      "dates": {
+        "edital": "2026-08-05",
+        "reducao": [
+          "2026-08-19",
+          "2026-08-21"
+        ],
+        "inscricao": [
+          "2026-08-19",
+          "2026-10-25"
+        ],
+        "boleto": "2026-10-25",
+        "prova": "2026-11-01",
+        "gabarito": "2026-11-01",
+        "recurso": "2026-11-03",
+        "resultado1": "2026-11-13",
+        "fase2": "2026-12-22",
+        "final": "2027-02-04"
+      },
+      "skip": [
+        "local"
+      ],
+      "extra": [
+        {
+          "label": "Resultado da isenção da taxa",
+          "type": "inscricao",
+          "date": "2026-08-24"
+        },
+        {
+          "label": "Resultado da análise curricular",
+          "type": "resultado",
+          "date": "2027-01-28"
+        },
+        {
+          "label": "Matrícula on-line",
+          "type": "resultado",
+          "date": "2027-02-10"
+        }
+      ],
+      "specialties": [
+        {
+          "name": "Anestesiologia",
+          "vacancies": 7,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Geral",
+          "vacancies": 8,
+          "cutoff": ""
+        },
+        {
+          "name": "Clínica Médica",
+          "vacancies": 11,
+          "cutoff": ""
+        },
+        {
+          "name": "Ginecologia e Obstetrícia",
+          "vacancies": 8,
+          "cutoff": ""
+        },
+        {
+          "name": "Oftalmologia",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Ortopedia e Traumatologia",
+          "vacancies": 8,
+          "cutoff": ""
+        },
+        {
+          "name": "Pediatria",
+          "vacancies": 8,
+          "cutoff": ""
+        }
+      ]
     }
   ]
 }
