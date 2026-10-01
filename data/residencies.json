@@ -1,4 +1,168 @@
 {
   "_comment": "Catálogo de residências (cadastrado por aqui). npm run data:sql gera supabase/data/residencias_catalogo.sql; rode-o no SQL Editor depois de supabase/parts/17_residency_catalog.sql. Rodar de novo atualiza as datas (para quem já escolheu, aparecem sozinhas). dates: chave da etapa → 'AAAA-MM-DD', ou [início, fim] em reducao e inscricao; etapa sem data fica 'a divulgar'. Etapas: edital, reducao, inscricao, boleto, local, prova, gabarito, recurso, resultado1, fase2, final. skip: etapas que esta residência não tem. extra: etapas a mais [{label, type: inscricao|prova|resultado, date}]. exam: id de data/exams.json para ligar à prova (a data da prova fica a mesma nos dois lugares).",
-  "residencies": []
+  "residencies": [
+    {
+      "id": "hrpp_2027",
+      "name": "HRPP",
+      "city": "Presidente Prudente",
+      "edital": "https://www.vunesp.com.br",
+      "fee": 800,
+      "exam": "unoeste_r1",
+      "dates": {
+        "edital": "2026-09-22",
+        "reducao": [
+          "2026-10-07",
+          "2026-10-08"
+        ],
+        "inscricao": [
+          "2026-10-07",
+          "2026-10-26"
+        ],
+        "boleto": "2026-10-26",
+        "local": "2026-11-27",
+        "prova": "2026-12-05",
+        "gabarito": "2026-12-08",
+        "recurso": "2026-12-10",
+        "resultado1": "2027-01-06",
+        "final": "2027-02-16"
+      },
+      "skip": [
+        "fase2"
+      ],
+      "extra": [
+        {
+          "label": "Resultado da redução da taxa",
+          "type": "inscricao",
+          "date": "2026-10-16"
+        },
+        {
+          "label": "Matrícula",
+          "type": "resultado",
+          "date": "2027-02-17"
+        }
+      ],
+      "specialties": [
+        {
+          "name": "Anestesiologia",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Geral",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Clínica Médica",
+          "vacancies": 20,
+          "cutoff": ""
+        },
+        {
+          "name": "Dermatologia",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Ginecologia e Obstetrícia",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Infectologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Família e Comunidade",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Intensiva",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurocirurgia",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Oftalmologia",
+          "vacancies": 4,
+          "cutoff": ""
+        },
+        {
+          "name": "Ortopedia e Traumatologia",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Otorrinolaringologia",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Pediatria",
+          "vacancies": 18,
+          "cutoff": ""
+        },
+        {
+          "name": "Psiquiatria",
+          "vacancies": 7,
+          "cutoff": ""
+        },
+        {
+          "name": "Radiologia e Diagnóstico por Imagem",
+          "vacancies": 2,
+          "cutoff": ""
+        }
+      ]
+    },
+    {
+      "id": "sus_sp_2027",
+      "name": "SUS-SP",
+      "city": "São Paulo",
+      "edital": "https://www.vunesp.com.br",
+      "fee": 120,
+      "exam": "sus_sp_r1",
+      "dates": {
+        "reducao": [
+          "2026-10-20",
+          "2026-10-21"
+        ],
+        "inscricao": [
+          "2026-10-20",
+          "2026-11-05"
+        ],
+        "boleto": "2026-11-05",
+        "prova": "2026-12-13",
+        "gabarito": "2026-12-15",
+        "recurso": "2026-12-17",
+        "resultado1": "2027-01-19",
+        "final": "2027-02-12"
+      },
+      "skip": [
+        "edital",
+        "fase2"
+      ],
+      "extra": [
+        {
+          "label": "Resultado da redução da taxa",
+          "type": "inscricao",
+          "date": "2026-10-27"
+        },
+        {
+          "label": "Escolha de vagas on-line (1ª chamada)",
+          "type": "resultado",
+          "date": "2027-02-17"
+        },
+        {
+          "label": "Matrícula (1ª chamada)",
+          "type": "resultado",
+          "date": "2027-02-24"
+        }
+      ]
+    }
+  ]
 }
