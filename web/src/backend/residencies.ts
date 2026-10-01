@@ -34,6 +34,8 @@ function toResidency(r: any): Residency {
 }
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (AAAA-MM-DD).');
+/** Id do catálogo: os cadastrados por arquivo (md5) têm formato de UUID, mas não a versão 4. */
+export const catalogUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'Id inválido.');
 const text = (max: number) => z.string().trim().max(max);
 const specialty = z.object({
   name: text(80).min(1, 'Escreva a especialidade.'),
@@ -67,7 +69,7 @@ const fields = {
   steps: z.array(step).max(40),
   examEditionId: z.string().uuid().nullable(),
 };
-const createSchema = z.object({ ...fields, catalogId: z.string().uuid().nullable() }).partial().required({ name: true });
+const createSchema = z.object({ ...fields, catalogId: catalogUuid.nullable() }).partial().required({ name: true });
 const updateSchema = z.object(fields).partial();
 type Patch = z.infer<typeof updateSchema>;
 
@@ -281,7 +283,7 @@ export async function listCatalog(ctx: Ctx) {
 /** Coloca na lista da pessoa as residências escolhidas do catálogo (as que ela já tem ficam como estão). */
 export async function addFromCatalog(ctx: Ctx, body: unknown) {
   const uid = await currentUserId(ctx);
-  const { ids } = z.object({ ids: z.array(z.string().uuid()).min(1, 'Escolha pelo menos uma residência.').max(100) }).parse(body);
+  const { ids } = z.object({ ids: z.array(catalogUuid).min(1, 'Escolha pelo menos uma residência.').max(100) }).parse(body);
   const hidden = await hiddenPref(ctx, uid);
   if (!(await cols(ctx)).includes('catalog_id')) {
     throw new ApiError(503, 'O banco do site está desatualizado: rode no Supabase o arquivo supabase/parts/17_residency_catalog.sql.');

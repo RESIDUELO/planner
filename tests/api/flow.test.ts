@@ -923,6 +923,15 @@ describe('Residências', () => {
     expect(mine).toMatchObject({ name: 'HC Botucatu', catalog: null });
     await admin.ok('DELETE', `/api/residency-catalog/${draft.id}`);
 
+    // Cadastrados pelo arquivo (ids md5, sem versão 4): a pessoa adiciona normalmente
+    await runDataFile('residencias_catalogo');
+    const seeded = (await student.ok('GET', '/api/residency-catalog')).entries.filter((e: any) => ['HRPP', 'SUS-SP'].includes(e.name));
+    expect(seeded).toHaveLength(2);
+    expect((await student.ok('POST', '/api/residency-catalog/add', { ids: seeded.map((e: any) => e.id) })).added).toBe(2);
+    const sus = (await student.ok('GET', '/api/residencies')).find((r: any) => r.name === 'SUS-SP');
+    expect(sus.steps.find((s: any) => s.key === 'prova').date).toBe('2026-12-13');
+    expect(sus.exam).toMatchObject({ institution: 'SUS-SP' });
+
     // Resetar todas: a lista fica vazia (só a dela)
     await other.ok('POST', '/api/residencies', { name: 'Da outra conta' });
     await student.ok('POST', '/api/residencies', { name: 'À mão' });

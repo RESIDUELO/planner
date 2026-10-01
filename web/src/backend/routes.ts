@@ -15,7 +15,7 @@ import { generateFromTemplate, listTemplates } from './templates';
 import { agendaView, createTask, deleteTask, plannerTasks, saveNote, updateTask } from './personal';
 import {
   addFromCatalog, createCatalogEntry, createResidency, deleteAllResidencies, deleteCatalogEntry, deleteResidency, getVisibleSteps, listCatalog, listResidencies,
-  setVisibleSteps, updateCatalogEntry, updateResidency,
+  catalogUuid, setVisibleSteps, updateCatalogEntry, updateResidency,
 } from './residencies';
 
 type Handler = (a: { ctx: Ctx; params: Record<string, string>; query: URLSearchParams; body: any }) => Promise<any>;
@@ -516,8 +516,8 @@ route('DELETE', '/api/residencies/:id', async ({ ctx, params }) => deleteResiden
 route('GET', '/api/residency-catalog', async ({ ctx }) => listCatalog(ctx));
 route('POST', '/api/residency-catalog/add', async ({ ctx, body }) => addFromCatalog(ctx, body));
 route('POST', '/api/residency-catalog', async ({ ctx, body }) => createCatalogEntry(ctx, body));
-route('PATCH', '/api/residency-catalog/:id', async ({ ctx, params, body }) => updateCatalogEntry(ctx, uuid.parse(params.id), body));
-route('DELETE', '/api/residency-catalog/:id', async ({ ctx, params }) => deleteCatalogEntry(ctx, uuid.parse(params.id)));
+route('PATCH', '/api/residency-catalog/:id', async ({ ctx, params, body }) => updateCatalogEntry(ctx, catalogUuid.parse(params.id), body));
+route('DELETE', '/api/residency-catalog/:id', async ({ ctx, params }) => deleteCatalogEntry(ctx, catalogUuid.parse(params.id)));
 
 route('POST', '/api/planner/manual', async ({ ctx, body }) => {
   const b = z.object({ startDate: isoDate.optional() }).parse(body ?? {});
