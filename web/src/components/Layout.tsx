@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, CalendarDays, Hospital, NotebookPen } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Hospital, NotebookPen } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../lib/auth';
 import { IS_LOCAL } from '../lib/platform';
@@ -31,15 +31,13 @@ function FocusChip() {
   );
 }
 
-/** PLANNER | AGENDA | RESIDÊNCIAS: as áreas principais, separadas. */
+/** PLANNER | RESIDÊNCIAS: as áreas principais, separadas. */
 function Tabs() {
   const tab = ({ isActive }: { isActive: boolean }) => clsx('relative py-1 text-[10.5px] font-medium tracking-[0.12em] uppercase transition-colors min-[420px]:text-[12px] min-[420px]:tracking-[0.2em]',
     isActive ? 'text-ink after:absolute after:inset-x-0 after:-bottom-px after:h-px after:bg-ink' : 'text-ink-3 hover:text-ink');
   return (
     <nav aria-label="Áreas" className="flex min-w-0 items-center gap-2.5 min-[420px]:gap-4 sm:gap-5">
       <NavLink to="/planner" className={tab}>Planner</NavLink>
-      <span className="h-3 w-px bg-line" aria-hidden />
-      <NavLink to="/agenda" className={tab}>Agenda</NavLink>
       <span className="h-3 w-px bg-line" aria-hidden />
       <NavLink to="/residencias" className={tab}>Residências</NavLink>
     </nav>
@@ -74,7 +72,7 @@ function useCollapsed() {
   return [collapsed, toggle] as const;
 }
 
-/** Barra lateral: logo, recolher, Planner, Agenda e, embaixo, o perfil. */
+/** Barra lateral: logo, recolher, Planner, Residências e, embaixo, o perfil. */
 function Sidebar({ collapsed, onToggle, profileItems, avatar, name }: {
   collapsed: boolean; onToggle: () => void; profileItems: Parameters<typeof Menu>[0]['items']; avatar: ReactNode; name: string;
 }) {
@@ -104,9 +102,6 @@ function Sidebar({ collapsed, onToggle, profileItems, avatar, name }: {
       <nav aria-label="Áreas" className="mt-6 flex flex-col gap-1">
         <NavLink to="/planner" className={item}>
           {(s) => (<>{bar(s)}<NotebookPen className="h-5 w-5 shrink-0" strokeWidth={1.25} /><Label hidden={collapsed} className={text}>Planner</Label>{collapsed && <Tip>Planner</Tip>}</>)}
-        </NavLink>
-        <NavLink to="/agenda" className={item}>
-          {(s) => (<>{bar(s)}<CalendarDays className="h-5 w-5 shrink-0" strokeWidth={1.25} /><Label hidden={collapsed} className={text}>Agenda</Label>{collapsed && <Tip>Agenda</Tip>}</>)}
         </NavLink>
         <NavLink to="/residencias" className={item}>
           {(s) => (<>{bar(s)}<Hospital className="h-5 w-5 shrink-0" strokeWidth={1.25} /><Label hidden={collapsed} className={text}>Residências</Label>{collapsed && <Tip>Residências</Tip>}</>)}
@@ -140,7 +135,7 @@ export function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
-  const home = loc.pathname === '/planner' || loc.pathname === '/agenda';
+  const home = loc.pathname === '/planner';
   const [collapsed, toggle] = useCollapsed();
   const profileItems = [
     { label: 'Meu perfil', onClick: () => nav('/configuracoes') },
