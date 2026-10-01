@@ -13,6 +13,8 @@ import residenciesSql from '../../../supabase/parts/15_residencies.sql?raw';
 import santaCasaSql from '../../../supabase/data/santa_casa_aracatuba_r1.sql?raw';
 import unoesteSql from '../../../supabase/data/unoeste_r1.sql?raw';
 import susSpSql from '../../../supabase/data/sus_sp_r1.sql?raw';
+import catalogSql from '../../../supabase/parts/17_residency_catalog.sql?raw';
+import { setCatalogSource } from '../backend/residencies';
 // Fontes dentro do app (sem internet não há Google Fonts)
 import '@fontsource/tinos/latin-400.css';
 import '@fontsource/tinos/latin-400-italic.css';
@@ -24,12 +26,28 @@ import '@fontsource/patrick-hand/latin-400.css';
 const DATA_DIR = 'idb://residencia-planner';
 const READY_KEY = 'rp-local-db';
 /** Versão do schema local; quem instalou uma versão anterior recebe as migrações que faltam. */
-export const LOCAL_DB_VERSION = '7';
+export const LOCAL_DB_VERSION = '8';
 const MIGRATIONS: Record<string, string> = { '2': agendaSql, '3': ownSubjectsSql, '4': residenciesSql, '5': santaCasaSql,
   // Assuntos juntados entre UNOESTE e Santa Casa (data/subject_merges.json)
   '6': `${unoesteSql}\n${santaCasaSql}`,
   // SUS-SP, com a banca de cada ano (troca para a VUNESP em 2026)
-  '7': susSpSql };
+  '7': susSpSql,
+  // Catálogo de residências (vem do site quando há internet)
+  '8': catalogSql };
+
+/** Catálogo de residências publicado no site (leitura pública), com tempo limite curto. */
+async function catalogFromSite(): Promise<any[] | null> {
+  const cfg = await fetch(`${import.meta.env.BASE_URL}config.json`).then((r) => r.json()).catch(() => null);
+  if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey || String(cfg.supabaseUrl).includes('SEU-PROJETO')) return null;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 5000);
+  try {
+    const res = await fetch(`${cfg.supabaseUrl}/rest/v1/residency_catalog?select=*&published=is.true`, {
+      headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${cfg.supabaseAnonKey}` }, signal: ctl.signal,
+    });
+    return res.ok ? await res.json() : null;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
 
 /** Cliente local e `flush` (grava no disco o que mudou; o app chama uma vez ao fim de cada ação). */
 export async function initLocal(): Promise<{ client: SupabaseClient; flush: () => Promise<void> }> {
@@ -71,5 +89,6 @@ export async function initLocal(): Promise<{ client: SupabaseClient; flush: () =
   };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   addEventListener('pagehide', () => { flush(); });
+  setCatalogSource(catalogFromSite);
   return { client: createLocalSupabase(db), flush };
 }

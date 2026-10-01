@@ -4,10 +4,19 @@
  * aí a data da prova é uma só: a de Provas (a oficial, quando cadastrada).
  */
 import { z } from 'zod';
-import { defaultSteps, RANGE_KEYS, type Residency, type Step } from '../../../shared/residency';
+import { catalogDated, defaultSteps, RANGE_KEYS, withCatalog, type CatalogEntry, type Residency, type Step } from '../../../shared/residency';
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
 
-const COLS = 'id, name, city, edital_url, specialties, institutions, fee, reduction_requested, reduction_granted, paid, decision, enrolled, notes, steps, exam_edition_id, created_at';
+const BASE_COLS = 'id, name, city, edital_url, specialties, institutions, fee, reduction_requested, reduction_granted, paid, decision, enrolled, notes, steps, exam_edition_id, created_at';
+/** catalog_id só existe depois de rodar 17_residency_catalog.sql; até lá a lista continua funcionando. */
+let hasCatalogCol: boolean | null = null;
+async function cols(ctx: Ctx) {
+  if (hasCatalogCol === null) {
+    const { error } = await ctx.sb.from('residencies').select('catalog_id').limit(1);
+    hasCatalogCol = !error;
+  }
+  return hasCatalogCol ? `${BASE_COLS}, catalog_id` : BASE_COLS;
+}
 
 function toResidency(r: any): Residency {
   return {
@@ -18,7 +27,7 @@ function toResidency(r: any): Residency {
     reductionRequested: !!r.reduction_requested, reductionGranted: r.reduction_granted ?? null, paid: !!r.paid,
     decision: r.decision ?? 'maybe', enrolled: !!r.enrolled, notes: r.notes ?? '',
     steps: Array.isArray(r.steps) && r.steps.length ? r.steps : defaultSteps(),
-    examEditionId: r.exam_edition_id ?? null, createdAt: r.created_at,
+    examEditionId: r.exam_edition_id ?? null, catalogId: r.catalog_id ?? null, createdAt: r.created_at,
   };
 }
 
@@ -54,7 +63,7 @@ const fields = {
   steps: z.array(step).max(40),
   examEditionId: z.string().uuid().nullable(),
 };
-const createSchema = z.object(fields).partial().required({ name: true });
+const createSchema = z.object({ ...fields, catalogId: z.string().uuid().nullable() }).partial().required({ name: true });
 const updateSchema = z.object(fields).partial();
 type Patch = z.infer<typeof updateSchema>;
 
@@ -66,7 +75,7 @@ function checkSteps(steps: Step[]) {
   if (new Set(steps.map((s) => s.id)).size !== steps.length) throw badRequest('Etapas repetidas.');
 }
 
-function toRow(b: Patch) {
+function toRow(b: Patch & { catalogId?: string | null }) {
   const r: Record<string, unknown> = {};
   if (b.name !== undefined) r.name = b.name;
   if (b.city !== undefined) r.city = b.city;
@@ -82,6 +91,7 @@ function toRow(b: Patch) {
   if (b.notes !== undefined) r.notes = b.notes;
   if (b.steps !== undefined) r.steps = b.steps;
   if (b.examEditionId !== undefined) r.exam_edition_id = b.examEditionId;
+  if (b.catalogId) r.catalog_id = b.catalogId;
   return r;
 }
 
@@ -106,9 +116,18 @@ async function examDates(ctx: Ctx, uid: string, ids: string[]) {
   return out;
 }
 
-type Linked = Residency & { exam: { institution: string; name: string; official: boolean } | null };
+type Linked = Residency & {
+  exam: { institution: string; name: string; official: boolean } | null;
+  /** Do catálogo: as etapas com data cadastrada lá (fixas para a pessoa). */
+  catalog: { id: string; dated: string[] } | null;
+};
 
-async function withExams(ctx: Ctx, uid: string, list: Residency[]): Promise<Linked[]> {
+async function withExams(ctx: Ctx, uid: string, raw: Residency[]): Promise<Linked[]> {
+  const cat = await catalogByIds(ctx, [...new Set(raw.map((r) => r.catalogId).filter(Boolean) as string[])]);
+  const list = raw.map((r) => {
+    const c = r.catalogId ? cat.get(r.catalogId) : undefined;
+    return c ? { ...withCatalog(r, c), catalog: { id: c.id, dated: catalogDated(c) } } : { ...r, catalog: null };
+  });
   const dates = await examDates(ctx, uid, [...new Set(list.map((r) => r.examEditionId).filter(Boolean) as string[])]);
   return list.map((r) => {
     const e = r.examEditionId ? dates.get(r.examEditionId) : undefined;
@@ -120,7 +139,9 @@ async function withExams(ctx: Ctx, uid: string, list: Residency[]): Promise<Link
 
 export async function listResidencies(ctx: Ctx) {
   const uid = await currentUserId(ctx);
-  const rows = await selectAll((a, b) => ctx.sb.from('residencies').select(COLS).eq('user_id', uid).order('created_at').range(a, b));
+  await syncCatalog(ctx);
+  const c = await cols(ctx);
+  const rows = await selectAll((a, b) => ctx.sb.from('residencies').select(c).eq('user_id', uid).order('created_at').range(a, b));
   return withExams(ctx, uid, (rows as any[]).map(toResidency));
 }
 
@@ -146,7 +167,7 @@ async function syncExam(ctx: Ctx, uid: string, r: Residency, provaChanged: boole
 }
 
 async function one(ctx: Ctx, uid: string, id: string) {
-  const r: any = await q(ctx.sb.from('residencies').select(COLS).eq('id', id).eq('user_id', uid).maybeSingle());
+  const r: any = await q(ctx.sb.from('residencies').select(await cols(ctx)).eq('id', id).eq('user_id', uid).maybeSingle());
   if (!r) throw notFound('Residência');
   return (await withExams(ctx, uid, [toResidency(r)]))[0];
 }
@@ -156,7 +177,7 @@ export async function createResidency(ctx: Ctx, body: unknown) {
   const b = createSchema.parse(body);
   const steps = b.steps ?? defaultSteps();
   checkSteps(steps);
-  const r: any = await q(ctx.sb.from('residencies').insert({ ...toRow({ ...b, steps }), user_id: uid }).select(COLS).single()).catch(denied);
+  const r: any = await q(ctx.sb.from('residencies').insert({ ...toRow({ ...b, steps }), user_id: uid }).select(await cols(ctx)).single()).catch(denied);
   const res = toResidency(r);
   await syncExam(ctx, uid, res, !!res.steps.find((s) => s.key === 'prova')?.date);
   return one(ctx, uid, res.id);
@@ -167,7 +188,7 @@ export async function updateResidency(ctx: Ctx, id: string, body: unknown) {
   const b = updateSchema.parse(body);
   const before = await one(ctx, uid, id);
   if (b.steps) checkSteps(b.steps);
-  const r: any = await q(ctx.sb.from('residencies').update({ ...toRow(b), updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', uid).select(COLS).single()).catch(denied);
+  const r: any = await q(ctx.sb.from('residencies').update({ ...toRow(b), updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', uid).select(await cols(ctx)).single()).catch(denied);
   const res = toResidency(r);
   const provaOf = (x: Residency) => x.steps.find((s) => s.key === 'prova')?.date ?? null;
   const linkedNow = b.examEditionId !== undefined && b.examEditionId !== before.examEditionId;
@@ -178,5 +199,149 @@ export async function updateResidency(ctx: Ctx, id: string, body: unknown) {
 export async function deleteResidency(ctx: Ctx, id: string) {
   const uid = await currentUserId(ctx);
   await q(ctx.sb.from('residencies').delete().eq('id', id).eq('user_id', uid));
+  return { ok: true };
+}
+
+// ============================================================================
+// Catálogo: residências com as datas cadastradas pela administração
+// ============================================================================
+const CATALOG_COLS = 'id, name, city, edital_url, specialties, institutions, fee, steps, exam_edition_id, notes, published, updated_at';
+
+function toEntry(r: any): CatalogEntry {
+  return {
+    id: r.id, name: r.name, city: r.city ?? '', editalUrl: r.edital_url ?? '',
+    specialties: Array.isArray(r.specialties) ? r.specialties : [],
+    institutions: Array.isArray(r.institutions) ? r.institutions : [],
+    fee: r.fee != null ? Number(r.fee) : null,
+    steps: (Array.isArray(r.steps) && r.steps.length ? r.steps : defaultSteps()).map((s: Step) => ({ ...s, done: false })),
+    examEditionId: r.exam_edition_id ?? null, notes: r.notes ?? '', published: r.published !== false, updatedAt: r.updated_at,
+  };
+}
+
+/** Catálogo ainda não criado no banco (falta rodar 17_residency_catalog.sql). */
+const missing = (e: unknown) => e instanceof ApiError && e.status === 503;
+
+async function catalogByIds(ctx: Ctx, ids: string[]) {
+  const out = new Map<string, CatalogEntry>();
+  if (!ids.length) return out;
+  const rows = await q<any[]>(ctx.sb.from('residency_catalog').select(CATALOG_COLS).in('id', ids)).catch((e) => { if (missing(e)) return []; throw e; });
+  for (const r of rows) out.set(r.id, toEntry(r));
+  return out;
+}
+
+/**
+ * App off-line: o catálogo vem do site quando há internet (no máximo a cada
+ * 10 minutos) e fica guardado no aparelho. Sem internet, vale o guardado.
+ */
+let catalogSource: (() => Promise<any[] | null>) | null = null;
+let lastSync = 0;
+export function setCatalogSource(f: typeof catalogSource) { catalogSource = f; lastSync = 0; }
+
+async function syncCatalog(ctx: Ctx) {
+  if (!catalogSource || Date.now() - lastSync < 10 * 60_000) return;
+  lastSync = Date.now();
+  const rows = await catalogSource().catch(() => null);
+  if (!rows) return;
+  const keep = rows.map((r) => ({
+    id: r.id, name: r.name, city: r.city ?? '', edital_url: r.edital_url ?? '', specialties: r.specialties ?? [], institutions: r.institutions ?? [],
+    fee: r.fee ?? null, steps: r.steps ?? [], exam_edition_id: null, notes: r.notes ?? '', published: true, updated_at: r.updated_at ?? new Date().toISOString(),
+  }));
+  // A prova ligada só vale se ela existe também no aparelho
+  const editions = [...new Set(rows.map((r) => r.exam_edition_id).filter(Boolean))] as string[];
+  const known = editions.length ? new Set((await q<any[]>(ctx.sb.from('exam_editions').select('id').in('id', editions)).catch(() => [])).map((e) => e.id)) : new Set();
+  keep.forEach((k, i) => { if (known.has(rows[i].exam_edition_id)) k.exam_edition_id = rows[i].exam_edition_id; });
+  try {
+    if (keep.length) await q(ctx.sb.from('residency_catalog').upsert(keep));
+    const del = ctx.sb.from('residency_catalog').delete();
+    await q(keep.length ? del.not('id', 'in', `(${keep.map((k) => k.id).join(',')})`) : del.neq('id', '00000000-0000-0000-0000-000000000000'));
+  } catch { /* fica o que já estava guardado */ }
+}
+
+export async function listCatalog(ctx: Ctx) {
+  await currentUserId(ctx);
+  await syncCatalog(ctx);
+  const rows = await q<any[]>(ctx.sb.from('residency_catalog').select(CATALOG_COLS).order('name')).catch((e) => { if (missing(e)) return null; throw e; });
+  if (!rows) return { ready: false, entries: [] };
+  const entries = rows.map(toEntry);
+  const dates = await examDates(ctx, await currentUserId(ctx), [...new Set(entries.map((e) => e.examEditionId).filter(Boolean) as string[])]);
+  return {
+    ready: true,
+    entries: entries.map((e) => {
+      const official = e.examEditionId ? dates.get(e.examEditionId) : undefined;
+      // Data oficial da prova (de Provas) vale também aqui
+      return official?.official && official.date ? { ...e, steps: e.steps.map((s) => (s.key === 'prova' ? { ...s, date: official.date } : s)) } : e;
+    }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+  };
+}
+
+/** Coloca na lista da pessoa as residências escolhidas do catálogo (as que ela já tem ficam como estão). */
+export async function addFromCatalog(ctx: Ctx, body: unknown) {
+  const uid = await currentUserId(ctx);
+  const { ids } = z.object({ ids: z.array(z.string().uuid()).min(1, 'Escolha pelo menos uma residência.').max(100) }).parse(body);
+  if (!(await cols(ctx)).includes('catalog_id')) {
+    throw new ApiError(503, 'O banco do site está desatualizado: rode no Supabase o arquivo supabase/parts/17_residency_catalog.sql.');
+  }
+  const have = new Set((await q<any[]>(ctx.sb.from('residencies').select('catalog_id').eq('user_id', uid).in('catalog_id', ids))).map((r) => r.catalog_id));
+  const cat = await catalogByIds(ctx, ids);
+  const added: string[] = [];
+  for (const id of ids) {
+    const c = cat.get(id);
+    if (!c || have.has(id)) continue;
+    const r = await createResidency(ctx, {
+      catalogId: c.id, name: c.name, city: c.city, editalUrl: c.editalUrl, specialties: c.specialties, institutions: c.institutions,
+      fee: c.fee, steps: c.steps, examEditionId: c.examEditionId, decision: 'yes',
+    });
+    added.push(r.id);
+  }
+  return { ok: true, added: added.length };
+}
+
+// Administração do catálogo (o banco confere o papel; aqui só a mensagem fica mais clara)
+const catalogSchema = z.object({
+  name: fields.name, city: fields.city, editalUrl: fields.editalUrl, specialties: fields.specialties, institutions: fields.institutions,
+  fee: fields.fee, steps: fields.steps, examEditionId: fields.examEditionId, notes: fields.notes, published: z.boolean(),
+}).partial();
+
+async function requireAdmin(ctx: Ctx) {
+  const uid = await currentUserId(ctx);
+  const p: any = await q(ctx.sb.from('user_profiles').select('role').eq('user_id', uid).maybeSingle());
+  if (p?.role !== 'admin') throw new ApiError(403, 'Só a administração cadastra residências no catálogo.');
+}
+
+function catalogRow(b: z.infer<typeof catalogSchema>) {
+  const r: Record<string, unknown> = {};
+  if (b.name !== undefined) r.name = b.name;
+  if (b.city !== undefined) r.city = b.city;
+  if (b.editalUrl !== undefined) r.edital_url = b.editalUrl;
+  if (b.specialties !== undefined) r.specialties = b.specialties;
+  if (b.institutions !== undefined) r.institutions = b.institutions;
+  if (b.fee !== undefined) r.fee = b.fee;
+  if (b.steps !== undefined) r.steps = b.steps.map((s) => ({ ...s, done: false }));
+  if (b.examEditionId !== undefined) r.exam_edition_id = b.examEditionId;
+  if (b.notes !== undefined) r.notes = b.notes;
+  if (b.published !== undefined) r.published = b.published;
+  return r;
+}
+
+export async function createCatalogEntry(ctx: Ctx, body: unknown) {
+  await requireAdmin(ctx);
+  const b = catalogSchema.required({ name: true }).parse(body);
+  if (b.steps) checkSteps(b.steps);
+  const r: any = await q(ctx.sb.from('residency_catalog').insert(catalogRow({ steps: defaultSteps(), ...b })).select(CATALOG_COLS).single());
+  return toEntry(r);
+}
+
+export async function updateCatalogEntry(ctx: Ctx, id: string, body: unknown) {
+  await requireAdmin(ctx);
+  const b = catalogSchema.parse(body);
+  if (b.steps) checkSteps(b.steps);
+  const r: any = await q(ctx.sb.from('residency_catalog').update({ ...catalogRow(b), updated_at: new Date().toISOString() }).eq('id', id).select(CATALOG_COLS).maybeSingle());
+  if (!r) throw notFound('Residência do catálogo');
+  return toEntry(r);
+}
+
+export async function deleteCatalogEntry(ctx: Ctx, id: string) {
+  await requireAdmin(ctx);
+  await q(ctx.sb.from('residency_catalog').delete().eq('id', id));
   return { ok: true };
 }

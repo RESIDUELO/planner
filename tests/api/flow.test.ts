@@ -666,13 +666,15 @@ describe('Cronograma pessoal (só administradores)', () => {
     // Registrada no dia em que foi feita (hoje real), não mais em 30/09
     const doneDays = cal.days.filter((x: any) => x.newSubjects.some((n: any) => n.name === 'Vacinação na Pediatria' && n.done));
     expect(doneDays).toHaveLength(1);
-    expect(doneDays[0].date <= '2026-09-28').toBe(true);
-    expect(names(cal, '2026-09-29')).toEqual(['Sangramentos de Primeira Metade da Gestação']);
-    expect(names(cal, '2026-09-30')).toEqual(['Derrame Pleural e Pneumonia Adquirida na Comunidade (PAC)']);
-    expect(names(cal, '2026-10-01')).toEqual(['Técnica cirúrgica: fios, antissepsia e instrumental']);
-    expect(names(cal, '2026-10-02')).toEqual(['Atenção Primária à Saúde']);
-    expect(names(cal, '2026-10-03')).toEqual(['Questões — baralhos mais frágeis (03/10)']);
-    expect(names(cal, '2026-10-10')).toEqual(['Simulado UNOESTE — R1 2022 completa (10/10)']);
+    expect(doneDays[0].date).toBe(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }));
+    // As seguintes (sem a feita, que fica no dia real em que foi marcada)
+    const next = (d: string) => names(cal, d).filter((n: string) => n !== 'Vacinação na Pediatria');
+    expect(next('2026-09-29')).toEqual(['Sangramentos de Primeira Metade da Gestação']);
+    expect(next('2026-09-30')).toEqual(['Derrame Pleural e Pneumonia Adquirida na Comunidade (PAC)']);
+    expect(next('2026-10-01')).toEqual(['Técnica cirúrgica: fios, antissepsia e instrumental']);
+    expect(next('2026-10-02')).toEqual(['Atenção Primária à Saúde']);
+    expect(next('2026-10-03')).toEqual(['Questões — baralhos mais frágeis (03/10)']);
+    expect(next('2026-10-10')).toEqual(['Simulado UNOESTE — R1 2022 completa (10/10)']);
   });
 
   it('arrastar: aula vai para outro dia e fica lá; revisão também; dia passado não', async () => {
@@ -849,5 +851,57 @@ describe('Residências', () => {
     expect((await student.req('PATCH', `/api/residencies/${r.id}`, { steps: bad })).status).toBe(400);
     await student.ok('DELETE', `/api/residencies/${r.id}`);
     expect((await student.ok('GET', '/api/residencies')).some((x: any) => x.id === r.id)).toBe(false);
+  });
+  it('catálogo: a administração cadastra, a pessoa só marca e as datas novas aparecem sozinhas', async () => {
+    const admin = new Client();
+    admin.today = TODAY;
+    await admin.ok('POST', '/api/auth/register', { name: 'Adm', email: 'adm-catalogo@teste.com', password: 'senha-adm-12345' });
+    await dbQuery('select public.make_admin($1)', ['adm-catalogo@teste.com']);
+
+    // Só a administração cadastra (pela API e direto na tabela)
+    expect((await student.req('POST', '/api/residency-catalog', { name: 'Hack' })).status).toBe(403);
+    expect((await rest(await student.accessToken(), 'POST', '/residency_catalog', { name: 'Hack' })).status).toBeGreaterThanOrEqual(400);
+
+    const steps = (await admin.ok('POST', '/api/residency-catalog', { name: 'HC Botucatu', city: 'Botucatu', fee: 450 })).steps
+      .map((s: any) => (s.key === 'inscricao' ? { ...s, date: '2026-10-05', end: '2026-10-30' } : s.key === 'prova' ? { ...s, date: '2026-11-29' } : s));
+    const hc = (await admin.ok('GET', '/api/residency-catalog')).entries.find((e: any) => e.name === 'HC Botucatu');
+    await admin.ok('PATCH', `/api/residency-catalog/${hc.id}`, { steps, specialties: [{ name: 'Pediatria', vacancies: 6, cutoff: '' }] });
+    const draft = await admin.ok('POST', '/api/residency-catalog', { name: 'Rascunho', published: false });
+
+    // A pessoa vê o catálogo publicado (rascunho não) e adiciona com um toque
+    const cat = await student.ok('GET', '/api/residency-catalog');
+    expect(cat.ready).toBe(true);
+    expect(cat.entries.map((e: any) => e.name)).toEqual(['HC Botucatu']);
+    expect((await student.ok('POST', '/api/residency-catalog/add', { ids: [hc.id, draft.id] })).added).toBe(1);
+    // Marcar de novo não duplica
+    expect((await student.ok('POST', '/api/residency-catalog/add', { ids: [hc.id] })).added).toBe(0);
+    let mine = (await student.ok('GET', '/api/residencies')).find((r: any) => r.catalogId === hc.id);
+    expect(mine).toMatchObject({ name: 'HC Botucatu', city: 'Botucatu', fee: 450, decision: 'yes', catalog: { id: hc.id } });
+    expect(mine.steps.find((s: any) => s.key === 'inscricao')).toMatchObject({ date: '2026-10-05', end: '2026-10-30' });
+    expect(mine.catalog.dated.sort()).toEqual(['inscricao', 'prova']);
+
+    // O que é dela continua dela: "feito", inscrito, observações, etapa própria e data que o catálogo ainda não tem
+    const own = mine.steps.map((s: any) => (s.key === 'inscricao' ? { ...s, done: true } : s.key === 'resultado1' ? { ...s, date: '2026-12-20' } : s));
+    own.push({ id: 'c-minha', key: 'custom', label: 'Pedir carta', type: 'inscricao', date: '2026-10-10', end: null, done: false });
+    await student.ok('PATCH', `/api/residencies/${mine.id}`, { steps: own, enrolled: true, notes: 'levar RG' });
+
+    // A administração publica datas novas e corrige uma: aparece sozinho na lista da pessoa
+    const later = steps.map((s: any) => (s.key === 'prova' ? { ...s, date: '2026-12-06' } : s.key === 'final' ? { ...s, date: '2027-01-15' } : s));
+    await admin.ok('PATCH', `/api/residency-catalog/${hc.id}`, { steps: later, fee: 480 });
+    mine = (await student.ok('GET', '/api/residencies')).find((r: any) => r.catalogId === hc.id);
+    const step = (k: string) => mine.steps.find((s: any) => s.key === k);
+    expect(step('prova').date).toBe('2026-12-06');
+    expect(step('final').date).toBe('2027-01-15');
+    expect(step('inscricao').done).toBe(true);
+    expect(step('resultado1').date).toBe('2026-12-20');
+    expect(mine.steps.some((s: any) => s.id === 'c-minha')).toBe(true);
+    expect(mine).toMatchObject({ enrolled: true, notes: 'levar RG', fee: 480 });
+
+    // Saiu do catálogo: a residência continua na lista dela, com o que tinha
+    await admin.ok('DELETE', `/api/residency-catalog/${hc.id}`);
+    mine = (await student.ok('GET', '/api/residencies')).find((r: any) => r.id === mine.id);
+    expect(mine).toMatchObject({ name: 'HC Botucatu', catalog: null });
+    await admin.ok('DELETE', `/api/residency-catalog/${draft.id}`);
+    await student.ok('DELETE', `/api/residencies/${mine.id}`);
   });
 });

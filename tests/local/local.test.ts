@@ -10,6 +10,7 @@ import { createLocalSupabase } from '../../web/src/local/client';
 import { createCtx } from '../../web/src/backend/core';
 import { handle } from '../../web/src/backend/routes';
 import { buildWidgetData } from '../../web/src/local/widget';
+import { setCatalogSource } from '../../web/src/backend/residencies';
 
 let today = '2026-09-28';
 let ctx: ReturnType<typeof createCtx>;
@@ -345,5 +346,35 @@ describe('alterações seguidas', () => {
     const scheduled = (p: any) => p.subjects.filter((s: any) => s.checklist.some((c: any) => c.scheduledDate)).map((s: any) => s.subjectId);
     const still = new Set(scheduled(after));
     expect(scheduled(before).filter((id: string) => !still.has(id))).toEqual([]);
+  });
+});
+
+describe('catálogo de residências no app off-line', () => {
+  it('vem do site quando há internet, fica guardado e as datas novas chegam', async () => {
+    const A = '11111111-1111-4111-8111-111111111111';
+    const B = '22222222-2222-4222-8222-222222222222';
+    const steps = (prova: string | null) => [
+      { id: 'inscricao', key: 'inscricao', label: 'Inscrição', type: 'inscricao', date: '2026-10-05', end: '2026-10-30', done: false },
+      { id: 'prova', key: 'prova', label: 'Prova', type: 'prova', date: prova, end: null, done: false },
+    ];
+    let site: any[] | null = [
+      { id: A, name: 'HC Botucatu', city: 'Botucatu', steps: steps('2026-11-29'), fee: 450, exam_edition_id: '99999999-9999-4999-8999-999999999999' },
+      { id: B, name: 'Unicamp', city: 'Campinas', steps: steps(null) },
+    ];
+    setCatalogSource(async () => site);
+    const cat = await ok('GET', '/api/residency-catalog');
+    expect(cat.entries.map((e: any) => e.name)).toEqual(['HC Botucatu', 'Unicamp']);
+    expect((await ok('POST', '/api/residency-catalog/add', { ids: [A] })).added).toBe(1);
+    const mine = () => ok('GET', '/api/residencies').then((l: any[]) => l.find((r) => r.catalogId === A));
+    expect((await mine()).steps.find((s: any) => s.key === 'prova').date).toBe('2026-11-29');
+
+    // O site mudou a data e tirou a Unicamp; sem internet, fica o guardado
+    site = [{ id: A, name: 'HC Botucatu', city: 'Botucatu', steps: steps('2026-12-06'), fee: 450 }];
+    setCatalogSource(async () => site);
+    expect((await mine()).steps.find((s: any) => s.key === 'prova').date).toBe('2026-12-06');
+    expect((await ok('GET', '/api/residency-catalog')).entries.map((e: any) => e.name)).toEqual(['HC Botucatu']);
+    setCatalogSource(async () => null);
+    expect((await ok('GET', '/api/residency-catalog')).entries).toHaveLength(1);
+    setCatalogSource(null);
   });
 });

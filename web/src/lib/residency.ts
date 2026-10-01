@@ -4,9 +4,12 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
-import { nextEvent, residencyEvents, type Residency, type ResidencyEvent, type StatusTone, type StepType } from '../../../shared/residency';
+import { nextEvent, residencyEvents, type CatalogEntry, type Residency, type ResidencyEvent, type StatusTone, type StepType } from '../../../shared/residency';
 
-export type ResidencyView = Residency & { exam: { institution: string; name: string; official: boolean } | null };
+export type ResidencyView = Residency & {
+  exam: { institution: string; name: string; official: boolean } | null;
+  catalog: { id: string; dated: string[] } | null;
+};
 export type ResidencyPatch = Partial<Omit<Residency, 'id' | 'createdAt'>>;
 
 export const TYPE_DOT: Record<StepType, string> = { inscricao: 'dot-sky', prova: 'dot-lilac', resultado: 'dot-mint' };
@@ -58,4 +61,25 @@ export function useResidencyActions() {
     onSettled: settle,
   });
   return { create, patch, remove };
+}
+
+// ---------------------------------------------------------------- Catálogo
+
+export type Catalog = { ready: boolean; entries: CatalogEntry[] };
+
+export const useCatalog = (enabled = true) =>
+  useQuery({ queryKey: ['residency-catalog'], queryFn: () => api.get<Catalog>('/api/residency-catalog'), enabled, staleTime: 60_000 });
+
+export function useCatalogActions() {
+  const qc = useQueryClient();
+  const settle = () => { qc.invalidateQueries({ queryKey: ['residency-catalog'] }); qc.invalidateQueries({ queryKey: ['residencies'] }); qc.invalidateQueries({ queryKey: ['exams'] }); };
+  const add = useMutation({
+    mutationFn: (ids: string[]) => api.post<{ ok: boolean; added: number }>('/api/residency-catalog/add', { ids }),
+    onSettled: settle,
+  });
+  type Body = Partial<Omit<CatalogEntry, 'id' | 'updatedAt'>>;
+  const create = useMutation({ mutationFn: (b: Body & { name: string }) => api.post<CatalogEntry>('/api/residency-catalog', b), onSettled: settle });
+  const patch = useMutation({ mutationFn: ({ id, patch }: { id: string; patch: Body }) => api.patch<CatalogEntry>(`/api/residency-catalog/${id}`, patch), onSettled: settle });
+  const remove = useMutation({ mutationFn: (id: string) => api.del(`/api/residency-catalog/${id}`), onSettled: settle });
+  return { add, create, patch, remove };
 }

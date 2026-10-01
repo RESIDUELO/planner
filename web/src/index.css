@@ -167,6 +167,7 @@ body {
 }
 .field:focus { border-color: var(--ink); background: var(--surface); box-shadow: none; }
 .field:disabled { opacity: 0.5; }
+.field[readonly] { background: transparent; border-color: transparent; padding-left: 0; cursor: default; }
 input[type="date"].field, input[type="time"].field { min-height: 42px; }
 }
 

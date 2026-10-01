@@ -39,8 +39,55 @@ export interface Residency {
   notes: string;
   steps: Step[];
   examEditionId: string | null;
+  /** Veio do catálogo de residências (datas cadastradas pela administração). */
+  catalogId?: string | null;
   createdAt: string;
 }
+
+/** Residência do catálogo: dados de edital e datas, cadastrados pela administração. */
+export interface CatalogEntry {
+  id: string;
+  name: string;
+  city: string;
+  editalUrl: string;
+  specialties: Specialty[];
+  institutions: Institution[];
+  fee: number | null;
+  steps: Step[];
+  examEditionId: string | null;
+  notes: string;
+  published: boolean;
+  updatedAt: string;
+}
+
+/**
+ * Residência da pessoa que veio do catálogo: nome, cidade, edital, vagas,
+ * taxa e as datas vêm do catálogo (sempre as mais novas). Dela ficam o
+ * "feito" de cada etapa, a situação, a inscrição e as observações, as
+ * etapas que ela mesma criou e a data que ela marcou numa etapa que o
+ * catálogo ainda não tem.
+ */
+export function withCatalog<T extends Residency>(r: T, c: CatalogEntry): T {
+  const mine = new Map(r.steps.map((s) => [s.id, s]));
+  const ids = new Set(c.steps.map((s) => s.id));
+  const steps: Step[] = c.steps.map((s) => {
+    const u = mine.get(s.id);
+    return { ...s, date: s.date ?? u?.date ?? null, end: s.end ?? u?.end ?? null, done: u?.done ?? false };
+  });
+  // Etapas que ela criou entram depois das do mesmo tipo
+  for (const u of r.steps) {
+    if (ids.has(u.id) || u.key !== 'custom') continue;
+    const at = steps.map((s) => s.type).lastIndexOf(u.type);
+    steps.splice(at < 0 ? steps.length : at + 1, 0, u);
+  }
+  return {
+    ...r, name: c.name, city: c.city, editalUrl: c.editalUrl, specialties: c.specialties, institutions: c.institutions,
+    fee: c.fee ?? r.fee, steps, examEditionId: c.examEditionId ?? r.examEditionId,
+  };
+}
+
+/** Etapas com data cadastrada no catálogo (a pessoa não muda). */
+export const catalogDated = (c: Pick<CatalogEntry, 'steps'>) => c.steps.filter((s) => s.date || s.end).map((s) => s.id);
 
 export const STEP_TYPES: Record<StepType, string> = { inscricao: 'Inscrição', prova: 'Prova', resultado: 'Resultado' };
 

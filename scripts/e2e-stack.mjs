@@ -17,6 +17,15 @@ writeFileSync('dist/config.json', JSON.stringify({ supabaseUrl: sb.url, supabase
 const c = new pg.Client({ connectionString: sb.dbUrl });
 await c.connect();
 for (const f of ['famerp_r1', 'uel_r1', 'unoeste_r1', 'famema_r1', 'santa_casa_aracatuba_r1', 'sus_sp_r1', 'cronograma_medcof_unoeste_v3']) await c.query(readFileSync(`supabase/data/${f}.sql`, 'utf8'));
+// Catálogo de residências (cadastrado pela administração), com datas relativas a hoje
+const day = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + n * 86_400_000));
+const catalogSteps = [
+  { id: 'inscricao', key: 'inscricao', label: 'Inscrição', type: 'inscricao', date: day(-2), end: day(9), done: false },
+  { id: 'prova', key: 'prova', label: 'Prova', type: 'prova', date: day(50), end: null, done: false },
+  { id: 'final', key: 'final', label: 'Resultado final', type: 'resultado', date: null, end: null, done: false },
+];
+await c.query(`insert into residency_catalog (name, city, fee, specialties, steps) values ('HC Botucatu', 'Botucatu', 450, $1, $2)`,
+  [JSON.stringify([{ name: 'Pediatria', vacancies: 6, cutoff: '' }]), JSON.stringify(catalogSteps)]);
 await c.end();
 console.log(`E2E pronto em ${sb.url}/planner/`);
 process.on('SIGTERM', async () => { await sb.stop(); process.exit(0); });

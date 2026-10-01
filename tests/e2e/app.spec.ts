@@ -545,4 +545,23 @@ test('Residências: cadastro, selo, prazos na Agenda e no Planner, "não vou" no
   // Continua lá depois de recarregar
   await page.reload();
   await expect(page.locator('article[data-testid^="residency-"]')).toHaveCount(2);
+
+  // Do catálogo: só marcar; as datas já vêm e o que é do edital fica fixo
+  await page.getByTestId('pick-residencies').click();
+  const pick = page.getByRole('dialog');
+  await expect(pick.getByTestId('catalog-HC Botucatu')).toContainText('Botucatu');
+  await pick.getByText('HC Botucatu').click();
+  await pick.getByTestId('catalog-add').click();
+  await expect(page.getByTestId('toast')).toContainText('1 residência adicionada');
+  const hc = page.getByTestId('residency-HC Botucatu');
+  await expect(hc).toContainText('Pediatria 6 vagas');
+  await expect(hc.getByTestId('status').first()).toHaveText('inscrições abertas · fecham em 9 dias');
+  await hc.getByRole('button').first().click();
+  await expect(page.getByRole('dialog').getByTestId('from-catalog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByLabel('Nome da residência')).toHaveAttribute('readonly', '');
+  await expect(page.getByRole('dialog').getByLabel('Inscrição - fim', { exact: true })).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).click();
+  // Marcada de novo, aparece como já na lista
+  await page.getByTestId('pick-residencies').click();
+  await expect(page.getByRole('dialog').getByTestId('catalog-HC Botucatu')).toContainText('já está na sua lista');
 });
