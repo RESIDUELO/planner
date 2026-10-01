@@ -163,6 +163,305 @@
           "date": "2027-02-24"
         }
       ]
+    },
+    {
+      "id": "famerp_2027",
+      "name": "FAMERP",
+      "city": "São José do Rio Preto",
+      "edital": "https://www.famerp.br/index.php/diretoria-de-pos-graduacao/coreme/processo-seletivo-coreme-2027-acesso-direto-e-especialidades/",
+      "fee": 950,
+      "exam": "famerp_r1",
+      "dates": {
+        "reducao": [
+          "2026-09-08",
+          "2026-09-09"
+        ],
+        "inscricao": [
+          "2026-09-21",
+          "2026-10-21"
+        ],
+        "boleto": "2026-10-21",
+        "local": "2026-11-09",
+        "prova": "2026-11-24",
+        "gabarito": "2026-11-24",
+        "recurso": "2026-11-26",
+        "resultado1": "2026-12-11",
+        "fase2": "2026-12-14",
+        "final": "2027-01-29"
+      },
+      "skip": [
+        "edital"
+      ],
+      "extra": [
+        {
+          "label": "Resultado da isenção/redução da taxa",
+          "type": "inscricao",
+          "date": "2026-09-16"
+        },
+        {
+          "label": "Nota da avaliação curricular",
+          "type": "resultado",
+          "date": "2027-01-20"
+        },
+        {
+          "label": "Matrícula (1ª chamada)",
+          "type": "resultado",
+          "date": "2027-02-11"
+        }
+      ],
+      "specialties": [
+        {
+          "name": "Acupuntura",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Anestesiologia",
+          "vacancies": 14,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Cardiovascular",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Geral",
+          "vacancies": 14,
+          "cutoff": ""
+        },
+        {
+          "name": "Clínica Médica",
+          "vacancies": 35,
+          "cutoff": ""
+        },
+        {
+          "name": "Dermatologia",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Ginecologia e Obstetrícia",
+          "vacancies": 14,
+          "cutoff": ""
+        },
+        {
+          "name": "Infectologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Emergência",
+          "vacancies": 4,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Família e Comunidade",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Física e Reabilitação",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Intensiva",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Nuclear",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurocirurgia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurologia",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Oftalmologia",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Ortopedia e Traumatologia",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Otorrinolaringologia",
+          "vacancies": 4,
+          "cutoff": ""
+        },
+        {
+          "name": "Patologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Patologia Clínica/Medicina Laboratorial",
+          "vacancies": 1,
+          "cutoff": ""
+        },
+        {
+          "name": "Pediatria",
+          "vacancies": 14,
+          "cutoff": ""
+        },
+        {
+          "name": "Psiquiatria",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Radiologia e Diagnóstico por Imagem",
+          "vacancies": 9,
+          "cutoff": ""
+        },
+        {
+          "name": "Radioterapia",
+          "vacancies": 1,
+          "cutoff": ""
+        }
+      ]
+    },
+    {
+      "id": "uel_2027",
+      "name": "UEL",
+      "city": "Londrina",
+      "edital": "https://www.cops.uel.br",
+      "fee": 692,
+      "exam": "uel_r1",
+      "dates": {
+        "edital": "2026-07-20",
+        "reducao": [
+          "2026-08-03",
+          "2026-08-07"
+        ],
+        "inscricao": [
+          "2026-09-22",
+          "2026-10-14"
+        ],
+        "boleto": "2026-10-15",
+        "local": "2026-11-05",
+        "prova": "2026-11-08",
+        "gabarito": "2026-11-08",
+        "recurso": "2026-11-10",
+        "resultado1": "2026-11-27",
+        "fase2": "2026-11-08",
+        "final": "2026-12-18"
+      },
+      "extra": [
+        {
+          "label": "Resultado da isenção da taxa",
+          "type": "inscricao",
+          "date": "2026-08-12"
+        },
+        {
+          "label": "Inscrição para ações afirmativas (até 25/08)",
+          "type": "inscricao",
+          "date": "2026-08-18"
+        },
+        {
+          "label": "Nota final provisória (currículo + bonificação)",
+          "type": "resultado",
+          "date": "2026-12-09"
+        },
+        {
+          "label": "Matrícula (1ª convocação, até 11/02)",
+          "type": "resultado",
+          "date": "2027-02-03"
+        }
+      ],
+      "specialties": [
+        {
+          "name": "Anestesiologia",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Cirurgia Geral",
+          "vacancies": 9,
+          "cutoff": ""
+        },
+        {
+          "name": "Clínica Médica",
+          "vacancies": 20,
+          "cutoff": ""
+        },
+        {
+          "name": "Dermatologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Infectologia",
+          "vacancies": 2,
+          "cutoff": ""
+        },
+        {
+          "name": "Ginecologia e Obstetrícia",
+          "vacancies": 10,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina de Família e Comunidade",
+          "vacancies": 6,
+          "cutoff": ""
+        },
+        {
+          "name": "Medicina Intensiva",
+          "vacancies": 5,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurocirurgia",
+          "vacancies": 1,
+          "cutoff": ""
+        },
+        {
+          "name": "Neurologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Oftalmologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Ortopedia e Traumatologia",
+          "vacancies": 4,
+          "cutoff": ""
+        },
+        {
+          "name": "Otorrinolaringologia",
+          "vacancies": 3,
+          "cutoff": ""
+        },
+        {
+          "name": "Patologia",
+          "vacancies": 1,
+          "cutoff": ""
+        },
+        {
+          "name": "Pediatria",
+          "vacancies": 12,
+          "cutoff": ""
+        },
+        {
+          "name": "Psiquiatria",
+          "vacancies": 3,
+          "cutoff": ""
+        }
+      ]
     }
   ]
 }
