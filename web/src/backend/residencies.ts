@@ -10,14 +10,23 @@ import {
 import { ApiError, badRequest, currentUserId, notFound, q, rpc, selectAll, type Ctx } from './core';
 
 const BASE_COLS = 'id, name, city, edital_url, specialties, institutions, fee, reduction_requested, reduction_granted, paid, decision, enrolled, notes, steps, exam_edition_id, created_at';
-/** catalog_id só existe depois de rodar 17_residency_catalog.sql; até lá a lista continua funcionando. */
-let hasCatalogCol: boolean | null = null;
-async function cols(ctx: Ctx) {
-  if (hasCatalogCol === null) {
-    const { error } = await ctx.sb.from('residencies').select('catalog_id').limit(1);
-    hasCatalogCol = !error;
+/**
+ * Colunas que só existem depois de rodar o SQL delas (catalog_id: 17_residency_catalog.sql,
+ * my_score: 19_residency_score.sql); até lá a lista continua funcionando.
+ */
+const OPTIONAL_COLS = ['catalog_id', 'my_score'] as const;
+let present: Set<string> | null = null;
+async function optionalCols(ctx: Ctx) {
+  if (!present) {
+    const found = new Set<string>();
+    for (const c of OPTIONAL_COLS) if (!(await ctx.sb.from('residencies').select(c).limit(1)).error) found.add(c);
+    present = found;
   }
-  return hasCatalogCol ? `${BASE_COLS}, catalog_id` : BASE_COLS;
+  return present;
+}
+async function cols(ctx: Ctx) {
+  const extra = [...(await optionalCols(ctx))];
+  return extra.length ? `${BASE_COLS}, ${extra.join(', ')}` : BASE_COLS;
 }
 
 function toResidency(r: any): Residency {
@@ -27,7 +36,7 @@ function toResidency(r: any): Residency {
     institutions: Array.isArray(r.institutions) ? r.institutions : [],
     fee: r.fee != null ? Number(r.fee) : null,
     reductionRequested: !!r.reduction_requested, reductionGranted: r.reduction_granted ?? null, paid: !!r.paid,
-    decision: r.decision ?? 'maybe', enrolled: !!r.enrolled, notes: r.notes ?? '',
+    decision: r.decision ?? 'maybe', enrolled: !!r.enrolled, notes: r.notes ?? '', myScore: r.my_score ?? '',
     steps: Array.isArray(r.steps) && r.steps.length ? r.steps : defaultSteps(),
     examEditionId: r.exam_edition_id ?? null, catalogId: r.catalog_id ?? null, createdAt: r.created_at,
   };
@@ -66,6 +75,7 @@ const fields = {
   decision: z.enum(['yes', 'maybe', 'no']),
   enrolled: z.boolean(),
   notes: z.string().max(5000),
+  myScore: text(60),
   steps: z.array(step).max(40),
   examEditionId: z.string().uuid().nullable(),
 };
@@ -95,6 +105,7 @@ function toRow(b: Patch & { catalogId?: string | null }) {
   if (b.decision !== undefined) r.decision = b.decision;
   if (b.enrolled !== undefined) r.enrolled = b.enrolled;
   if (b.notes !== undefined) r.notes = b.notes;
+  if (b.myScore !== undefined) r.my_score = b.myScore;
   if (b.steps !== undefined) r.steps = b.steps;
   if (b.examEditionId !== undefined) r.exam_edition_id = b.examEditionId;
   if (b.catalogId) r.catalog_id = b.catalogId;
@@ -172,6 +183,14 @@ async function syncExam(ctx: Ctx, uid: string, r: Residency, provaChanged: boole
   });
 }
 
+/** Sem a coluna da nota no banco (SQL 19 não rodado): avisa se há nota para guardar; senão, só não grava. */
+async function scoreFits(ctx: Ctx, row: Record<string, unknown>) {
+  if (!('my_score' in row) || (await optionalCols(ctx)).has('my_score')) return row;
+  if (row.my_score) throw badRequest('Para guardar a nota, o banco do site precisa ser atualizado: no Supabase, rode o arquivo supabase/parts/19_residency_score.sql.');
+  const { my_score: _, ...rest } = row;
+  return rest;
+}
+
 async function one(ctx: Ctx, uid: string, id: string) {
   const r: any = await q(ctx.sb.from('residencies').select(await cols(ctx)).eq('id', id).eq('user_id', uid).maybeSingle());
   if (!r) throw notFound('Residência');
@@ -183,7 +202,7 @@ export async function createResidency(ctx: Ctx, body: unknown) {
   const b = createSchema.parse(body);
   const steps = b.steps ?? defaultSteps();
   checkSteps(steps);
-  const r: any = await q(ctx.sb.from('residencies').insert({ ...toRow({ ...b, steps }), user_id: uid }).select(await cols(ctx)).single()).catch(denied);
+  const r: any = await q(ctx.sb.from('residencies').insert({ ...(await scoreFits(ctx, toRow({ ...b, steps }))), user_id: uid }).select(await cols(ctx)).single()).catch(denied);
   const res = toResidency(r);
   await syncExam(ctx, uid, res, !!res.steps.find((s) => s.key === 'prova')?.date);
   return one(ctx, uid, res.id);
@@ -194,7 +213,7 @@ export async function updateResidency(ctx: Ctx, id: string, body: unknown) {
   const b = updateSchema.parse(body);
   const before = await one(ctx, uid, id);
   if (b.steps) checkSteps(b.steps);
-  const r: any = await q(ctx.sb.from('residencies').update({ ...toRow(b), updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', uid).select(await cols(ctx)).single()).catch(denied);
+  const r: any = await q(ctx.sb.from('residencies').update({ ...(await scoreFits(ctx, toRow(b))), updated_at: new Date().toISOString() }).eq('id', id).eq('user_id', uid).select(await cols(ctx)).single()).catch(denied);
   const res = toResidency(r);
   const provaOf = (x: Residency) => x.steps.find((s) => s.key === 'prova')?.date ?? null;
   const linkedNow = b.examEditionId !== undefined && b.examEditionId !== before.examEditionId;

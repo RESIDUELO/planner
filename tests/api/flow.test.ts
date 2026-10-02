@@ -962,7 +962,7 @@ describe('Residências', () => {
     const own = mine.steps.map((s: any) => (s.key === 'inscricao' ? { ...s, done: true } : s.key === 'resultado1' ? { ...s, date: '2026-12-20' }
       : s.key === 'gabarito' ? { ...s, date: '2026-12-01', own: true } : s.key === 'boleto' ? { ...s, hidden: true } : s));
     own.push({ id: 'c-minha', key: 'custom', label: 'Pedir carta', type: 'inscricao', date: '2026-10-10', end: null, done: false });
-    await student.ok('PATCH', `/api/residencies/${mine.id}`, { steps: own, enrolled: true, notes: 'levar RG' });
+    await student.ok('PATCH', `/api/residencies/${mine.id}`, { steps: own, enrolled: true, notes: 'levar RG', myScore: '78/100' });
 
     // A administração publica datas novas e corrige uma: aparece sozinho na lista da pessoa
     const later = steps.map((s: any) => (s.key === 'prova' ? { ...s, date: '2026-12-06' } : s.key === 'final' ? { ...s, date: '2027-01-15' }
@@ -993,7 +993,7 @@ describe('Residências', () => {
     await student.ok('PUT', '/api/residencies/hidden-steps', { hidden: [] });
     await student.ok('DELETE', `/api/residencies/${u.id}`);
     await admin.ok('DELETE', `/api/residency-catalog/${unicamp.id}`);
-    expect(mine).toMatchObject({ enrolled: true, notes: 'levar RG', fee: 480 });
+    expect(mine).toMatchObject({ enrolled: true, notes: 'levar RG', myScore: '78/100', fee: 480 });
 
     // Saiu do catálogo: a residência continua na lista dela, com o que tinha
     await admin.ok('DELETE', `/api/residency-catalog/${hc.id}`);

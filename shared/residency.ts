@@ -41,6 +41,8 @@ export interface Residency {
   decision: 'yes' | 'maybe' | 'no';
   enrolled: boolean;
   notes: string;
+  /** A nota que a pessoa tirou (ex.: 78/100), em texto livre. */
+  myScore?: string;
   steps: Step[];
   examEditionId: string | null;
   /** Veio do catálogo de residências (datas cadastradas pela administração). */

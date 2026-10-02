@@ -552,6 +552,8 @@ test('Residências: cadastro, selo, prazos no Planner, "não vou" no fim', async
   await hc.getByRole('button').first().click();
   await expect(page.getByRole('dialog').getByTestId('from-catalog')).toBeVisible();
   await expect(page.getByRole('dialog').getByLabel('Nome da residência')).toHaveAttribute('readonly', '');
+  // Minha nota: guardada na residência e mostrada no cartão
+  await page.getByRole('dialog').getByLabel('Minha nota').fill('78/100');
   // A data oficial pode ser mudada (aí vale a dela, com "voltar à oficial"); a etapa que não quer ver some
   const ed = page.getByRole('dialog');
   await ed.getByLabel('Inscrição - fim', { exact: true }).fill(inDays(12));
@@ -560,6 +562,7 @@ test('Residências: cadastro, selo, prazos no Planner, "não vou" no fim', async
   await expect(ed.getByTestId('hidden-steps')).toContainText('Resultado final');
   await ed.getByRole('button', { name: 'Salvar' }).click();
   await expect(hc.getByTestId('status').first()).toHaveText('inscrições abertas · fecham em 12 dias');
+  await expect(hc.getByTestId('card-score')).toHaveText('Minha nota: 78/100');
 
   // Marcada de novo, aparece como já na lista; datas que aparecem: sem redução
   await page.getByTestId('pick-residencies').click();

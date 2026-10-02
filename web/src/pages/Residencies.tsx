@@ -189,6 +189,7 @@ function ResidencyCard({ r, today, onOpen }: { r: ResidencyView; today: string; 
         <div className="min-w-0 flex-1">
           <div className="font-display text-[28px] leading-tight">{r.name}</div>
           {(r.city || specs) && <div className="mt-0.5 truncate text-[13px] text-ink-2">{[r.city, specs].filter(Boolean).join(' · ')}</div>}
+          {r.myScore && <div className="mt-1.5 text-[13px] text-ink" data-testid="card-score">Minha nota: <span className="tabular font-medium">{r.myScore}</span></div>}
           <div className="mt-2.5 hidden sm:block"><StatusBadge r={r} today={today} /></div>
         </div>
         <div className="max-w-[45%] shrink-0 pt-1 text-right" data-testid="next-deadline">
@@ -359,7 +360,7 @@ type Draft = Omit<ResidencyPatch, 'steps' | 'specialties' | 'institutions'> & { 
 
 const blank = (): Draft => ({
   name: '', city: '', editalUrl: '', specialties: [], institutions: [], fee: null, reductionRequested: false, reductionGranted: null,
-  paid: false, decision: 'yes', enrolled: false, notes: '', steps: defaultSteps(), examEditionId: null, multi: false,
+  paid: false, decision: 'yes', enrolled: false, notes: '', myScore: '', steps: defaultSteps(), examEditionId: null, multi: false,
 });
 
 const uid = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -549,6 +550,12 @@ function ResidencyEditor({ residency, entry, catalogMode, onClose }: { residency
             <Segmented value={d.decision ?? 'yes'} onChange={(v) => set({ decision: v })}
               options={[{ value: 'yes', label: 'Vou fazer' }, { value: 'maybe', label: 'Talvez' }, { value: 'no', label: 'Não vou' }]} />
             <Check on={!!d.enrolled} onChange={(v) => set({ enrolled: v })} label="Inscrito" />
+          </div>
+          <div className="mt-5 max-w-xs">
+            <Field label="Minha nota">
+              <input className="field tabular" value={d.myScore ?? ''} maxLength={60} placeholder="Ex.: 78/100" data-testid="my-score"
+                onChange={(e) => set({ myScore: e.target.value })} />
+            </Field>
           </div>
         </section>}
 

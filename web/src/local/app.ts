@@ -14,6 +14,7 @@ import santaCasaSql from '../../../supabase/data/santa_casa_aracatuba_r1.sql?raw
 import unoesteSql from '../../../supabase/data/unoeste_r1.sql?raw';
 import susSpSql from '../../../supabase/data/sus_sp_r1.sql?raw';
 import catalogSql from '../../../supabase/parts/17_residency_catalog.sql?raw';
+import scoreSql from '../../../supabase/parts/19_residency_score.sql?raw';
 import { setCatalogSource } from '../backend/residencies';
 // Fontes dentro do app (sem internet não há Google Fonts)
 import '@fontsource/tinos/latin-400.css';
@@ -26,14 +27,16 @@ import '@fontsource/patrick-hand/latin-400.css';
 const DATA_DIR = 'idb://residencia-planner';
 const READY_KEY = 'rp-local-db';
 /** Versão do schema local; quem instalou uma versão anterior recebe as migrações que faltam. */
-export const LOCAL_DB_VERSION = '8';
+export const LOCAL_DB_VERSION = '9';
 const MIGRATIONS: Record<string, string> = { '2': agendaSql, '3': ownSubjectsSql, '4': residenciesSql, '5': santaCasaSql,
   // Assuntos juntados entre UNOESTE e Santa Casa (data/subject_merges.json)
   '6': `${unoesteSql}\n${santaCasaSql}`,
   // SUS-SP, com a banca de cada ano (troca para a VUNESP em 2026)
   '7': susSpSql,
   // Catálogo de residências (vem do site quando há internet)
-  '8': catalogSql };
+  '8': catalogSql,
+  // Minha nota em cada residência
+  '9': scoreSql };
 
 /** Catálogo de residências publicado no site (leitura pública), com tempo limite curto. */
 async function catalogFromSite(): Promise<any[] | null> {
