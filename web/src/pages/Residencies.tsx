@@ -20,12 +20,15 @@ import {
   type ResidencyPatch, type ResidencyView,
 } from '../lib/residency';
 import { TypeDot, UpcomingList } from '../components/Residencies';
+import { ResidencyCalendar } from '../components/ResidencyCalendar';
 import { ActionMenu, SwipeRow, type Anchor } from '../components/Gestures';
 import { Button, CheckSquare, Eyebrow, Field, Menu, Note, Segmented, Sheet, Spinner, SquareButton, Toggle } from '../components/ui';
 import {
   DEFAULT_STEPS, defaultSteps, nextEvent, RANGE_KEYS, residencyStatus, sortResidencies, stepOf, STEP_TYPES,
   type CatalogEntry, type Institution, type Specialty, type Step, type StepKey, type StepType,
 } from '../../../shared/residency';
+
+const VIEW_KEY = 'rp-residencies-view';
 
 export function ResidenciesPage() {
   const today = todayBR();
@@ -37,6 +40,10 @@ export function ResidenciesPage() {
   const pick = () => setParams({ escolher: '1' }, { replace: true });
   const [sheet, setSheet] = useState<'steps' | 'reset' | null>(null);
   const [menu, setMenu] = useState<{ r: ResidencyView; anchor: Anchor } | null>(null);
+  // Lista ou calendário (fica como a pessoa deixou, neste aparelho)
+  const [view, setViewState] = useState<'list' | 'calendar'>(() => { try { return localStorage.getItem(VIEW_KEY) === 'calendar' ? 'calendar' : 'list'; } catch { return 'list'; } });
+  const setView = (v: 'list' | 'calendar') => { setViewState(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ } };
+  const calendar = view === 'calendar' && (q.data ?? []).length > 0;
   const { remove, restore, removeAll } = useResidencyActions();
   const drop = (r: ResidencyView) => {
     remove.mutate(r.id);
@@ -68,7 +75,7 @@ export function ResidenciesPage() {
   if (q.error && !q.data) return <ResidenciesError error={q.error} />;
   const active = list.filter((r) => r.decision !== 'no').length;
   return (
-    <div className="grid gap-14 fit:h-[calc(var(--app-h,100dvh)-var(--chrome-h))] fit:grid-cols-[minmax(0,1fr)_320px] fit:grid-rows-[minmax(0,1fr)] fit:gap-10">
+    <div className={clsx('grid gap-14 fit:h-[calc(var(--app-h,100dvh)-var(--chrome-h))] fit:grid-rows-[minmax(0,1fr)] fit:gap-10', calendar ? 'fit:grid-cols-1' : 'fit:grid-cols-[minmax(0,1fr)_320px]')}>
       <section aria-label="Residências" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
         <div className="fit:shrink-0">
           <Eyebrow>Residências{list.length > 0 && ` · ${active} ${active === 1 ? 'acompanhada' : 'acompanhadas'}`}</Eyebrow>
@@ -89,9 +96,15 @@ export function ResidenciesPage() {
               ]} />
             </div>
           </div>
+          {list.length > 0 && (
+            <Segmented value={view} onChange={setView} className="mb-5 [&>button]:py-0 [&>button]:text-[14px]"
+              options={[{ value: 'list', label: 'Lista' }, { value: 'calendar', label: 'Calendário' }]} />
+          )}
         </div>
-        <div className={clsx('border-t border-line', desktop && 'no-scrollbar fade-scroll -mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-10')}>
-          {list.length === 0 ? (
+        <div className={clsx(!calendar && 'border-t border-line', desktop && 'no-scrollbar fade-scroll -mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-10')}>
+          {calendar ? (
+            <ResidencyCalendar residencies={list} today={today} onOpen={(id) => setParams({ r: id }, { replace: true })} />
+          ) : list.length === 0 ? (
             <div className="py-10">
               <p className="font-display text-[26px] italic">Nenhuma residência ainda.</p>
               <p className="mt-2 max-w-md text-[15px] text-ink-2">
@@ -119,7 +132,7 @@ export function ResidenciesPage() {
         </div>
       </section>
 
-      <aside aria-label="Próximos prazos" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
+      {!calendar && <aside aria-label="Próximos prazos" className="min-w-0 fit:flex fit:min-h-0 fit:flex-col">
         <div className="flex items-baseline gap-3 fit:shrink-0">
           <span className="font-display text-[26px] italic">Próximos prazos</span>
           <span className="h-px flex-1 bg-line" />
@@ -130,7 +143,7 @@ export function ResidenciesPage() {
             {(Object.keys(STEP_TYPES) as StepType[]).map((t) => <span key={t} className="inline-flex items-center gap-1.5"><TypeDot type={t} />{STEP_TYPES[t].toLowerCase()}</span>)}
           </div>
         </div>
-      </aside>
+      </aside>}
 
       {picking && <CatalogPicker onSteps={() => setSheet('steps')} mine={q.data ?? []} today={today} onClose={close} onManual={() => { close(); setCreating(true); }} />}
       {menu && (

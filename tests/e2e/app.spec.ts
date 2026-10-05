@@ -563,6 +563,14 @@ test('Residências: cadastro, selo, prazos no Planner, "não vou" no fim', async
   await ed.getByRole('button', { name: 'Salvar' }).click();
   await expect(hc.getByTestId('status').first()).toHaveText('inscrições abertas · fecham em 12 dias');
   await expect(hc.getByTestId('card-score')).toHaveText('Minha nota: 78/100');
+  // Calendário: só as datas das residências, no mês; clicar abre a residência
+  await page.getByRole('tab', { name: 'Calendário' }).click();
+  const cal = page.getByTestId('residency-calendar');
+  await expect(cal.getByTestId('calendar-event').filter({ hasText: 'HC Botucatu' }).first()).toBeVisible();
+  await cal.getByTestId('calendar-event').filter({ hasText: 'HC Botucatu' }).first().click();
+  await expect(page.getByRole('dialog').getByLabel('Nome da residência')).toHaveValue('HC Botucatu');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click();
+  await page.getByRole('tab', { name: 'Lista' }).click();
 
   // Marcada de novo, aparece como já na lista; datas que aparecem: sem redução
   await page.getByTestId('pick-residencies').click();
