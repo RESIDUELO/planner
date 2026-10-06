@@ -1,12 +1,10 @@
 /**
  * priority_v4 - ranking e prioridade dos assuntos.
  *
- * 1) Ranking histórico (ordem do planner): primeiro a REGULARIDADE - em quantas
- *    provas o assunto caiu, contando a partir da primeira em que apareceu (um
- *    tema que cai todo ano desde 2023, ou o bloco de Saúde Mental desde 2024,
- *    vale o mesmo que um que cai desde 2021; sempre olhando no mínimo as 3
- *    últimas provas) -, depois a QUANTIDADE de questões nesse mesmo período e,
- *    por fim, a recência. Com várias provas, os rankings de cada uma são
+ * 1) Ranking histórico (ordem do planner): primeiro a PORCENTAGEM - quanto o
+ *    assunto caiu nas provas analisadas -, depois a REGULARIDADE (em quantas
+ *    provas caiu desde a primeira em que apareceu, sempre olhando no mínimo as
+ *    3 últimas) e, por fim, a recência. Com várias provas, os rankings de cada uma são
  *    intercalados na proporção do peso (principal e mais próxima pesam mais).
  *    Prova que trocou de banca: as provas da banca atual pesam mais e os
  *    assuntos vêm por nível (núcleo confirmado → assinatura da banca nova →

@@ -31,13 +31,16 @@ describe('computeExamStats', () => {
     expect(a.recentPercentage).toBeCloseTo(9 / 100);
   });
 
-  it('ordena pela regularidade e depois pela quantidade', () => {
+  it('ordena pela porcentagem e, no empate, pela regularidade', () => {
     expect(st.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'vacinas', 'diabetes']);
-    // 1 questão em cada prova (4/4) vem antes de 7 questões em 3 de 4 provas
+    // 7 questões em 3 de 4 provas vêm antes de 1 questão em cada prova (4/4)
     const extra = [...links];
     for (const ed of ['e22', 'e23', 'e24', 'e25']) extra.push({ questionId: `c-${ed}`, editionId: ed, subjectId: 'cirrose', weight: 1 });
+    // Mesma quantidade (7): quem caiu em todas as provas vem antes
+    for (const ed of ['e22', 'e23', 'e24', 'e25']) extra.push({ questionId: `h-${ed}`, editionId: ed, subjectId: 'hepatites', weight: 1 });
+    for (const ed of ['e22', 'e23', 'e25']) extra.push({ questionId: `h2-${ed}`, editionId: ed, subjectId: 'hepatites', weight: 1 });
     const s2 = computeExamStats(eds, extra);
-    expect(s2.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'cirrose', 'vacinas', 'diabetes']);
+    expect(s2.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'hepatites', 'vacinas', 'diabetes', 'cirrose']);
   });
 
   it('regularidade conta a partir da primeira aparição (tema que passou a cair todo ano)', () => {
@@ -53,8 +56,8 @@ describe('computeExamStats', () => {
     expect(sm.presenceRate).toBe(0.75);
     expect(sm.activePercentage).toBeCloseTo(3 / 150);
     expect(s2.subjects.find((s) => s.subjectId === 'novo')!.regularity).toBeCloseTo(1 / 3);
-    // Empata em regularidade com quem caiu todos os anos; vem antes de quem falhou um ano
-    expect(s2.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'saude-mental', 'vacinas', 'novo', 'diabetes']);
+    // A ordem é pela quantidade; a regularidade só desempata
+    expect(s2.subjects.map((s) => s.subjectId)).toEqual(['arritmias', 'vacinas', 'diabetes', 'saude-mental', 'novo']);
   });
 
   it('não conta edições sem questões classificadas', () => {

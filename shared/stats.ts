@@ -222,18 +222,15 @@ export function computeExamStats(
 
 type Comparable = { percentage: number; activePercentage: number; regularity: number; recentPercentage: number; subjectId: string; tier?: number };
 /**
- * Ordem histórica: regularidade (desde a 1ª aparição) → quantidade no mesmo período → recência.
+ * Ordem histórica: porcentagem (quantidade) → regularidade (desde a 1ª aparição) → recência.
  * Com troca de banca: nível → quantidade (com as provas da banca atual pesando mais) → regularidade.
  */
 export function compareHistorical(a: Comparable, b: Comparable): number {
-  // O nível já diz a presença em cada banca; dentro dele vale a quantidade
-  const regular = a.tier ? 0 : Math.round((b.regularity - a.regularity) * 1e6);
   return (
     (a.tier ?? 0) - (b.tier ?? 0) ||
-    regular ||
+    Math.round((b.percentage - a.percentage) * 1e9) ||
+    Math.round((b.regularity - a.regularity) * 1e6) ||
     b.activePercentage - a.activePercentage ||
-    b.percentage - a.percentage ||
-    b.regularity - a.regularity ||
     b.recentPercentage - a.recentPercentage ||
     a.subjectId.localeCompare(b.subjectId)
   );
